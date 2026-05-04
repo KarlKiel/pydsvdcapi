@@ -317,24 +317,28 @@ Requires `primaryGroup=3` (`ColorGroup.BLUE` — covers all climate sub-types fo
 
 ##### N — Feature Combination Quick Reference
 
-All features listed as `auto:` are produced automatically by `derive_model_features()` when the condition is met. Only `manual` and `not-tested` features need to be added explicitly.
+All features in the "Auto-derived features" column are produced automatically by `derive_model_features()` when the stated condition is met. Features in the "Add manually if needed" column require an explicit `add_model_feature()` call.
 
 | Device scenario | Auto-derived features (from `derive_model_features()`) | Add manually if needed |
 |---|---|---|
-| Dimmable light (DIMMER function) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig` | `identification` (if on_identify set) |
-| Switched light (ON_OFF function) | `dontcare`, `blink`, `outvalue8`, `outconfigswitch`, `impulseconfig` | — |
+| Dimmable light (DIMMER function) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig` | — |
+| Switched light (ON_OFF function) | `dontcare`, `blink`, `outvalue8`, `transt`, `outconfigswitch`, `impulseconfig` | — |
 | Color light (FULL_COLOR_DIMMER) | `dontcare`, `blink`, `outvalue8`, `transt`, `outputchannels`, `dimtimeconfig` | — |
-| Roller shutter / awning | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | — |
-| Venetian blind / jalousie | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `shadebladeang`, `motiontimefins`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | — |
-| Heating valve (ON/OFF) | `dontcare`, `blink`, `outvalue8`, `pwmvalue`, `outconfigswitch`, `impulseconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
-| Heating valve (continuous/PWM) | `dontcare`, `blink`, `outvalue8`, `transt`, `pwmvalue`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
-| Joker with group assignment | `jokerconfig` (from primaryGroup=8) | `highlevel` (if button with group=8) |
+| Roller shutter / awning | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `transt`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | — |
+| Venetian blind / jalousie | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `shadebladeang`, `motiontimefins`, `transt`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | — |
+| Heating valve (ON/OFF) | `dontcare`, `blink`, `outvalue8`, `transt`, `pwmvalue`, `outconfigswitch`, `impulseconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
+| Heating valve (continuous/PWM) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig`, `pwmvalue`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
+| Joker with group assignment | `jokerconfig` (pg=8), `highlevel` (when button with group=8 present) | — |
 | 1-way push button | `pushbutton`, `pushbadvanced`, `pushbdisabled`, `pushbarea` (group≠8), `pushbdevice` (if supportsLocalKeyMode) | — |
-| AKM sensor input | `akmsensor`, `akminput`, `akmdelay` (from any binary input) | — |
-| Multi-channel RGBW output | `outputchannels` (auto when HUE+SAT or BRI+CT channels present) | — |
-| Device with blink identification | `blink` (auto from output), `identification` (auto from on_identify callback) | `blinkconfig` (not-tested) |
-| Room controller (temperature + Blue) | `temperatureoffset` (auto from TEMPERATURE sensor + primaryGroup=3) | `ftwtempcontrolventilationselect` (not-tested) |
-| Ventilation / Fan Coil Unit | `dontcare`, `blink`, `transt`, `outvalue8`, `ventconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes`, `fcu` | — |
+| AKM sensor input | `akmsensor`, `akminput`, `akmdelay` (any binary input) | — |
+| Device with identification | `blink` (any output), `identification` (when on_identify callback registered) | `blinkconfig` (not-tested) |
+| Room controller (temperature + Blue) | `heatingprops`, `heatinggroup`, `temperatureoffset` (TEMPERATURE sensor + pg=3) | `ftwtempcontrolventilationselect` (not-tested) |
+| Ventilation / Fan Coil Unit | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig`, `ventconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes`, `fcu` | — |
+
+> **Notes:**
+> - `transt` for shade devices is derived from shade position channel types (7–10), which fall in `_TRANST_CHANNEL_TYPES`. A properly configured shade device always has these channels, so `transt` is always derived.
+> - `identification` is auto-derived only when the `on_identify` callback is registered on the device; it is never added unconditionally.
+> - `highlevel` for joker devices is auto-derived from the button loop when any button has `group=8`; no manual call is needed.
 
 ---
 
