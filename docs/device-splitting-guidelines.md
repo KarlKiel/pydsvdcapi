@@ -54,9 +54,12 @@ to 0,1 and 2,3).
 
 ## Quick Decision Checklist
 
-1. Count independent outputs → one vdSD per output.
-2. Can functional units end up in different zones? → separate vdSDs.
-3. Do functional units belong to different dS classes (colors)? → separate vdSDs.
-4. Multiple buttons/sensors/inputs on the same functional unit → keep in one vdSD.
-5. Is the hardware permanently integrated? → use `derive_subdevice()` enumeration.
-6. Are parts physically separable? → use fully distinct dSUIDs.
+1. Try to bring together capabilities of a physical device in as less vdsds as possible.
+2. Are parts physically separable? → use fully distinct dSUIDs.
+3. Does the (sub-)device contain several sensors → keep as on vdsd
+4. Does the (sub-)device contain different kinds of capabilities (Button, binary Input, Sensors, Output) → keep as one vdsd
+5. Do functional units belong to different dS classes (colors)? → separate vdSDs.
+6. Can functional units end up in different zones? → separate vdSDs.
+7. Does the device contain several different outputs (not channels!) → one vdSD per output.
+8. Are there multiple buttons/ binary inputs on the same functional unit that shall be configurable via ds configurator?→ separate vdSDs.
+9. Is the hardware permanently integrated? → use `derive_subdevice()` enumeration.
