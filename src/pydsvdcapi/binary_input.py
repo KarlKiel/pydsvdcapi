@@ -50,10 +50,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb

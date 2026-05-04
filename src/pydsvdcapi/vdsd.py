@@ -66,14 +66,11 @@ Usage example::
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
@@ -120,8 +117,8 @@ ENTITY_TYPE_VDSD: str = "vdSD"
 #: ``group`` / ``zone_id`` are optional contextual integers
 #: (``None`` when not provided by the vdSM).
 ControlValueCallback = Callable[
-    ["Vdsd", str, float, Optional[int], Optional[int]],
-    Union[None, Awaitable[None]],
+    ["Vdsd", str, float, int | None, int | None],
+    None | Awaitable[None],
 ]
 
 #: Type alias for the invoke-action callback.
@@ -138,7 +135,7 @@ ControlValueCallback = Callable[
 #: additional parameter name → value pairs (may be empty).
 InvokeActionCallback = Callable[
     ["Vdsd", str, dict[str, Any]],
-    Union[None, Awaitable[None]],
+    None | Awaitable[None],
 ]
 
 #: Type alias for the identify callback.
@@ -155,7 +152,7 @@ InvokeActionCallback = Callable[
 #: device (e.g. blink an LED, beep, etc.).
 IdentifyCallback = Callable[
     ["Vdsd"],
-    Union[None, Awaitable[None]],
+    None | Awaitable[None],
 ]
 
 

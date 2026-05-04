@@ -66,12 +66,10 @@ Usage::
 from __future__ import annotations
 
 import logging
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Union,
 )
 
 import pydsvdcapi.vdc_messages_pb2 as pb
@@ -97,7 +95,7 @@ if TYPE_CHECKING:
 #: ``async def callback(output, channel_updates) -> None``
 #: where *channel_updates* is a dict ``{OutputChannelType | int: value}``.
 ChannelAppliedCallback = Callable[
-    ["Output", dict[Union[OutputChannelType, int], float]],
+    ["Output", dict[OutputChannelType | int, float]],
     Coroutine[Any, Any, None],
 ]
 
@@ -1097,7 +1095,11 @@ class Output:
             return
 
         # Local priority check.
-        if self._local_priority and not force and not entry.get("ignoreLocalPriority", False):
+        if (
+            self._local_priority
+            and not force
+            and not entry.get("ignoreLocalPriority", False)
+        ):
             logger.debug(
                 "call_scene %d: blocked by local priority",
                 scene_nr,

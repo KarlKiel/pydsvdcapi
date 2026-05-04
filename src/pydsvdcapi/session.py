@@ -44,8 +44,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from collections.abc import Awaitable
-from typing import Callable, Optional
+from collections.abc import Awaitable, Callable
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
@@ -86,7 +85,7 @@ class SessionState(enum.Enum):
 #: optional ``Message`` response.
 MessageCallback = Callable[
     ["VdcSession", pb.Message],
-    Awaitable[Optional[pb.Message]],
+    Awaitable[pb.Message | None],
 ]
 
 #: Signature for the hello-completed callback.

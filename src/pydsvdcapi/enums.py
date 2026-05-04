@@ -10,7 +10,6 @@ vDC API protocol, derived from the official documentation:
 """
 
 from enum import IntEnum, unique
-from typing import Union
 
 # ---------------------------------------------------------------------------
 #  Protocol-level enums (from genericVDC.proto)
@@ -1065,7 +1064,7 @@ class ButtonFunctionJoker(IntEnum):
 
 def button_function_for_group(
     group: int, value: int
-) -> Union[ButtonFunction, ButtonFunctionJoker, int]:
+) -> ButtonFunction | ButtonFunctionJoker | int:
     """Return the correct ButtonFunction enum for *group* and raw *value*.
 
     Group 8 (Joker/Black) uses Table 55; all other groups use Table 54.

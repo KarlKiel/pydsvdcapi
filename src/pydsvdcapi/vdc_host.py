@@ -33,9 +33,9 @@ import logging
 import platform
 import socket
 import threading
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Callable, ClassVar
+from typing import Any, ClassVar
 
 from zeroconf import ServiceInfo
 from zeroconf.asyncio import AsyncZeroconf

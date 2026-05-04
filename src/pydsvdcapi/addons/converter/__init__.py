@@ -48,7 +48,8 @@ from __future__ import annotations
 
 import logging
 import textwrap
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
