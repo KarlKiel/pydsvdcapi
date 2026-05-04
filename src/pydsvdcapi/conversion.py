@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import logging
 import textwrap
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ def compile_converter(code: str) -> Callable[[Any], Any]:
     # exec into an isolated namespace to retrieve the function object.
     namespace: dict = {}
     exec(compiled, namespace)  # noqa: S102
-    return namespace["_converter"]
+    return cast(Callable[[Any], Any], namespace["_converter"])
 
 
 def apply_converter(
