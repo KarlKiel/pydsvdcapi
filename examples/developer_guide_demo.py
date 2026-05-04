@@ -87,8 +87,6 @@ from mock_devices import (  # noqa: E402
 from pydsvdcapi import (  # noqa: E402
     # -- Property type constants --
     PROPERTY_TYPE_NUMERIC,
-    PROPERTY_TYPE_STRING,
-    # -- Components --
     BinaryInput,
     # -- Enums --
     BinaryInputType,
@@ -105,7 +103,6 @@ from pydsvdcapi import (  # noqa: E402
     DeviceEvent,
     DeviceProperty,
     Output,
-    OutputChannel,
     OutputChannelType,
     OutputFunction,
     OutputMode,
@@ -967,7 +964,7 @@ async def action_create_converter(
     converter_code = "value = value / 1000"
     info(f"Converter snippet:  {converter_code!r}")
     info(f"Sensor:             {si_power.name} (ds_index={si_power.ds_index})")
-    info(f"Effect:             raw W → kW (divide by 1000)")
+    info("Effect:             raw W → kW (divide by 1000)")
 
     answer = await _read_line(
         f"\n{BOLD}Apply this converter? [y/N]: {RESET}",

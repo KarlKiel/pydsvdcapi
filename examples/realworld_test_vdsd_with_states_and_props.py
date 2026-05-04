@@ -199,7 +199,7 @@ async def on_channel_applied(output: Output, updates: dict) -> None:
 
 
 async def on_control_value(
-    vdsd: "Vdsd",
+    vdsd: Vdsd,
     name: str,
     value: float,
     group: int | None,

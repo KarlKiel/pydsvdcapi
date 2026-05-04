@@ -144,6 +144,6 @@ from pydsvdcapi.vdsd import (  # noqa: F401,F811
     InvokeActionCallback,
     Vdsd,
 )
-from pydsvdcapi.vdsd import (
+from pydsvdcapi.vdsd import (  # noqa: F401
     IdentifyCallback as DeviceIdentifyCallback,
 )

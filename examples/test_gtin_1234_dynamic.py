@@ -51,7 +51,7 @@ from pydsvdcapi import (
 from pydsvdcapi.actions import ActionParameter, CustomAction, DeviceActionDescription
 from pydsvdcapi.device_property import PROPERTY_TYPE_NUMERIC, DeviceProperty
 from pydsvdcapi.device_state import DeviceState
-from pydsvdcapi.enums import ColorClass, OutputUsage
+from pydsvdcapi.enums import ColorClass
 
 # ---------------------------------------------------------------------------
 # Config
@@ -361,17 +361,17 @@ async def main() -> None:
     info(f"dynamic_definitions : {BOLD}True{RESET}")
     info("")
     info("Device features defined by this VDC:")
-    info(f"  State   : pyVDC_State   (options: idle / running / error)")
-    info(f"  State   : pyVDC_Mode    (options: off / auto / manual)")
-    info(f"  Action  : pyVDC_Action  (param: level 0–100 %)")
-    info(f"  Event   : pyVDC_Event")
-    info(f"  Property: pyVDC_Property (0–1000 ppm)")
+    info("  State   : pyVDC_State   (options: idle / running / error)")
+    info("  State   : pyVDC_Mode    (options: off / auto / manual)")
+    info("  Action  : pyVDC_Action  (param: level 0–100 %)")
+    info("  Event   : pyVDC_Event")
+    info("  Property: pyVDC_Property (0–1000 ppm)")
     info("")
     info("DB-defined features for GTIN 1234567890123:")
-    info(f"  State   : dummyState    (options: d / mm / u / y)")
-    info(f"  Property: dummyProperty (string)")
-    info(f"  Actions : dummyAction1, dummyAction2, …")
-    info(f"  Events  : dummyEventOther, dummyEventUI2, Nochnevent")
+    info("  State   : dummyState    (options: d / mm / u / y)")
+    info("  Property: dummyProperty (string)")
+    info("  Actions : dummyAction1, dummyAction2, …")
+    info("  Events  : dummyEventOther, dummyEventUI2, Nochnevent")
     info("")
     info("Observed behaviour (dynamicDefinitions=True + GTIN with DB state row):")
     info(

@@ -67,7 +67,6 @@ import logging
 import random
 import shutil
 import sys
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -212,7 +211,7 @@ def warn(text: str) -> None:
     print(f"{YELLOW}[warn]{RESET} {text}")
 
 
-async def wait_for_session(host: "VdcHost", timeout: float = CONNECT_TIMEOUT) -> None:
+async def wait_for_session(host: VdcHost, timeout: float = CONNECT_TIMEOUT) -> None:
     """Block until the vdSM completes the Hello handshake."""
     info(f"Waiting up to {int(timeout)}s for vdSM to connect on port {host.port}…")
     deadline = asyncio.get_event_loop().time() + timeout
@@ -298,7 +297,7 @@ async def on_message(session, msg: pb.Message) -> Optional[pb.Message]:
 # ===========================================================================
 
 
-def build_device_a(vdc: "Vdc") -> "Device":
+def build_device_a(vdc: Vdc) -> Device:
     """Build Device A: motion binary-input + dimmer + toggle action."""
     dsuid = DsUid.from_name_in_space("sim-demo-device-a", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=dsuid)
@@ -376,10 +375,10 @@ def build_device_a(vdc: "Vdc") -> "Device":
 class MockDeviceA:
     """Background simulator for Device A (motion + dimmer)."""
 
-    def __init__(self, device: "Device") -> None:
-        self._vdsd: "Vdsd" = list(device.vdsds.values())[0]
-        self._bi: "BinaryInput" = self._vdsd.binary_inputs[0]
-        self._output: "Output" = self._vdsd.output
+    def __init__(self, device: Device) -> None:
+        self._vdsd: Vdsd = list(device.vdsds.values())[0]
+        self._bi: BinaryInput = self._vdsd.binary_inputs[0]
+        self._output: Output = self._vdsd.output
         self._task: Optional[asyncio.Task] = None
         self._log = logging.getLogger("mock-A")
         self._motion = False
@@ -440,7 +439,7 @@ class MockDeviceA:
 # ===========================================================================
 
 
-def build_device_b(vdc: "Vdc") -> "Device":
+def build_device_b(vdc: Vdc) -> Device:
     """Build Device B: rocker-button + brightness+CT dimmer + property."""
     dsuid = DsUid.from_name_in_space("sim-demo-device-b", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=dsuid)
@@ -532,11 +531,11 @@ def _make_on_channel_applied(label: str):
 class MockDeviceB:
     """Background simulator for Device B (single button + CT dimmer + temp sensor)."""
 
-    def __init__(self, device: "Device") -> None:
-        self._vdsd: "Vdsd" = list(device.vdsds.values())[0]
-        self._output: "Output" = self._vdsd.output
-        self._prop: "DeviceProperty" = self._vdsd.device_properties[0]
-        self._sensor: "SensorInput" = self._vdsd.sensor_inputs[0]
+    def __init__(self, device: Device) -> None:
+        self._vdsd: Vdsd = list(device.vdsds.values())[0]
+        self._output: Output = self._vdsd.output
+        self._prop: DeviceProperty = self._vdsd.device_properties[0]
+        self._sensor: SensorInput = self._vdsd.sensor_inputs[0]
         self._task: Optional[asyncio.Task] = None
         self._log = logging.getLogger("mock-B")
         self._brightness = 50.0
@@ -622,7 +621,7 @@ class MockDeviceB:
 # ===========================================================================
 
 
-def build_device_c(vdc: "Vdc") -> "Device":
+def build_device_c(vdc: Vdc) -> Device:
     """Build Device C: window contact binary-input + relay output + event."""
     dsuid = DsUid.from_name_in_space("sim-demo-device-c", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=dsuid)
@@ -682,11 +681,11 @@ def build_device_c(vdc: "Vdc") -> "Device":
 class MockDeviceC:
     """Background simulator for Device C (window contact + relay + event)."""
 
-    def __init__(self, device: "Device") -> None:
-        self._vdsd: "Vdsd" = list(device.vdsds.values())[0]
-        self._bi: "BinaryInput" = self._vdsd.binary_inputs[0]
-        self._output: "Output" = self._vdsd.output
-        self._event: "DeviceEvent" = self._vdsd.device_events[0]
+    def __init__(self, device: Device) -> None:
+        self._vdsd: Vdsd = list(device.vdsds.values())[0]
+        self._bi: BinaryInput = self._vdsd.binary_inputs[0]
+        self._output: Output = self._vdsd.output
+        self._event: DeviceEvent = self._vdsd.device_events[0]
         self._task: Optional[asyncio.Task] = None
         self._log = logging.getLogger("mock-C")
         self._window_open = False
@@ -758,7 +757,7 @@ class MockDeviceC:
 # ===========================================================================
 
 
-def build_all_devices(vdc: "Vdc") -> dict:
+def build_all_devices(vdc: Vdc) -> dict:
     """Build and return the active devices (currently Device A only)."""
     return {
         "A": build_device_a(vdc),
@@ -766,8 +765,8 @@ def build_all_devices(vdc: "Vdc") -> dict:
 
 
 async def announce_devices(
-    host: "VdcHost",
-    vdc: "Vdc",
+    host: VdcHost,
+    vdc: Vdc,
     devices: dict,
 ) -> None:
     """Announce all devices in *devices* to the vdSM."""
@@ -783,7 +782,7 @@ async def announce_devices(
     # pre-registered devices the dSM discovers all of them at once and
     # will not confirm any single announce until all are in flight —
     # sequential announcing would deadlock.
-    async def _announce_one(label: str, device: "Device") -> None:
+    async def _announce_one(label: str, device: Device) -> None:
         for vdsd in device.vdsds.values():
             ok = await vdsd.announce(session)
             info(
@@ -797,7 +796,7 @@ async def announce_devices(
     )
 
 
-async def vanish_devices(host: "VdcHost", devices: dict) -> None:
+async def vanish_devices(host: VdcHost, devices: dict) -> None:
     """Send vanish for all devices in *devices*."""
     session = host.session
     for label, device in devices.items():
@@ -828,12 +827,12 @@ async def stop_mocks(mocks: dict) -> None:
 
 
 async def action_breakdown_restore(
-    host: "VdcHost",
-    vdc: "Vdc",
+    host: VdcHost,
+    vdc: Vdc,
     devices: dict,
     mocks: dict,
     port: int,
-) -> tuple["VdcHost", "Vdc", dict, dict]:
+) -> tuple[VdcHost, Vdc, dict, dict]:
     """Stop everything, wipe state, rebuild from YAML, re-announce.
 
     Returns the new (host, vdc, devices, mocks) tuple.
@@ -907,7 +906,7 @@ async def action_breakdown_restore(
     if not new_vdc.is_announced:
         warn("vDC re-announcement failed.")
     else:
-        info(f"vDC and all devices re-announced")
+        info("vDC and all devices re-announced")
 
     section("Restarting mock simulators…")
     new_mocks = build_mocks(new_devices)
@@ -918,10 +917,10 @@ async def action_breakdown_restore(
 
 
 async def action_save_template_create_d(
-    host: "VdcHost",
-    vdc: "Vdc",
+    host: VdcHost,
+    vdc: Vdc,
     devices: dict,
-) -> Optional["Device"]:
+) -> Optional[Device]:
     """Save Device A as template, load and instantiate Device D."""
     banner("Menu [2] — Save Device A as template → Device D")
 
@@ -981,10 +980,10 @@ async def _device_d_invoke_action(action_id: str, params: dict) -> None:
 
 
 async def action_end(
-    host: "VdcHost",
+    host: VdcHost,
     devices: dict,
     mocks: dict,
-    device_d: Optional["Device"],
+    device_d: Optional[Device],
 ) -> None:
     """Vanish all devices, stop host, clean up all temporary files."""
     banner("Menu [3] — End simulation")

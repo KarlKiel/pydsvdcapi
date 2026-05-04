@@ -20,7 +20,6 @@ from pydsvdcapi import (
     DsUid,
     DsUidNamespace,
     Output,
-    OutputChannelType,
     OutputFunction,
     OutputMode,
     Vdc,

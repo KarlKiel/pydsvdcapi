@@ -411,7 +411,7 @@ async def main() -> None:
             f"  {i:<2}  {c.name:<26}  {c.color_class.name:<18}  {fn:>2}  {ch:<28}  {gtin}"
         )
     info("")
-    info(f"  Notes:")
+    info("  Notes:")
     for i, rt in enumerate(runtimes, 1):
         info(f"    {i}. {rt.cfg.note}")
     info("")

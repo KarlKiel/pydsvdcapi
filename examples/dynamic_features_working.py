@@ -151,7 +151,7 @@ from pydsvdcapi import (
 from pydsvdcapi.actions import ActionParameter, DeviceActionDescription, StandardAction
 from pydsvdcapi.device_property import PROPERTY_TYPE_NUMERIC, DeviceProperty
 from pydsvdcapi.device_state import DeviceState
-from pydsvdcapi.enums import ColorClass, OutputUsage
+from pydsvdcapi.enums import ColorClass
 
 # ---------------------------------------------------------------------------
 # Configuration — EDIT THIS GTIN
@@ -512,22 +512,22 @@ async def main() -> None:
     info(f"  Port            : {args.port}")
     info("")
     info(f"{BOLD}Device announces:{RESET}")
-    info(f"  States  : operatingMode (standby/running/error)")
-    info(f"            connectivity (offline/online/degraded)")
-    info(f"  Event   : testAlarm")
-    info(f"  Action  : setMode(mode=standby|running)")
-    info(f"  Property: uptimeSecs")
+    info("  States  : operatingMode (standby/running/error)")
+    info("            connectivity (offline/online/degraded)")
+    info("  Event   : testAlarm")
+    info("  Action  : setMode(mode=standby|running)")
+    info("  Property: uptimeSecs")
     info("")
     info(f"{BOLD}Expected dSS behavior:{RESET}")
     info(
         f"  hasActions      : {'True (Activities tab visible)' if args.gtin else 'depends on GTIN'}"
     )
-    info(f"  Descriptions    : from VDC (dynamicDefinitions=True)")
-    info(f"  State triggers  : DeviceStateEvent fires on push → event rules work")
-    info(f"  State conditions: only work if GTIN has matching state names in VdcDb")
-    info(f"  Events          : DeviceEventEvent fires → event rules work")
+    info("  Descriptions    : from VDC (dynamicDefinitions=True)")
+    info("  State triggers  : DeviceStateEvent fires on push → event rules work")
+    info("  State conditions: only work if GTIN has matching state names in VdcDb")
+    info("  Events          : DeviceEventEvent fires → event rules work")
     info(
-        f"  Actions         : invokeDeviceAction dispatched to on_invoke_action callback"
+        "  Actions         : invokeDeviceAction dispatched to on_invoke_action callback"
     )
     info("")
 
