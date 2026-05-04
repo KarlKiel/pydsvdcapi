@@ -393,6 +393,7 @@ class VdcSession:
 
     async def _invoke_on_hello(self) -> None:
         """Wrapper that invokes *_on_hello* with error handling."""
+        assert self._on_hello is not None  # guarded by caller
         try:
             await self._on_hello(self)
         except Exception:  # noqa: BLE001
@@ -444,7 +445,7 @@ class VdcSession:
         response = pb.Message()
         response.type = pb.GENERIC_RESPONSE
         response.message_id = request.message_id
-        response.generic_response.code = code
+        response.generic_response.code = code  # type: ignore[assignment]  # protobuf accepts int for enum fields at runtime
         response.generic_response.description = description
 
         try:
