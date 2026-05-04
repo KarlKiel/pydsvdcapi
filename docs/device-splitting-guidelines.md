@@ -24,12 +24,12 @@ different zone/group.
 
 ## What Does NOT Require Splitting
 
-| Component | Per vdSD | Why |
-|---|---|---|
-| Button inputs | 0 to many | Stored as array; each has its own group/function setting |
-| Binary inputs | 0 to many | Stored as array with individual group settings |
-| Sensors | 0 to many | Stored as array |
-| Output channels | 1 to many (on the single output) | Parameters of one output function |
+| Component | Allowed Per vdSD | Recommendation | Why? |
+|---|---|---|---|
+| Button inputs | 0 to many | Single Pushbutton or Pushbuttongroup only | Even though buttons are stored as array with its own group/function setting, configurator UI only allows config for first Button/Buttongroup |
+| Binary inputs | 0 to many | Single Binary input per vdsd only | Even though binary inputs are stored as array with individual group settings configurator UI only allows config for first binary input |
+| Sensors | 0 to many | 0 to many |Stored as array, no individual sensor settings available |
+| Output channels | 1 to many (on the single output) | # of channels normally directly related to outputFunction | setting of outputFunction expects specific number and types for specific outputFunctions  |
 
 A paired up/down rocker (2 buttons) is one vdSD with 2 button inputs at
 index 0 and 1.
