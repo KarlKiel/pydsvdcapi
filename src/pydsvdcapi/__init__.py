@@ -138,10 +138,12 @@ from pydsvdcapi.vdc_host import (  # noqa: F401
     VdcHost,
 )
 from pydsvdcapi.vdsd import (  # noqa: F401,F811
+    ENTITY_TYPE_VDSD,
     ControlValueCallback,
     Device,
-    ENTITY_TYPE_VDSD,
-    IdentifyCallback as DeviceIdentifyCallback,
     InvokeActionCallback,
     Vdsd,
+)
+from pydsvdcapi.vdsd import (
+    IdentifyCallback as DeviceIdentifyCallback,
 )
