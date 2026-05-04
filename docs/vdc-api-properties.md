@@ -1,4 +1,4 @@
-# pyDSvDCAPI — vDC API Properties Complete Reference
+# pydsvdcapi — vDC API Properties Complete Reference
 
 This document consolidates the entire vDC API property surface into a single reference.
 For every property it documents: the protocol key, access mode, type, description, and how
@@ -8,7 +8,7 @@ Sources used:
 - Official vDC API Properties specification (vdc-API-properties/01–15)
 - dSS mainline firmware source (`modelconst.h`, `vdc-connection.cpp`, `busscanner.cpp`,
   `backend-vdcs.cpp`, `businterface.cpp`, `device.cpp`, `model-features.cpp`)
-- pyDSvDCAPI `enums.py` and `vdc-host-behavior.md`
+- pydsvdcapi `enums.py` and `vdc-host-behavior.md`
 
 **Conventions**
 
@@ -145,7 +145,7 @@ Values are the firmware `ApplicationType` enum (`modelconst.h`). The same intege
 Model features are boolean flags sent in the `modelFeatures` property. Each feature name is a key with value `true` when present. The full set is the firmware `ModelFeatureId` enum (65 features, IDs 0–64).
 
 **Derivation key:**
-- `auto: <condition>` — the pyDSvDCAPI library auto-sets this feature when the condition is met
+- `auto: <condition>` — the pydsvdcapi library auto-sets this feature when the condition is met
 - `not-tested` — can be set manually with `add_model_feature()`; full VDC behavior unconfirmed
 - `manual` — must be set explicitly by the integrator; VDC behavior confirmed or plausible
 - `not-supported-vdc` — **rejected with `ValueError`** by `add_model_feature()`; cannot work on TCP/IP VDC devices; never auto-derived
@@ -820,7 +820,7 @@ Read-only hardware characteristics. Read by the dSS via `VdcHelper::getClimateSe
 
 | Property | acc | Type | Description | dSS handling |
 |---|---|---|---|---|
-| `function` | r | integer enum | Functional output type — see table below. | **Not read by dSS firmware.** Purely for configurator display and client code. The auto-created channels in pyDSvDCAPI are determined by this value, but the firmware ignores it. |
+| `function` | r | integer enum | Functional output type — see table below. | **Not read by dSS firmware.** Purely for configurator display and client code. The auto-created channels in pydsvdcapi are determined by this value, but the firmware ignores it. |
 | `defaultGroup` | r | integer | Application Group ID for this output. Use `ColorClass` enum values (1–12, 48, 64, 65, 69). Informational only — zero runtime callers in the dSS firmware read this field for routing. Example: Yellow light: `defaultGroup=1` (`ColorClass.LIGHTS`); Grey blind: `defaultGroup=2` (`ColorClass.BLINDS`); Blue heating valve: `defaultGroup=3` (`ColorClass.HEATING`); Blue ventilation: `defaultGroup=10` (`ColorClass.VENTILATION`). |
 | `outputUsage` | r | integer enum | Usage context beyond device colour — see table below. | Stored in output descriptor. Shown in configurator. |
 | `variableRamp` | r | boolean | `true` = output supports variable-speed transitions. | Stored. Shown in configurator. |

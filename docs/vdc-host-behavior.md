@@ -1,4 +1,4 @@
-# pyDSvDCAPI — VDC Host Behavior Reference
+# pydsvdcapi — VDC Host Behavior Reference
 
 > **Audience:** This document targets completed VDC implementations.
 > It explains the *what* and *why* of configuration choices rather
@@ -10,7 +10,7 @@
 
 ## 1. The Three-Level Entity Hierarchy
 
-A pyDSvDCAPI deployment has exactly three levels:
+A pydsvdcapi deployment has exactly three levels:
 
 ```
 VdcHost  — one per gateway host (one MAC address / process)
@@ -293,7 +293,7 @@ participates in the standard lighting group.
   put the corresponding regular group in `groups` instead — e.g. an apartment
   ventilation output uses `active_group=64` but `groups={10}` (VENTILATION).
 
-**Backend-VDC path note**: when pyDSvDCAPI is used as a TCP/IP VDC (classic path), the
+**Backend-VDC path note**: when pydsvdcapi is used as a TCP/IP VDC (classic path), the
 vDSM reads all three output fields from the VDC announcement and translates them into the
 dS485 bus protocol.  When the dSS backend-VDC REST path is used instead, the dSS ignores
 `outputSettings.activeGroup` and `outputSettings.groups` entirely — it calls

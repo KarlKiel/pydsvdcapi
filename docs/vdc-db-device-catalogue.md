@@ -95,7 +95,7 @@ on the VDC's `dynamicDefinitions` capability:
 
 - **`dynamicDefinitions=False`** (e.g. official product VDC addons) → falls back
   to the DB state definitions for the GTIN → shows the GTIN's exact state names.
-- **`dynamicDefinitions=True`** (pyDSvDCAPI default) → queries the VDC's own
+- **`dynamicDefinitions=True`** (pydsvdcapi default) → queries the VDC's own
   `deviceStateDescriptions` property → shows the VDC's own custom state names,
   completely overriding any DB content.
 
