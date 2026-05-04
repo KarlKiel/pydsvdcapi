@@ -146,10 +146,12 @@ Model features are boolean flags sent in the `modelFeatures` property. Each feat
 
 **Derivation key:**
 - `auto: <condition>` — the pyDSvDCAPI library auto-sets this feature when the condition is met
-- `manual` — must be set explicitly by the integrator
+- `not-tested` — can be set manually with `add_model_feature()`; full VDC behavior unconfirmed
+- `manual` — must be set explicitly by the integrator; VDC behavior confirmed or plausible
+- `not-supported-vdc` — **rejected with `ValueError`** by `add_model_feature()`; cannot work on TCP/IP VDC devices; never auto-derived
 - `forbidden` — do NOT set from a vDC; dSS firmware injects/manages this automatically
 
-> **VDC limitation:** For TCP/IP VDC devices the `modelFeatures.setFeatures()` call in the dSS firmware throws (device color = -1, outside valid range 1–9), so declared features are NOT stored in the ModelFeatures database. The configurator reads features from the database via `/apartment/getModelFeatures`. This means model features declared by a VDC device may not reach the configurator UI. The dSS firmware's only direct runtime check is `supportsApartmentApplications()` which reads `apartmentapplication` from `m_modelFeatures` — this also fails for VDC devices.
+> **VDC path:** For **classic TCP/IP VDC devices** (`BusMember_vDC`, the Python library path), the DSM layer translates the device's `primaryGroup` into `FunctionID` bits[15:12] (e.g. `primaryGroup=1` → `FunctionID=0x1000`). This makes `getDeviceClass()` return a valid color, so `ModelFeatures::setFeatures()` **succeeds** and declared features reach the `/apartment/getModelFeatures` REST endpoint that the configurator reads. For **backend VDC devices** (`BusMember_backendVdc`), the busscanner block is bypassed entirely — features are never registered. See `docs/dss-configurator-ui-composition.md §2` for the full flow analysis.
 
 ##### A — General Device Properties Panel
 
@@ -158,12 +160,12 @@ Model features are boolean flags sent in the `modelFeatures` property. Each feat
 | 0 | `dontcare` | Enables the scene "don't care" flag. When active, a scene transition leaves the output unchanged instead of forcing a specific value. | `getSceneMode()` / `setSceneMode()` → `dontCare` parameter | `auto: any output present` |
 | 7 | `outvalue8` | Enables 8-bit (0–255) scene output value entry. Without it, only binary on/off values (0 or 255) are offered. | `getSceneValue()` / `setSceneValue()` (full 0–255 range) | `auto: primaryGroup ≠ 2 (not an outdoor shade device)` |
 | 4 | `transt` | Enables per-scene global transition time configuration (one preset). | `getTransitionTime()` / `setTransitionTime()` (dimtimeIndex 0) | `auto: channelType 1–12, 14–18, or 22–24 present` |
-| 53 | `dimtimeconfig` | Extends `transt`: up to three independent transition time presets (dimtimeIndex 0–2) with separate up/down ramp times. | `getTransitionTime()` / `setTransitionTime()` (dimtimeIndex 0–2) | `manual` |
-| 59 | `customtransitiontime` | Enables per-scene custom transition times (overrides global presets on a per-scene basis). | Per-scene transition time editor | `manual` |
-| 55 | `dimmodeconfig` | Enables dimmer characteristic curve selection (linear vs. logarithmic). | Dimmer mode selector in device properties | `manual` |
-| 54 | `outmodeauto` | Adds an "automatic" mode option to the dimmer output mode selector (DS485 mode ID 31). **NOT supported for TCP/IP VDC** — writes via DS485 `CfgFunction_Mode`; additionally blocks the "Edit Device Values" UI for multi-channel outputs. | `setOutputMode()` → AUTO mode | `not-supported-vdc` |
-| 41 | `outconfigswitch` | Enables "output after switch" behavior configuration. | Scene impulse configuration field | `manual` |
-| 39 | `impulseconfig` | Enables output state configuration for a single impulse signal (SceneImpulse: on / off / retain). | `setOutputAfterImpulse()` / `getOutputAfterImpulse()` | `manual` |
+| 53 | `dimtimeconfig` | Extends `transt`: up to three independent transition time presets (dimtimeIndex 0–2) with separate up/down ramp times. | `getTransitionTime()` / `setTransitionTime()` (dimtimeIndex 0–2) | `auto: function in {DIMMER(1), DIMMER_COLOR_TEMP(3), FULL_COLOR_DIMMER(4)}` |
+| 59 | `customtransitiontime` | Per-scene custom transition time. No vdSD property stores the value — may be stored on dSS/vdSM side. | Per-scene transition time editor | `not-tested` |
+| 55 | `dimmodeconfig` | Dimmer characteristic curve selection (linear vs. logarithmic). Relates to physical dimmer hardware; VDC devices do not receive this information. **NOT supported for TCP/IP VDC.** | Dimmer mode selector in device properties | `not-supported-vdc` |
+| 54 | `outmodeauto` | Adds an "automatic" mode option to the dimmer output mode selector. Firmware analysis shows it writes via DS485 `CfgFunction_Mode` and may block the "Edit Device Values" UI for multi-channel outputs — VDC behavior not confirmed. | `setOutputMode()` → AUTO mode | `not-tested` |
+| 41 | `outconfigswitch` | Switch output threshold configuration UI (onThreshold). | Scene impulse configuration field | `auto: function=ON_OFF` |
+| 39 | `impulseconfig` | "Impulse" tab in Device Properties for binary-output devices — configures impulse behavior. May be stored on dSS/vdSM. | `setOutputAfterImpulse()` / `getOutputAfterImpulse()` | `auto: function=ON_OFF` |
 
 ##### A.2 — Output Mode Selection
 
@@ -180,16 +182,16 @@ Model features are boolean flags sent in the `modelFeatures` property. Each feat
 
 | ID | Feature | Effect | dSS API | Derivation |
 |---|---|---|---|---|
-| 2 | `ledauto` | Full LED configuration: status LED follows group/scene state; all LED parameters configurable (color, mode, dim, RGB, group color mode). | `getLedMode()` / `setLedMode()` | `auto: any output present` |
-| 3 | `leddark` | Permanent LED-off option (LED can be set to always dark). | `setLedMode()` → modeSelect = dark | `manual` |
+| 2 | `ledauto` | "LED Mode" radio button (Auto / Off). Device LED is not API-controlled on VDC devices; no vdSD property reflects the state. **NOT supported for TCP/IP VDC.** | `getLedMode()` / `setLedMode()` | `not-supported-vdc` |
+| 3 | `leddark` | "LED Mode" radio button (On / Dark / Off). Same reason as `ledauto` — hardware-only, no VDC path. **NOT supported for TCP/IP VDC.** | `setLedMode()` → modeSelect = dark | `not-supported-vdc` |
 
 ##### A.4 — Blink / Identification
 
 | ID | Feature | Effect | dSS API | Requirement | Derivation |
 |---|---|---|---|---|---|
-| 1 | `blink` | Enables the `blink()` device interface call. Device pulses LED to identify itself. | `blink()` device interface | `capabilities.identification = true` on the vDC | `auto: on_identify callback registered` |
-| 34 | `blinkconfig` | Enables blink pattern configuration (pulse count, on-delay, off-delay). Requires `blink`. | `setBlinkConfig()` / `getBlinkConfig()` | `blink` must also be present | `auto: on_identify callback registered` |
-| 56 | `identification` | Enables the "Identify" button in the configurator. 1:1 correspondence with `capabilities.identification`. | Configurator "Identify" button → `blink()` call | `capabilities.identification = true` | `auto: on_identify callback registered` |
+| 1 | `blink` | Enables the per-scene "blink effect" checkbox. Scene calls with effect=4 produce a blink pattern on the output. | `scenes/[x]/effect` (=4 when selected) | Output present | `auto: any output present` |
+| 34 | `blinkconfig` | Blink pattern configuration (pulse count, on-delay, off-delay). No vdSD property stores the config — may be stored on dSS/vdSM side. | `setBlinkConfig()` / `getBlinkConfig()` | `blink` must also be present | `not-tested` |
+| 56 | `identification` | Enables the "Identify" menu entry in the configurator. Sends a Notify message to the VDC which triggers the `on_identify` callback. | Configurator "Identify" → `blink()` call | `capabilities.identification = true` | `auto: on_identify callback registered` |
 
 ##### B — Push Button / Input Configuration Panel
 
@@ -202,17 +204,17 @@ All require at least one `buttonInputDescription` entry.
 | 10 | `pushbsensor` | Enables sensor-trigger assignment for the button input. | Button assignment → sensor trigger | — | `auto: button with group=8` |
 | 11 | `pushbarea` | Enables area scene assignment (areas 1–4). | Area scene configuration in button settings | — | `auto: button with group≠8` |
 | 12 | `pushbadvanced` | Enables advanced button options: scene selection per event, button ID assignment. | Advanced button configuration | — | `auto: any button configured` |
-| 13 | `pushbcombined` | Enables combined two-button operation (adjacent up/down buttons as single input). | Combined input mode toggle | `buttonType` ∈ {2,3,4,5} | `auto: buttonType in {2,3,4,5}` |
-| 49 | `pushbdisabled` | Indicates the button input can be disabled entirely. | "Disable button" option | — | `manual` |
-| 25 | `twowayconfig` | Enables two-way (master/slave) pairing configuration. | Two-way mode selector | `buttonInputDescriptions` with `dsIndex≥1` | `auto: any button dsIndex≥1` |
+| 13 | `pushbcombined` | Combined two-button operation (adjacent up/down buttons as single input). `ButtonDescription/buttonType` is **read-only** in the VDC protocol — values do not align with the UI options and this feature is hardware-specific to physical TKM/SDS devices. **NOT supported for TCP/IP VDC.** | Combined input mode toggle | `buttonType` ∈ {2,3,4,5} | `not-supported-vdc` |
+| 49 | `pushbdisabled` | Dialog for disabling unused buttons from end-user UIs / Smarthome API. | "Disable button" option | Any button present | `auto: any button configured` |
+| 25 | `twowayconfig` | Two-way (master/slave) pairing configuration. `ButtonDescription/buttonType` is **read-only** in the VDC protocol — same root cause as `pushbcombined`. **NOT supported for TCP/IP VDC.** | Two-way mode selector | `buttonInputDescriptions` with `dsIndex≥1` | `not-supported-vdc` |
 
 ##### C — AKM Sensor Input Configuration
 
 | ID | Feature | Effect | dSS API | Prerequisite | Derivation |
 |---|---|---|---|---|---|
-| 22 | `akmsensor` | Enables sensor input function assignment. | `setAKMInputProperty()` | Device has binary sensor input | `auto: binary input with group=8` |
-| 23 | `akminput` | Enables input electrical mode selection. | `setAKMInputProperty()` | `akmsensor` also present | `auto: binary input with group=8` |
-| 24 | `akmdelay` | Enables debounce/delay timeout configuration (on-delay and off-delay). | `setAKMInputTimeouts()` / `getAKMInputTimeouts()` | `akmsensor` or `akminput` present | `auto: binary input with group=8` |
+| 22 | `akmsensor` | "Sensor Function" dropdown to configure the sensor type (motion, window…). | `setAKMInputProperty()` / `binaryInputSettings/sensorFunction` | Any binary input | `auto: any binary input` |
+| 23 | `akminput` | "Input" dropdown to configure sensor behaviour (standard / inverted). Config may be stored on dSS/vdSM rather than vdSD. | `setAKMInputProperty()` | `akmsensor` also present | `auto: any binary input` |
+| 24 | `akmdelay` | "Turn-on / Turn-off delay" dropdowns for delayed sensor response. Config may be stored on dSS/vdSM rather than vdSD. | `setAKMInputTimeouts()` / `getAKMInputTimeouts()` | `akmsensor` or `akminput` present | `auto: any binary input` |
 
 ##### D — Joker / Group Assignment (Black / SW Group)
 
@@ -235,7 +237,7 @@ Requires `primaryGroup=2` (GREY). `shadeprops` is the master gate.
 | 15 | `shadeposition` | Enables shade position control (0–100%) per scene. | Scene editor position field | Requires `shadeprops` | `auto: shade output + outputFunction=POSITIONAL` |
 | 18 | `shadebladeang` | Enables slat/blade angle control (0–100°) for venetian blinds. | Scene editor angle field | Requires `shadeprops`; jalousie hardware only | `auto: shade output + channelType 9 or 10 present` |
 | 16 | `motiontimefins` | Enables travel time calibration for slat movement. | `setMaxMotionTime()` / `setMotionTime()` | Requires `shadeprops`; jalousie/venetian blind only | `auto: shade output + channelType 9 or 10 present` |
-| 17 | `optypeconfig` | Enables output type selection (shade actuator / relay / other). Used on **SW/black group** devices, not GR shade devices. | Output type selector | Applicable in SW group only | `manual` |
+| 17 | `optypeconfig` | Output type selector (Switched / Swiped / PowerSafe). Selection changes dSS `m_OutputMode` via DS485 `CfgFunction_Mode` — these mode IDs have no VDC equivalent. **NOT supported for TCP/IP VDC.** | Output type selector | — | `not-supported-vdc` |
 
 ##### F — Location & Wind Protection (GR Group)
 
@@ -243,9 +245,10 @@ Requires `primaryGroup=2` and `shadeprops`.
 
 | ID | Feature | Effect | dSS API | Notes | Derivation |
 |---|---|---|---|---|---|
-| 36 | `locationconfig` | Enables orientation settings (cardinal direction N/S/E/W) and floor number. | `setCardinalDirection()` / `setFloor()` | Used in wind protection calculation | `auto: primaryGroup=2 + any output` |
-| 37 | `windprotectionconfigawning` | Enables wind sensitivity class configuration for **awning** hardware. | `setWindProtectionClass()` / `getWindProtectionClass()` | Use for awnings only; not for blinds | `auto: primaryGroup=2 + output without channelType 9/10` |
-| 38 | `windprotectionconfigblind` | Enables wind sensitivity class configuration for **blind/shutter/jalousie** hardware. | `setWindProtectionClass()` / `getWindProtectionClass()` | Use for blinds only; not for awnings | `auto: primaryGroup=2 + channelType 9 or 10 present` |
+| 36 | `locationconfig` | Direction/orientation dropdown (cardinal direction, floor) in Device Properties. Values stored on dSS side. | `setCardinalDirection()` / `setFloor()` | Used in wind protection calculation | `auto: primaryGroup=2 + any output` |
+| 62 | `operationlock` | "Ignore operation lock for weather alarms" radio button in Device Properties → Advanced Settings. Stored on dSS/vdSM. | Operation lock control | Grey actuator devices | `auto: primaryGroup=2 + any output` |
+| 37 | `windprotectionconfigawning` | Wind sensitivity class configuration for **awning** hardware. | `setWindProtectionClass()` / `getWindProtectionClass()` | Use for awnings only; not for blinds | `auto: primaryGroup=2 + output without channelType 9/10` |
+| 38 | `windprotectionconfigblind` | Wind sensitivity class configuration for **blind/shutter/jalousie** hardware. | `setWindProtectionClass()` / `getWindProtectionClass()` | Use for blinds only; not for awnings | `auto: primaryGroup=2 + channelType 9 or 10 present` |
 
 > Use **exactly one** of `windprotectionconfigawning` or `windprotectionconfigblind` per device.
 
@@ -260,7 +263,7 @@ Requires `primaryGroup=3` (`ColorGroup.BLUE` — covers all climate sub-types fo
 | 29 | `heatingprops` | **Gate for heating sub-features.** Enables the full heating properties panel. | Heating properties panel | Required for `pwmvalue`, `valvetype`, `extendedvalvetypes` | `auto: primaryGroup=3` |
 | 30 | `pwmvalue` | Enables PWM valve configuration (period, min/max stroke, offset). | `setValvePwmMode()` / `getValvePwmMode()` | Requires `heatingprops` | `auto: primaryGroup ∈ {3,48} (BLUE / all climate; TCP/IP VDC: only 3 is valid) + outputFunction=ON_OFF` |
 | 31 | `valvetype` | Enables valve type selection (normally-open / normally-closed). **dSS writes** `outputSettings.heatingSystemType` back when user changes valve type. | `setValveType()` | Requires `heatingprops` | `auto: primaryGroup=3 + any output` |
-| 58 | `extendedvalvetypes` | Extends `valvetype` with additional types (piston, mixed-mode). | Extended valve type selector | Requires `valvetype` and `heatingprops`. **dSS writes** `heatingSystemType` with extended range. | `manual` |
+| 58 | `extendedvalvetypes` | Extends `valvetype` with additional types (piston, mixed-mode). **dSS writes** `heatingSystemType` with extended range. | Extended valve type selector | Requires `valvetype` and `heatingprops` | `auto: primaryGroup=3 + any output` |
 
 ##### H — Multi-Channel Output
 
@@ -273,27 +276,27 @@ Requires `primaryGroup=3` (`ColorGroup.BLUE` — covers all climate sub-types fo
 | ID | Feature | Effect | Notes | Derivation |
 |---|---|---|---|---|
 | 32 | `extradimmer` | Enables the additional dimmer circuit on UMV200/UMV210 devices (physical relay+dimmer combo hardware). **NOT supported for TCP/IP VDC** — hardware-specific; configuration writes via DS485. For VDC, declare separate output channels instead. | UMV-200/210 in GE group only | `not-supported-vdc` |
-| 33 | `umvrelay` | Enables the relay output toggle on UMV200/UMV210 devices (companion to `extradimmer`). **NOT supported for TCP/IP VDC** — same hardware-specific DS485 path as `extradimmer`. | Set with `extradimmer` | `not-supported-vdc` |
+| 33 | `umvrelay` | "Relay Function" dropdown to configure relay/output interplay (UMV200/210). If relay logic is internal to the UMV hardware, config is invisible to VDC and this would be NOT SUPPORTED. VDC behavior not confirmed — use only if device has addressable relay via API. | Set with `extradimmer` | `not-tested` |
 | 57 | `setumr200config` | Enables UMR-200 advanced configuration panel. **Firmware-managed — do NOT set from a vDC.** | Auto-injected for UMR-200 with revisionID ≥ 0x0370 | `forbidden` |
 
 ##### J — Temperature & Display (SK / FTW Room Controller)
 
 | ID | Feature | Effect | dSS API | Prerequisite | Derivation |
 |---|---|---|---|---|---|
-| 42 | `temperatureoffset` | Temperature calibration offset for built-in sensor (−128 to +127 in 0.1 °C). | `setTemperatureOffset()` / `getTemperatureOffset()` | Device has built-in temperature sensor | `manual` |
-| 44 | `ftwtempcontrolventilationselect` | Mode selection: "temperature only" vs. "temperature + ventilation" (SK-204). | `setSK204Config()` / `getSK204Config()` | SK-204 only | `manual` |
-| 45 | `ftwdisplaysettings` | Configures what is shown on the SK-204 display (humidity, room setpoint). | `setSK204DisplayMode()` / `getSK204DisplayMode()` | SK-204 only | `manual` |
-| 46 | `ftwbacklighttimeout` | Sets SK-204 display backlight timeout after last touch. | `setSK204BacklightTimeout()` | SK-204 only | `manual` |
-| 47 | `ventconfig` | Enables ventilation channel config when SK-204 is in ventilation control mode. | Ventilation output device settings | Requires `ftwtempcontrolventilationselect` | `manual` |
-| 48 | `fcu` | Marks device as a Fan Coil Unit with multiple heat/cool/fan stage channels. | FCU-specific output channel configuration | vDC use only | `manual` |
+| 42 | `temperatureoffset` | Temperature calibration offset for built-in sensor (−128 to +127 in 0.1 °C). | `setTemperatureOffset()` / `getTemperatureOffset()` | Device has built-in temperature sensor | `auto: sensorType=TEMPERATURE(1) + primaryGroup=3` |
+| 44 | `ftwtempcontrolventilationselect` | Mode selection: "temperature only" vs. "temperature + ventilation" (SK-204). Hardware-specific; not tested for VDC. | `setSK204Config()` / `getSK204Config()` | SK-204 only | `not-tested` |
+| 45 | `ftwdisplaysettings` | Display settings for SK-204 display panel. Hardware-specific to physical SK204/FTW panels; no VDC equivalent. **NOT supported for TCP/IP VDC.** | `setSK204DisplayMode()` / `getSK204DisplayMode()` | SK-204 only | `not-supported-vdc` |
+| 46 | `ftwbacklighttimeout` | SK-204 display backlight timeout. Hardware-specific to physical SK204/FTW panels; no VDC equivalent. **NOT supported for TCP/IP VDC.** | `setSK204BacklightTimeout()` | SK-204 only | `not-supported-vdc` |
+| 47 | `ventconfig` | Ventilation channel configuration UI. | Ventilation output device settings | Ventilation channel types present | `auto: any ventilation channel (types 12,13,14,15,20,21) present` |
+| 48 | `fcu` | Fan Coil Unit profile — marks device as FCU with combined heat/cool/fan channels. | FCU-specific output channel configuration | Ventilation channels + output + primaryGroup=3 | `auto: primaryGroup=3 + output + ventilation channel present` |
 
 ##### K — Power Consumption
 
 | ID | Feature | Effect | dSS API | Derivation |
 |---|---|---|---|---|
 | 20 | `consumption` | Enables power consumption display in device status view. | `setConsumptionVisualization()` | `auto: sensorType 14, 15, 16, or 17 present` |
-| 50 | `consumptioneventled` | LED pulse on energy count pulse (S0 input). | LED pulse on energy event | `manual` |
-| 51 | `consumptiontimer` | Configures consumption measurement sampling interval. | Sampling timer configuration | `manual` |
+| 50 | `consumptioneventled` | LED pulse on energy count pulse. Controls a hardware LED on the end device — no VDC parameter handles this. **NOT supported for TCP/IP VDC.** | LED pulse on energy event | — | `not-supported-vdc` |
+| 51 | `consumptiontimer` | Consumption measurement timer UI. Not tested for VDC — may be stored on dSS/vdSM side. | Sampling timer configuration | — | `not-tested` |
 
 ##### L — Custom Actions & Activities
 
@@ -305,30 +308,33 @@ Requires `primaryGroup=3` (`ColorGroup.BLUE` — covers all climate sub-types fo
 
 | ID | Feature | Injected when | Effect |
 |---|---|---|---|
-| 61 | `outmodeenoceanvalve` | `implementationId = "EnOcean_Bus_Container"` + valve device | Adds EnOcean valve output mode |
+| 61 | `outmodeenoceanvalve` | `implementationId = "EnOcean_Bus_Container"` + valve device | Adds EnOcean valve output mode. Also `not-supported-vdc` (DS485-only path). |
 | 43 | `apartmentapplication` | FunctionID subclass (bits 11–6) = 0x07, 0x08, or 0x09 | Apartment-level application filtering; the only model feature the dSS firmware itself reads at runtime |
 | 57 | `setumr200config` | Device type = UMR-200, revisionID ≥ 0x0370, multiDeviceIndex ≤ 1 | UMR-200 block assignment configuration |
-| 62 | `operationlock` | Device class = KL, revisionID ≥ 0x365 | Operation-lock support (disable physical button presses) |
-| 63 | `grkl387workaround` | Device class = KL, revisionID = 0x387, device number ∈ {200,210,220,230} | Hardware revision 0x387 behavior correction (dsd-2590) |
+| 63 | `grkl387workaround` | Device class = KL, revisionID = 0x387, device number ∈ {200,210,220,230} | Hardware revision 0x387 behavior correction. Also `not-supported-vdc` — meaningless for VDC devices. |
+
+> **Note on `operationlock`:** Physical KL hardware devices have this injected by firmware, but for TCP/IP VDC (grey/shade) devices it is auto-derived by the library (`primaryGroup=2 + any output`) because the UI state is stored on dSS/vdSM side. See Section F above.
 
 ##### N — Feature Combination Quick Reference
 
-| Device scenario | Minimum required features |
-|---|---|
-| Basic dimmer | `dontcare`, `outvalue8`, `transt` |
-| Advanced dimmer | add `dimtimeconfig`, `dimmodeconfig`, `customtransitiontime` |
-| Roller shutter / awning | `shadeprops`, `shadeposition`, `locationconfig`, `windprotectionconfigawning` |
-| Venetian blind / jalousie | `shadeprops`, `shadeposition`, `shadebladeang`, `motiontimefins`, `locationconfig`, `windprotectionconfigblind` |
-| Heating valve (PWM) | `heatinggroup`, `heatingprops`, `pwmvalue`, `valvetype` |
-| Heating valve (switched relay) | `heatinggroup`, `heatingprops`, `valvetype` |
-| Joker with group assignment | `highlevel`, `jokerconfig` |
-| Joker as heating actuator | `highlevel`, `jokerconfig`, `jokertempcontrol`, `valvetype` |
-| 1-way push button | `pushbutton`, `pushbdevice`, `pushbarea`, `pushbadvanced` |
-| 2-way push button (rocker) | `pushbutton`, `pushbdevice`, `pushbarea`, `pushbadvanced`, `twowayconfig` |
-| AKM sensor input | `akmsensor`, `akminput`, `akmdelay` |
-| Multi-channel RGBW output | `outputchannels` (with channelDescriptions populated) |
-| Device with blink identification | `identification`, `blink`, `blinkconfig` |
-| SK-204 room controller | `temperatureoffset`, `ftwtempcontrolventilationselect`, `ftwdisplaysettings`, `ftwbacklighttimeout`, `ventconfig`, `identification` |
+All features listed as `auto:` are produced automatically by `derive_model_features()` when the condition is met. Only `manual` and `not-tested` features need to be added explicitly.
+
+| Device scenario | Auto-derived features (from `derive_model_features()`) | Add manually if needed |
+|---|---|---|
+| Dimmable light (DIMMER function) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig` | `identification` (if on_identify set) |
+| Switched light (ON_OFF function) | `dontcare`, `blink`, `outvalue8`, `outconfigswitch`, `impulseconfig` | — |
+| Color light (FULL_COLOR_DIMMER) | `dontcare`, `blink`, `outvalue8`, `transt`, `outputchannels`, `dimtimeconfig` | — |
+| Roller shutter / awning | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | — |
+| Venetian blind / jalousie | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `shadebladeang`, `motiontimefins`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | — |
+| Heating valve (ON/OFF) | `dontcare`, `blink`, `outvalue8`, `pwmvalue`, `outconfigswitch`, `impulseconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
+| Heating valve (continuous/PWM) | `dontcare`, `blink`, `outvalue8`, `transt`, `pwmvalue`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
+| Joker with group assignment | `jokerconfig` (from primaryGroup=8) | `highlevel` (if button with group=8) |
+| 1-way push button | `pushbutton`, `pushbadvanced`, `pushbdisabled`, `pushbarea` (group≠8), `pushbdevice` (if supportsLocalKeyMode) | — |
+| AKM sensor input | `akmsensor`, `akminput`, `akmdelay` (from any binary input) | — |
+| Multi-channel RGBW output | `outputchannels` (auto when HUE+SAT or BRI+CT channels present) | — |
+| Device with blink identification | `blink` (auto from output), `identification` (auto from on_identify callback) | `blinkconfig` (not-tested) |
+| Room controller (temperature + Blue) | `temperatureoffset` (auto from TEMPERATURE sensor + primaryGroup=3) | `ftwtempcontrolventilationselect` (not-tested) |
+| Ventilation / Fan Coil Unit | `dontcare`, `blink`, `transt`, `outvalue8`, `ventconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes`, `fcu` | — |
 
 ---
 
@@ -352,7 +358,7 @@ Requires `primaryGroup=3` (`ColorGroup.BLUE` — covers all climate sub-types fo
 | `dsIndex` | r | integer | 0…N-1 sequential button index. Index 0 = primary / default button. | Used to address this button in settings and states. |
 | `supportsLocalKeyMode` | r | boolean | `true` = button can be configured as a "device button" (controls device output directly). | When `true` → enables `pushbdevice` feature auto-assignment. |
 | `buttonID` | r | optional integer | Physical button ID. All elements of the same multi-function hardware button share the same `buttonID`. | No fixed assignment if absent. |
-| `buttonType` | r | integer enum | Physical button form factor — see table below. | Used to auto-assign `pushbcombined` feature. |
+| `buttonType` | r | integer enum | Physical button form factor — see table below. | Read-only descriptor; `pushbcombined` is NOT supported for TCP/IP VDC devices (hardware-specific to physical TKM/SDS devices). |
 | `buttonElementID` | r | integer enum | Which element of a multi-contact button this represents — see table below. | Used for direction mapping (up/down/left/right). |
 
 **buttonType values:**
