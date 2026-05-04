@@ -509,28 +509,33 @@ configurator which UI panels to show for a device.  They do not affect
 runtime behaviour directly — only UI rendering.
 
 Most features are **auto-derived** from the declared components before
-the device is announced.  For example:
+the device is announced.  Key auto-derivation rules:
 
-- Any output → `dontcare`, `ledauto`
-- DIMMER function → `dimtimeconfig`, `outmodeauto`, `dimmodeconfig`, `customtransitiontime`
+- Any output → `dontcare`, `blink`
+- ON_OFF function → `outconfigswitch`, `impulseconfig`
+- DIMMER / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER function → `dimtimeconfig`
 - Grey shade output with slat channel → `shadebladeang`, `motiontimefins`
+- Any binary input → `akmsensor`, `akminput`, `akmdelay`
+- Any button → `pushbutton`, `pushbadvanced`, `pushbdisabled`
 
-Some features require **manual addition** because they depend on
-hardware-specific capabilities that cannot be inferred from the
-component configuration.  The most common manually-added features are:
+Some features are **not tested** (can be set manually, VDC behavior unconfirmed):
 
-| Feature | When to add |
+| Feature | When to consider adding |
 |---|---|
-| `outmode` | Device supports selecting output operating mode (dim / switch) |
-| `outmodeswitch` | Device can operate as a switch as well as a dimmer |
-| `outmodegeneric` | Joker device with selectable output mode |
-| `leddark` | Device has no status LED (dark-mode capable) |
-| `extradimmer` | Device has an additional external dimmer output |
-| `impulseconfig` | Device supports impulse-mode scene configuration |
-| `customactivityconfig` | Custom activity/app configuration UI is available |
+| `blinkconfig` | Blink pattern configuration (config may be stored on dSS/vdSM) |
+| `outmodegeneric` | Joker device with selectable output mode — VDC support unclear |
+| `customactivityconfig` | Custom activity/app configuration UI |
+| `ftwtempcontrolventilationselect` | Display panel (SK-204) with temp + ventilation mode select |
+| `customtransitiontime` | Per-scene transition time (no vdSD storage confirmed) |
+
+**Several features are explicitly NOT supported** and will raise `ValueError` if passed
+to `add_model_feature()` — including `outmode`, `outmodeswitch`, `ledauto`, `leddark`,
+`dimmodeconfig`, `extradimmer`, `heatingoutmode`, `twowayconfig`, `pushbcombined`,
+`consumptioneventled`, and others.  These features write hardware state via DS485 and
+have no VDC write-back path, or relate to hardware capabilities with no API equivalent.
 
 See `docs/model-features-auto-assignment.md` for the complete rule
-reference and the full list of manually-configurable and forbidden features.
+reference, including the full list of not-tested optional and not-supported features.
 
 ---
 
