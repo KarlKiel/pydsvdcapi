@@ -8,11 +8,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydsvdcapi"
-version = "0.1.0"
+version = "0.8.0"
 description = "Python library for the digitalSTROM vDC API"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "protobuf>=4.0",
     "pyyaml>=6.0",
@@ -26,7 +26,6 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -51,6 +50,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "coverage[toml]>=7.0",
+    "types-PyYAML>=6.0",
 ]
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ known-first-party = ["pydsvdcapi"]
 # ---------------------------------------------------------------------------
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_unused_configs = true
 warn_return_any = true
 warn_unused_ignores = true
@@ -115,7 +115,10 @@ ignore_missing_imports = true
 [tool.coverage.run]
 source = ["pydsvdcapi"]
 branch = true
-omit = ["src/pydsvdcapi/genericVDC_pb2.py"]
+omit = [
+    "src/pydsvdcapi/vdc_messages_pb2.py",
+    "src/pydsvdcapi/vdcapi_pb2.py",
+]
 
 [tool.coverage.report]
 show_missing = true
