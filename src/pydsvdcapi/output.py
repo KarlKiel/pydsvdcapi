@@ -1097,13 +1097,12 @@ class Output:
             return
 
         # Local priority check.
-        if self._local_priority and not force:
-            if not entry.get("ignoreLocalPriority", False):
-                logger.debug(
-                    "call_scene %d: blocked by local priority",
-                    scene_nr,
-                )
-                return
+        if self._local_priority and not force and not entry.get("ignoreLocalPriority", False):
+            logger.debug(
+                "call_scene %d: blocked by local priority",
+                scene_nr,
+            )
+            return
 
         # Take undo snapshot keyed by group.
         self._undo_snapshots[group] = {

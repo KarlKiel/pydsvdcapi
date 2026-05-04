@@ -13,6 +13,8 @@ import yaml
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.binary_input import BinaryInput
 from pydsvdcapi.button_input import ButtonInput
+from pydsvdcapi.device_property import DeviceProperty
+from pydsvdcapi.device_state import DeviceState
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import (
     BinaryInputType,
@@ -2531,10 +2533,6 @@ class TestDeriveModelFeatures:
 # ===========================================================================
 # Vdsd — _wait_for_initial_values
 # ===========================================================================
-
-
-from pydsvdcapi.device_property import DeviceProperty
-from pydsvdcapi.device_state import DeviceState
 
 
 @pytest.mark.asyncio

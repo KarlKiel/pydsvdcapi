@@ -247,10 +247,12 @@ class Vdc:
         device_icon_name: str | None = None,
         device_class: str | None = None,
         device_class_version: str | None = None,
-        capabilities: VdcCapabilities = VdcCapabilities(),
+        capabilities: VdcCapabilities | None = None,
         zone_id: int = 0,
         template_path: str | Path | None = None,
     ) -> None:
+        if capabilities is None:
+            capabilities = VdcCapabilities()
         # Auto-save must be disabled during construction.
         self._auto_save_enabled: bool = False
 
