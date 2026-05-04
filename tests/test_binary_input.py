@@ -1368,3 +1368,30 @@ class TestVdsdAliveTimerLifecycle:
 
         vdsd.reset_announcement()
         assert vdsd._session is None
+
+
+# ===========================================================================
+# Force parameter for _push_state
+# ===========================================================================
+
+
+class TestBinaryInputPushStateForce:
+    """Tests for the force parameter in _push_state."""
+
+    @pytest.mark.asyncio
+    async def test_push_state_accepts_force_keyword(self):
+        """Regression: _push_state must accept force=True without TypeError."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        bi = BinaryInput(
+            vdsd=vdsd,
+            ds_index=0,
+            sensor_function=BinaryInputType.MOTION,
+            input_usage=BinaryInputUsage.ROOM_CLIMATE,
+            name="Test Input",
+        )
+        # Should not raise TypeError
+        await bi._push_state(None, force=True)
+        await bi._push_state(None, force=False)

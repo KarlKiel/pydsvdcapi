@@ -521,6 +521,8 @@ class BinaryInput:
     async def _push_state(
         self,
         session: Optional[VdcSession],
+        *,
+        force: bool = False,
     ) -> None:
         """Push current state to the vdSM.
 
@@ -528,6 +530,9 @@ class BinaryInput:
         ----------
         session:
             Session to push on.  ``None`` → no push.
+        force:
+            If ``True``, bypass throttling (unused for BinaryInput,
+            accepted for compatibility with SensorInput and vdsd.py).
         """
         if session is None:
             return
