@@ -133,10 +133,13 @@ FUNCTION_CHANNELS: Dict[OutputFunction, List[OutputChannelType]] = {
         OutputChannelType.COLOR_TEMPERATURE,
     ],
     OutputFunction.FULL_COLOR_DIMMER: [
+        # Order verified against working dSS config: brightness(0), colortemp(1),
+        # hue(2), saturation(3), cieX(4), cieY(5).  colortemp must be dsIndex 1
+        # so the dSS configurator renders the CT slider correctly.
         OutputChannelType.BRIGHTNESS,
+        OutputChannelType.COLOR_TEMPERATURE,
         OutputChannelType.HUE,
         OutputChannelType.SATURATION,
-        OutputChannelType.COLOR_TEMPERATURE,
         OutputChannelType.CIE_X,
         OutputChannelType.CIE_Y,
     ],
@@ -212,6 +215,71 @@ _NON_VALUE_SCENES: frozenset = frozenset({
     SceneNumber.MINIMUM,
 })
 
+#: Medium preset scenes — scene number → fraction of (max − min) to add to min.
+#: Preset X2 = 75 %, Preset X3 = 50 %, Preset X4 = 25 % (ds-basics Table 3).
+#: Five groups × three presets = 15 entries (scenes 17–31).
+_MEDIUM_PRESET_FRACTIONS: Dict[int, float] = {
+    17: 0.75,  # Preset 2
+    18: 0.50,  # Preset 3
+    19: 0.25,  # Preset 4
+    20: 0.75,  # Preset 12
+    21: 0.50,  # Preset 13
+    22: 0.25,  # Preset 14
+    23: 0.75,  # Preset 22
+    24: 0.50,  # Preset 23
+    25: 0.25,  # Preset 24
+    26: 0.75,  # Preset 32
+    27: 0.50,  # Preset 33
+    28: 0.25,  # Preset 34
+    29: 0.75,  # Preset 42
+    30: 0.50,  # Preset 43
+    31: 0.25,  # Preset 44
+}
+
+#: Scenes that override local priority (ds-basics §5.3).
+_IGNORE_LOCAL_PRIORITY_SCENES: frozenset = frozenset({
+    SceneNumber.PANIC,
+    SceneNumber.FIRE,
+    SceneNumber.ALARM_1,
+    SceneNumber.ALARM_2,
+    SceneNumber.ALARM_3,
+    SceneNumber.ALARM_4,
+    SceneNumber.ABSENT,   # spec §5.3 explicitly: "Absent shall have an effect … regardless"
+})
+
+#: Stepping scenes that move the primary channel DOWN.
+_STEP_DOWN_SCENES: frozenset = frozenset({
+    SceneNumber.DECREMENT,
+    SceneNumber.AREA_1_DEC,
+    SceneNumber.AREA_2_DEC,
+    SceneNumber.AREA_3_DEC,
+    SceneNumber.AREA_4_DEC,
+})
+
+#: Stepping scenes that move the primary channel UP.
+_STEP_UP_SCENES: frozenset = frozenset({
+    SceneNumber.INCREMENT,
+    SceneNumber.AREA_1_INC,
+    SceneNumber.AREA_2_INC,
+    SceneNumber.AREA_3_INC,
+    SceneNumber.AREA_4_INC,
+})
+
+#: All stepping scene numbers (up, down, and continue).
+_ALL_STEP_SCENES: frozenset = (
+    _STEP_DOWN_SCENES
+    | _STEP_UP_SCENES
+    | frozenset({SceneNumber.AREA_STEPPING_CONTINUE})
+)
+
+#: Stepping scene number → area restriction (0 for zone-wide commands).
+_STEP_SCENE_AREA: Dict[int, int] = {
+    int(SceneNumber.AREA_1_DEC): 1, int(SceneNumber.AREA_1_INC): 1,
+    int(SceneNumber.AREA_2_DEC): 2, int(SceneNumber.AREA_2_INC): 2,
+    int(SceneNumber.AREA_3_DEC): 3, int(SceneNumber.AREA_3_INC): 3,
+    int(SceneNumber.AREA_4_DEC): 4, int(SceneNumber.AREA_4_INC): 4,
+}
+
 
 def _build_default_scene_entry(
     scene_nr: int,
@@ -236,18 +304,12 @@ def _build_default_scene_entry(
     """
     is_off = scene_nr in _OFF_SCENES
     is_on = scene_nr in _ON_SCENES
-    has_default = is_off or is_on
+    medium_fraction = _MEDIUM_PRESET_FRACTIONS.get(scene_nr)
+    has_default = is_off or is_on or medium_fraction is not None
 
     # Determine scene-global defaults.
     scene_dont_care = not has_default
-    ignore_local_priority = scene_nr in {
-        SceneNumber.PANIC,
-        SceneNumber.FIRE,
-        SceneNumber.ALARM_1,
-        SceneNumber.ALARM_2,
-        SceneNumber.ALARM_3,
-        SceneNumber.ALARM_4,
-    }
+    ignore_local_priority = scene_nr in _IGNORE_LOCAL_PRIORITY_SCENES
     effect = int(SceneEffect.SMOOTH) if has_default else int(SceneEffect.NONE)
 
     ch_entries: Dict[int, Dict[str, Any]] = {}
@@ -256,6 +318,8 @@ def _build_default_scene_entry(
             val: Optional[float] = ch.min_value
         elif is_on:
             val = ch.max_value
+        elif medium_fraction is not None:
+            val = ch.min_value + medium_fraction * (ch.max_value - ch.min_value)
         else:
             val = ch.min_value
         ch_entries[idx] = {
@@ -292,7 +356,13 @@ class Output:
         Human-readable name for the output (e.g. matching a hardware
         connector label).
     default_group:
-        dS Application ID of the device (colour group for this output).
+        dS Application Group ID for this output.  Use :class:`~pydsvdcapi.enums.ColorClass`
+        values.  For most devices this equals the numeric value of the device's
+        ``primaryGroup`` (e.g. YELLOW light: ``ColorClass.LIGHTS`` = 1;
+        BLUE heating valve: ``ColorClass.HEATING`` = 3).  Climate sub-types
+        use the more specific Application Group ID (e.g. ``ColorClass.VENTILATION``
+        = 10 for a ventilation unit, even though ``primaryGroup`` is BLUE = 3).
+        Informational only — the dSS firmware does not use this field at runtime.
     variable_ramp:
         Whether variable-speed transitions are supported.
     max_power:
@@ -304,11 +374,26 @@ class Output:
     Settings (writable, persisted):
 
     mode:
-        Output operating mode (disabled / binary / gradual / default).
+        Output capability hint for the configurator UI — one of
+        :class:`~pydsvdcapi.enums.OutputMode` values.  When omitted
+        (``None``) the correct value is auto-derived from ``function``:
+        ``ON_OFF`` → ``BINARY``; ``INTERNALLY_CONTROLLED`` / ``CUSTOM`` →
+        ``DISABLED``; all other functions → ``GRADUAL``.  The dSS firmware
+        runtime ignores this field entirely for TCP/IP VDC devices; it only
+        affects which controls the configurator renders.
     active_group:
-        dS Application ID which group to use by default.
+        dS Application Group ID this output is active in.  Use
+        :class:`~pydsvdcapi.enums.ColorClass` values.  For most devices equals
+        ``default_group``.  Drives scene routing and device behaviour in the dSS
+        firmware (cast to ``ApplicationType``).  For joker devices the user can
+        change this via the dSS UI.  If the value is < 64 it must also appear
+        in ``groups``; values ≥ 64 (global app groups) are exempt.
     groups:
-        Set of integer group IDs (1-63) this output belongs to.
+        Set of dS Application Group IDs (1–63) this output belongs to.  Use
+        :class:`~pydsvdcapi.enums.ColorClass` values with value ≤ 63.  For
+        most devices this is a single-element set containing ``active_group``
+        (when ``active_group`` < 64).  Global app group IDs (≥ 64) must NOT
+        appear here — they are declared via ``active_group`` only.
     push_changes:
         Whether locally-generated output changes are pushed.
     on_threshold:
@@ -347,7 +432,7 @@ class Output:
         max_power: Optional[float] = None,
         active_cooling_mode: Optional[bool] = None,
         # Settings (writable, persisted)
-        mode: Union[OutputMode, int] = OutputMode.DEFAULT,
+        mode: Optional[Union[OutputMode, int]] = None,
         active_group: int,
         groups: Set[int],
         push_changes: bool = False,
@@ -383,7 +468,16 @@ class Output:
         self._active_cooling_mode: Optional[bool] = active_cooling_mode
 
         # ---- settings properties (read/write, persisted) -------------
-        self._mode: OutputMode = OutputMode(int(mode))
+        if mode is None:
+            fn = int(self._function)
+            if fn in (int(OutputFunction.INTERNALLY_CONTROLLED), int(OutputFunction.CUSTOM)):
+                self._mode = OutputMode.DISABLED
+            elif fn == int(OutputFunction.ON_OFF):
+                self._mode = OutputMode.BINARY
+            else:
+                self._mode = OutputMode.GRADUAL
+        else:
+            self._mode = OutputMode(int(mode))
         self._active_group: int = active_group
         self._groups: Set[int] = set(groups)
         self._push_changes: bool = push_changes
@@ -425,6 +519,10 @@ class Output:
         self._on_channel_applied: Optional[ChannelAppliedCallback] = None
         #: Callback invoked for dimChannel notifications (§7.3.5).
         self._on_dim_channel: Optional[DimChannelCallback] = None
+        #: Last stepping direction for AREA_STEPPING_CONTINUE: -1 down, +1 up, 0 unknown.
+        self._last_step_direction: int = 0
+        #: Area of last directional step (for AREA_STEPPING_CONTINUE).
+        self._last_step_area: int = 0
 
         # Auto-create channels from function.
         self._auto_create_channels()
@@ -472,7 +570,7 @@ class Output:
 
     @property
     def default_group(self) -> int:
-        """dS Application ID (colour group)."""
+        """Application profile ID for this output (use ColorClass enum)."""
         return self._default_group
 
     @property
@@ -506,7 +604,7 @@ class Output:
 
     @property
     def active_group(self) -> int:
-        """Active dS group."""
+        """Application profile ID this output is currently active in (use ColorClass enum)."""
         return self._active_group
 
     @active_group.setter
@@ -516,7 +614,7 @@ class Output:
 
     @property
     def groups(self) -> Set[int]:
-        """Set of group IDs (1-63) this output belongs to."""
+        """Application profile IDs this output belongs to (use ColorClass enum values)."""
         return set(self._groups)
 
     @groups.setter
@@ -525,7 +623,7 @@ class Output:
         self._schedule_auto_save()
 
     def add_group(self, group_id: int) -> None:
-        """Add membership in a group (1-63)."""
+        """Add an ColorClass to the output's group membership set."""
         self._groups.add(group_id)
         self._schedule_auto_save()
 
@@ -822,13 +920,13 @@ class Output:
     # ==================================================================
 
     def _init_default_scenes(self) -> None:
-        """Populate the scene table with standard defaults.
+        """Populate the scene table with defaults for all 128 scene commands.
 
-        Generates a default entry for every ``SceneNumber`` that
-        represents a stored-value scene (i.e. not stepping/stop).
+        Per ds-basics Rule 4, every digitalSTROM device must implement
+        default behaviour for all 128 scene commands.  Action-only scenes
+        (stepping, stop, impulse) have no stored values and are excluded.
         """
-        for sn in SceneNumber:
-            nr = int(sn)
+        for nr in range(128):
             if nr in _NON_VALUE_SCENES:
                 continue
             self._scenes[nr] = _build_default_scene_entry(
@@ -845,13 +943,16 @@ class Output:
             ch_entries = entry.get("channels", {})
             is_off = nr in _OFF_SCENES
             is_on = nr in _ON_SCENES
-            has_default = is_off or is_on
+            medium_fraction = _MEDIUM_PRESET_FRACTIONS.get(nr)
+            has_default = is_off or is_on or medium_fraction is not None
             for idx, ch in self._channels.items():
                 if idx not in ch_entries:
                     if is_off:
                         val: Optional[float] = ch.min_value
                     elif is_on:
                         val = ch.max_value
+                    elif medium_fraction is not None:
+                        val = ch.min_value + medium_fraction * (ch.max_value - ch.min_value)
                     else:
                         val = ch.min_value
                     ch_entries[idx] = {
@@ -1136,6 +1237,101 @@ class Output:
                     "on_dim_channel callback raised for output '%s'",
                     self._name,
                 )
+
+    async def call_step_scene(self, scene_nr: int) -> None:
+        """Handle a stepping scene command with Rule 6 compliance.
+
+        ds-basics Rule 6: stepping commands must be ignored when the
+        primary channel is at its minimum value.  When the channel is
+        above minimum the command is forwarded to the
+        :attr:`on_dim_channel` callback so the integrator can drive the
+        hardware.
+
+        Parameters
+        ----------
+        scene_nr:
+            One of the stepping scene numbers: ``DECREMENT`` (11),
+            ``INCREMENT`` (12), ``AREA_x_DEC`` / ``AREA_x_INC`` (42-49),
+            or ``AREA_STEPPING_CONTINUE`` (10).
+        """
+        if not self._channels:
+            return
+
+        # Resolve step direction.
+        if scene_nr in _STEP_DOWN_SCENES:
+            mode = -1
+        elif scene_nr in _STEP_UP_SCENES:
+            mode = 1
+        elif scene_nr == int(SceneNumber.AREA_STEPPING_CONTINUE):
+            mode = self._last_step_direction
+            if mode == 0:
+                logger.debug(
+                    "step scene %d (AREA_STEPPING_CONTINUE): no prior "
+                    "direction — ignored", scene_nr,
+                )
+                return
+        else:
+            return
+
+        # Primary channel: dsIndex 0, fallback to first available.
+        primary_ch = self._channels.get(0)
+        if primary_ch is None:
+            primary_ch = next(iter(self._channels.values()), None)
+        if primary_ch is None:
+            return
+
+        # Rule 6: ignore stepping when primary channel is at minimum.
+        if (
+            primary_ch.value is not None
+            and primary_ch.value <= primary_ch.min_value
+        ):
+            logger.debug(
+                "step scene %d: Rule 6 — primary channel at minimum "
+                "(%.3f ≤ %.3f), ignored",
+                scene_nr, primary_ch.value, primary_ch.min_value,
+            )
+            return
+
+        # Track direction/area for subsequent AREA_STEPPING_CONTINUE.
+        if scene_nr != int(SceneNumber.AREA_STEPPING_CONTINUE):
+            self._last_step_direction = mode
+            self._last_step_area = _STEP_SCENE_AREA.get(scene_nr, 0)
+
+        area = (
+            self._last_step_area
+            if scene_nr == int(SceneNumber.AREA_STEPPING_CONTINUE)
+            else _STEP_SCENE_AREA.get(scene_nr, 0)
+        )
+        await self.dim_channel(primary_ch, mode, area)
+
+    async def dispatch_scene(
+        self,
+        scene_nr: int,
+        *,
+        force: bool = False,
+        group: int = 0,
+    ) -> None:
+        """Dispatch any scene command to the appropriate handler.
+
+        Stepping scenes (DECREMENT, INCREMENT, AREA_x_DEC/INC,
+        AREA_STEPPING_CONTINUE) are routed to :meth:`call_step_scene`.
+        All other scenes are handled by :meth:`call_scene` followed by
+        :meth:`apply_pending_channels`.
+
+        Parameters
+        ----------
+        scene_nr:
+            The dS scene number.
+        force:
+            Passed to :meth:`call_scene` for stored-value scenes.
+        group:
+            dS group number; passed to :meth:`call_scene`.
+        """
+        if scene_nr in _ALL_STEP_SCENES:
+            await self.call_step_scene(scene_nr)
+        else:
+            self.call_scene(scene_nr, force=force, group=group)
+            await self.apply_pending_channels()
 
     # ==================================================================
     # apply_now buffering (§7.3.9)
@@ -1607,9 +1803,13 @@ class Output:
             self._channels.clear()
             self._auto_create_channels()
 
-        # Restore scenes from persisted state.
+        # Restore scenes: always start from all-128 defaults so that scenes
+        # not present in an older YAML (written before the range(128) expansion)
+        # still get correct default values after upgrade.  Then overlay any
+        # persisted scene entries on top.
+        self._scenes.clear()
+        self._init_default_scenes()
         if "scenes" in state:
-            self._scenes.clear()
             for nr_str, s in state["scenes"].items():
                 nr = int(nr_str)
                 ch_entries: Dict[int, Dict[str, Any]] = {}
@@ -1638,10 +1838,6 @@ class Output:
                     ),
                     "channels": ch_entries,
                 }
-        else:
-            # No persisted scenes — regenerate defaults.
-            self._scenes.clear()
-            self._init_default_scenes()
 
     # ==================================================================
     # Session management

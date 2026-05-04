@@ -127,9 +127,11 @@ from pydsvdcapi.enums import (
     ButtonClickType,
     ButtonElementID,
     ButtonFunction,
+    ButtonFunctionJoker,
     ButtonMode,
     ButtonType,
     InputError,
+    button_function_for_group,
 )
 from pydsvdcapi.property_handling import dict_to_elements
 
@@ -228,7 +230,7 @@ class ClickDetector:
       ``False`` if released.
 
     The callback may return a coroutine, which will be scheduled via
-    ``asyncio.ensure_future``.
+    ``asyncio.create_task``.
 
     Timing parameters
     -----------------
@@ -510,7 +512,7 @@ class ClickDetector:
         try:
             result = self._on_click(click_type, value)
             if asyncio.iscoroutine(result):
-                asyncio.ensure_future(result)
+                asyncio.create_task(result)
         except Exception:
             logger.exception(
                 "ClickDetector callback error for %s",
@@ -588,7 +590,7 @@ class ButtonInput:
         button_element_id: ButtonElementID = ButtonElementID.CENTER,
         # Settings (writable, persisted)
         group: int = 0,
-        function: Union[ButtonFunction, int] = ButtonFunction.DEVICE,
+        function: Union[ButtonFunction, ButtonFunctionJoker, int] = ButtonFunction.DEVICE,
         mode: Union[ButtonMode, int] = ButtonMode.STANDARD,
         channel: int = 0,
         sets_local_priority: bool = False,
@@ -609,7 +611,7 @@ class ButtonInput:
 
         # ---- settings properties (read/write, persisted) -------------
         self._group: int = group
-        self._function: ButtonFunction = ButtonFunction(int(function))
+        self._function: Union[ButtonFunction, ButtonFunctionJoker, int] = button_function_for_group(group, int(function))
         self._mode: ButtonMode = ButtonMode(int(mode))
         self._channel: int = channel
         self._sets_local_priority: bool = sets_local_priority
@@ -705,16 +707,17 @@ class ButtonInput:
     @group.setter
     def group(self, value: int) -> None:
         self._group = int(value)
+        self._function = button_function_for_group(self._group, int(self._function))
         self._schedule_auto_save()
 
     @property
-    def function(self) -> ButtonFunction:
+    def function(self) -> Union[ButtonFunction, ButtonFunctionJoker, int]:
         """Button function / LTNUM (writable, persisted)."""
         return self._function
 
     @function.setter
-    def function(self, value: Union[ButtonFunction, int]) -> None:
-        self._function = ButtonFunction(int(value))
+    def function(self, value: Union[ButtonFunction, ButtonFunctionJoker, int]) -> None:
+        self._function = button_function_for_group(self._group, int(value))
         self._schedule_auto_save()
 
     @property
@@ -1031,7 +1034,7 @@ class ButtonInput:
             self._group = int(incoming["group"])
             changed = True
         if "function" in incoming:
-            self._function = ButtonFunction(int(incoming["function"]))
+            self._function = button_function_for_group(self._group, int(incoming["function"]))
             changed = True
         if "mode" in incoming:
             self._mode = ButtonMode(int(incoming["mode"]))
@@ -1053,7 +1056,7 @@ class ButtonInput:
                 "function=%s, mode=%s, channel=%d",
                 self._ds_index,
                 self._group,
-                self._function.name,
+                getattr(self._function, "name", self._function),
                 self._mode.name,
                 self._channel,
             )
@@ -1116,7 +1119,7 @@ class ButtonInput:
         if "group" in state:
             self._group = int(state["group"])
         if "function" in state:
-            self._function = ButtonFunction(int(state["function"]))
+            self._function = button_function_for_group(self._group, int(state["function"]))
         if "mode" in state:
             self._mode = ButtonMode(int(state["mode"]))
         if "channel" in state:

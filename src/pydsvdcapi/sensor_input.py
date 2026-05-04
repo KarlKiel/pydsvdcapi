@@ -86,7 +86,7 @@ from typing import (
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.conversion import apply_converter, compile_converter
-from pydsvdcapi.enums import InputError, SensorType, SensorUsage
+from pydsvdcapi.enums import InputError, SensorType, SensorUsage, validate_sensor_type_usage
 from pydsvdcapi.property_handling import dict_to_elements
 
 if TYPE_CHECKING:
@@ -164,6 +164,7 @@ class SensorInput:
         min_push_interval: float = 2.0,
         changes_only_interval: float = 0.0,
     ) -> None:
+        validate_sensor_type_usage(sensor_type, sensor_usage)
         self._init(
             vdsd=vdsd,
             ds_index=ds_index,
@@ -224,6 +225,9 @@ class SensorInput:
         self._error: InputError = InputError.OK
         #: Monotonic timestamp of the last value update (for age calc).
         self._last_update: Optional[float] = None
+
+        # Set when the first real (non-None) value has been received.
+        self._initial_value_ready: asyncio.Event = asyncio.Event()
 
         # ---- push throttling / alive timer state ---------------------
         self._session: Optional[VdcSession] = None
@@ -478,6 +482,8 @@ class SensorInput:
             direction="uplink",
         )
         self._value = value
+        if value is not None:
+            self._initial_value_ready.set()
         self._last_update = time.monotonic()
         if context_id is not None:
             self._context_id = context_id
@@ -805,7 +811,7 @@ class SensorInput:
         """Callback for :meth:`_schedule_deferred_push`."""
         self._deferred_push_handle = None
         if self._vdsd.is_announced:
-            asyncio.ensure_future(self._do_push(session))
+            asyncio.create_task(self._do_push(session))
 
     # ---- alive timer (periodic heartbeat push) -----------------------
 
@@ -867,7 +873,7 @@ class SensorInput:
                 "re-pushing state",
                 self._ds_index, self._name,
             )
-            asyncio.ensure_future(
+            asyncio.create_task(
                 self._push_state(session, force=True)
             )
 

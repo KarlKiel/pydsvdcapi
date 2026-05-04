@@ -439,7 +439,7 @@ class Vdc:
         """
         import asyncio as _asyncio
 
-        unanounced = [d for d in self._devices.values() if not d.is_announced]
+        unannounced = [d for d in self._devices.values() if not d.is_announced]
 
         async def _announce_one(device) -> int:
             try:
@@ -450,7 +450,7 @@ class Vdc:
                 )
                 return 0
 
-        results = await _asyncio.gather(*[_announce_one(d) for d in unanounced])
+        results = await _asyncio.gather(*[_announce_one(d) for d in unannounced])
         total = sum(results)
         logger.info(
             "vDC '%s': announced %d vdSD(s) across %d device(s)",

@@ -166,87 +166,29 @@ For backend VDC devices (cloud/HTTP API), the entire busscanner flow is bypassed
 
 **Note:** `device.getModelFeatures()` (the per-device map, shown in device JSON) is still empty for VDC devices — it is only populated by `updateModelFeatures()` for 5 hardware-specific features. The configurator uses `/apartment/getModelFeatures` (the database keyed by `color+modelUID`), NOT the per-device JSON field.
 
-### 2.5 Only Backend Check of modelFeatures
+### 2.5 Only Backend Check of modelFeatures in dSS Backend
 
 There is exactly **one place** in the entire dSS backend C++ that reads modelFeatures for functional logic:
 
 ```cpp
-modelDevice->addToGroup(spec.primaryGroup);  
-modelDevice->setActiveGroup(spec.primaryGroup);
-
---> PLEASE BE VERY EXACT ON WHERE to use device class (by primaryGroup) and where to use application Group (defaultGroup, activeGroup) Settings !!!!
-
+// device.cpp:3048
+bool Device::supportsApartmentApplications() const {
+  return m_modelFeatures.count(ModelFeatureId::apartmentapplication) > 0;
+}
 ```
 
-This is unreachable for VDC devices since `m_modelFeatures` is always empty for them.
+This checks `m_modelFeatures` (the per-device map), which is **never populated for VDC devices** (neither classic nor backend). All other feature-related UI behavior is driven by the external configurator frontend reading `/apartment/getModelFeatures`.
 
-| `primaryGroup` value | Constant | UI color | Application |
-|---|---|---|---|
-| 0 | GroupIDBroadcast | — | Broadcast |
-| **1** | GroupIDYellow | **Yellow** | Lights / dimming |
-| **2** | GroupIDGray | **Grey** | Shadow / Blinds / Shading |
-| **3** | GroupIDHeating | **Blue** | Heating |
-| **4** | GroupIDCyan | **Cyan** | Audio |
-| **5** | GroupIDViolet | **Violet** | Video |
-| **6** | GroupIDRed | **Red** | Security (deprecated) |
-| **7** | GroupIDGreen | **Green** | Access (deprecated) |
-| **8** | GroupIDBlack | **Black** | Joker (reassignable) |
-| **9** | GroupIDCooling | **Blue** | Cooling |
-| **10** | GroupIDVentilation | **Blue** | Ventilation |
-| **11** | GroupIDWindow | **Blue** | Window / Shading |
-| **12** | GroupIDRecirculation | **Blue** | Recirculation |
-| **48** | GroupIDControlTemperature | **Blue** | Temperature set-point |
-| **64** | GroupIDApartmentVentilation | **Blue** | Apartment-level ventilation |
-| **65** | GroupIDApartmentAwnings | **Grey** | Apartment-level awnings / shading |
-| **69** | GroupIDApartmentRecirculation | **Blue** | Apartment-level recirculation |
+### 2.6 What This Means for VDC Implementation
 
---> PLEASE BE VERY EXACT ON WHERE to use device class (by primaryGroup) and where to use application Group (defaultGroup, activeGroup)
+For **classic VDC devices** (`BusMember_vDC`, Python library):
+- Features declared in `modelFeatures` **do** propagate to the ModelFeatures database (keyed by `color+modelUID`)
+- The configurator frontend **can use** them to show/hide UI panels
+- `primaryGroup` additionally controls the color band, default scenes, and category icon
 
-### 3.2 Device Overview Line Fields (Common to All Groups)
-
-Every device in the list shows these fields (from `jsonhelper.cpp::toJSON(DeviceReference)`):
-
-```
-name              ← from spec.name (VdSD property "name")
-dSUID             ← from spec.dSUID
-DisplayID         ← from spec.displayId (serial number / MAC)
-functionID        ← always 0 for VDC devices
-productID         ← always 0 for VDC devices
-modelFeatures     ← derived feature list
-isVdcDevice       ← true
-outputMode        ← from OutputMode enum
-groups            ← [primaryGroup] + any additional group memberships
-buttonInputMode   ← 255 = DEACTIVATED for output-only devices
-isPresent         ← true when connected
-on                ← current on/off state
-VdcConfigURL      ← from spec.configURL  (per-device config link)
-VdcHardwareInfo   ← from spec.model
-VdcHardwareVersion← from spec.hardwareVersion
-hasActions        ← set from OEM EAN database lookup (see §13)
-supportedBasicScenes ← bitmask of configurable scenes 0-63
-```
-
-> **Note:** `ValveType` only appears in the JSON if `isValveDevice() == true` — which is **never true** for VDC devices (see §14).
-
-The only features ever set in `m_modelFeatures`, via `Device::updateModelFeatures()` in `device.cpp:2445`:
-
-| Feature | Condition |
-|---|---|
-| `apartmentapplication` | FunctionID subclass bits[6–8] ∈ {0x07, 0x08, 0x09} |
-| `setumr200config` | DeviceType=UMR, DeviceNumber=200, RevisionID≥0x0370, multiDeviceIndex≤1 |
-| `consumption` | DeviceType=UMR, DeviceNumber=200, multiDeviceIndex==2 |
-| `operationlock` | DeviceType=KL, RevisionID≥0x365 |
-| `grkl387workaround` | DeviceType=KL, RevisionID=0x387, DeviceNumber ∈ {200,210,220,230} |
-
-None of these conditions are met by VDC devices.
-
-### 2.5 What This Means for VDC Implementation
-
-The features you declare in `modelFeatures` when announcing a VDC device do not currently propagate to any path the dSS or its configurator can read. However:
-
-- Declare them anyway for forward compatibility (a firmware fix could add the correct color routing)
-- Declare the feature set that matches the closest physical hardware equivalent
-- The group/color (`primaryGroup`) is the primary routing mechanism for UI in the current firmware
+For **backend VDC devices** (`BusMember_backendVdc`):
+- Declared `modelFeatures` are **never registered** in the ModelFeatures DB
+- `primaryGroup` remains the only UI routing mechanism
 
 ---
 
@@ -258,18 +200,18 @@ All 65 features defined in `src/model/modelconst.h` (enum class `ModelFeatureId`
 |---|---|---|---|
 | 0 | `dontcare` | Output | "Don't care" scene flag for the output value |
 | 1 | `blink` | Blink | Device supports blink/flash output behavior |
-| 2 | `ledauto` | LED | LED indicator auto-mode (follows output state) |
-| 3 | `leddark` | LED | LED indicator in dark/inverted mode |
+| 2 | `ledauto` | LED | LED indicator auto-mode (follows output state). **NOT supported for TCP/IP VDC** — device LED is not API-controlled; no vdSD property reflects the state. |
+| 3 | `leddark` | LED | LED indicator dark/inverted mode. **NOT supported for TCP/IP VDC** — same reason as `ledauto`; hardware-only. |
 | 4 | `transt` | Output | Configurable transition/fade time |
-| 5 | `outmode` | Output | Output mode selection (dimmer/switch/disabled etc.) |
-| 6 | `outmodeswitch` | Output | Output mode fixed to switch (on/off) variant |
+| 5 | `outmode` | Output | Output mode selection (dimmer/switch/disabled). **NOT supported for TCP/IP VDC** — UI writes hardware mode via DS485 `CfgFunction_Mode`; value stored in dSS `m_OutputMode` and never forwarded to VDC. |
+| 6 | `outmodeswitch` | Output | Switch-only output mode variant. **NOT supported for TCP/IP VDC** — same DS485-only write path as `outmode`. |
 | 7 | `outvalue8` | Output | 8-bit (0–255) output value control |
 | 8 | `pushbutton` | Button | Device has push-button input(s) |
 | 9 | `pushbdevice` | Button | Push-button can be routed to device level |
 | 10 | `pushbsensor` | Button | Push-button sensor function (Black/UMR devices) |
 | 11 | `pushbarea` | Button | Push-button can be routed to area level |
 | 12 | `pushbadvanced` | Button | Advanced push-button configuration available |
-| 13 | `pushbcombined` | Button | Combined push-button modes (SDS20/22 2-button) |
+| 13 | `pushbcombined` | Button | Combined push-button modes (SDS20/22 2-button). **NOT supported for TCP/IP VDC** — `ButtonDescription/buttonType` is **read-only** in the VDC protocol and hardware-specific to physical TKM/SDS devices; the value does not align with the UI options. |
 | 14 | `shadeprops` | Shade | Shade/blind movement properties configurable |
 | 15 | `shadeposition` | Shade | Shade/blind position tracking supported |
 | 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable |
@@ -281,45 +223,45 @@ All 65 features defined in `src/model/modelconst.h` (enum class `ModelFeatureId`
 | 22 | `akmsensor` | AKM | AKM bus sensor input |
 | 23 | `akminput` | AKM | AKM bus digital input |
 | 24 | `akmdelay` | AKM | AKM input delay configurable |
-| 25 | `twowayconfig` | Config | Two-way/bidirectional operation configurable |
+| 25 | `twowayconfig` | Config | Two-way/bidirectional operation configurable. **NOT supported for TCP/IP VDC** — same reason as `pushbcombined`; `buttonType` is read-only and hardware-specific. |
 | 26 | `outputchannels` | Output | Multiple output channels supported (RGB, dimmer+relay) |
 | 27 | `heatinggroup` | Heating | Heating application group assignment UI |
-| 28 | `heatingoutmode` | Heating | Heating output mode configurable |
+| 28 | `heatingoutmode` | Heating | Heating output mode configurable. **NOT supported for TCP/IP VDC** — UI writes hardware mode via DS485; stored in dSS `m_OutputMode`, never forwarded to VDC. |
 | 29 | `heatingprops` | Heating | Heating/valve properties section shown |
 | 30 | `pwmvalue` | Heating | PWM duty cycle value configurable |
 | 31 | `valvetype` | Heating | Attached valve/terminal device type selectable |
-| 32 | `extradimmer` | Output | Extra dimmer output channel (UMV devices) |
-| 33 | `umvrelay` | Output | Relay output on UMV multi-function device |
+| 32 | `extradimmer` | Output | Extra dimmer circuit on UMV200/UMV210 (physical relay+dimmer combo). **NOT supported for TCP/IP VDC** — hardware-specific; configuration writes via DS485. For VDC, use separate output channels. |
+| 33 | `umvrelay` | Output | Relay toggle on UMV200/UMV210 (companion to `extradimmer`). **NOT supported for TCP/IP VDC** — same hardware-specific DS485 path. |
 | 34 | `blinkconfig` | Blink | Blink pattern/rate configurable |
-| 35 | `umroutmode` | Output | UMR output mode configurable |
+| 35 | `umroutmode` | Output | UMR-200 output mode configurable. **NOT supported for TCP/IP VDC** — UMR200 is always a physical DS485 bus device; value never reaches VDC. |
 | 36 | `locationconfig` | Shade | Shade/awning installation location configurable |
 | 37 | `windprotectionconfigawning` | Shade | Wind protection settings for awnings |
 | 38 | `windprotectionconfigblind` | Shade | Wind protection settings for venetian blinds |
 | 39 | `impulseconfig` | Config | Impulse/pulse output configurable |
-| 40 | `outmodegeneric` | Output | Generic output mode (non-specific) |
+| 40 | `outmodegeneric` | Output | Generic output mode (non-specific). **VDC support unclear** — not assigned to any DS485 device; may be VDC-intended for Joker devices, but mode write path is DS485-only with no confirmed VDC property write-back. |
 | 41 | `outconfigswitch` | Config | Output configuration for switch behavior |
 | 42 | `temperatureoffset` | Climate | Temperature sensor offset configurable |
 | 43 | `apartmentapplication` | Special | Device supports apartment-level application routing |
 | 44 | `ftwtempcontrolventilationselect` | Climate | FTW thermostat ventilation mode selector |
-| 45 | `ftwdisplaysettings` | Climate | FTW thermostat display settings |
-| 46 | `ftwbacklighttimeout` | Climate | FTW thermostat backlight timeout |
+| 45 | `ftwdisplaysettings` | Climate | FTW thermostat display settings. **NOT supported for TCP/IP VDC** — hardware-specific to physical SK204/FTW display panels; no VDC equivalent. |
+| 46 | `ftwbacklighttimeout` | Climate | FTW thermostat backlight timeout. **NOT supported for TCP/IP VDC** — same hardware-specific reason as `ftwdisplaysettings`. |
 | 47 | `ventconfig` | Climate | Ventilation configuration panel |
 | 48 | `fcu` | Climate | Fan Coil Unit (FCU) specific options |
 | 49 | `pushbdisabled` | Button | Push-button input present but disabled (ZWS205) |
-| 50 | `consumptioneventled` | Joker | Consumption event LED indicator |
-| 51 | `consumptiontimer` | Joker | Consumption measurement timer |
+| 50 | `consumptioneventled` | Joker | Consumption event LED indicator. **NOT supported for TCP/IP VDC** — controls a hardware LED on the end device; no VDC parameter handles this. |
+| 51 | `consumptiontimer` | Joker | Consumption measurement timer. NOT TESTED for TCP/IP VDC — may be stored on dSS/vdSM side. |
 | 52 | `jokertempcontrol` | Joker | Joker device temperature control mode |
 | 53 | `dimtimeconfig` | Config | Dimming time (ramp speed) configurable |
-| 54 | `outmodeauto` | Output | Output mode automatic detection/switching |
-| 55 | `dimmodeconfig` | Config | Dimming mode (leading/trailing edge etc.) configurable |
+| 54 | `outmodeauto` | Output | Adds "auto-detect" option to the dimmer mode selector (DS485 mode ID 31). **NOT supported for TCP/IP VDC** — writes via DS485 `CfgFunction_Mode`; also blocks "Edit Device Values" UI for multi-channel outputs. |
+| 55 | `dimmodeconfig` | Config | Dimming mode (leading/trailing edge etc.) configurable. **NOT supported for TCP/IP VDC** — relates to physical dimmer hardware capability; VDC devices do not receive this information and cannot handle the setting. |
 | 56 | `identification` | Special | Device supports identification/locate function |
 | 57 | `setumr200config` | Special | UMR200 extended configuration UI |
 | 58 | `extendedvalvetypes` | Heating | Extended valve type options |
 | 59 | `customtransitiontime` | Config | Custom (non-preset) transition time input |
-| 60 | `outmodetempcontrol` | Output | Output mode with temperature control |
-| 61 | `outmodeenoceanvalve` | Special | EnOcean valve output mode (auto-added for EnOcean containers) |
+| 60 | `outmodetempcontrol` | Output | Adds temperature-control modes to the mode selector (regulation PWM=64, regulation switch=65). **NOT supported for TCP/IP VDC** — same DS485 `CfgFunction_Mode` write path as `outmode`. |
+| 61 | `outmodeenoceanvalve` | Special | EnOcean valve output mode. Auto-injected by `busscanner.cpp` for EnOcean VDC container devices. **NOTE:** Although EnOcean devices are VDC-connected, the mode configuration UI still writes via DS485 `CfgFunction_Mode` — there is no VDC write-back path. This is a firmware design limitation. **Firmware-managed — do NOT set from a vDC.** |
 | 62 | `operationlock` | Special | Operation lock functionality (KL hardware only) |
-| 63 | `grkl387workaround` | Special | GR-KL387 hardware workaround flag (internal) |
+| 63 | `grkl387workaround` | Special | GR-KL387 hardware workaround flag (internal). **NOT supported for TCP/IP VDC** — firmware-injected for specific KL 0x387 hardware bug; meaningless for VDC. |
 | 64 | `customactivityconfig` | Special | Custom activity/scene configuration UI |
 
 > **Note on feature string serialization:** Features are serialized by string name (not integer ID) in the VDC protocol and JSON API. An unrecognized name is logged as a warning and discarded by `VdcHelper::getSpec()`.
@@ -375,6 +317,13 @@ outconfigswitch, impulseconfig, blinkconfig
 ```
 blink, identification, leddark,
 pushbutton, pushbarea, pushbadvanced
+```
+
+**TKM2** (Legacy touch keypad, button-only Yellow variant; distinct from TKM220/TKM230 — adds `impulseconfig` and `blinkconfig`):
+```
+blink, identification, leddark,
+pushbutton, pushbarea, pushbadvanced,
+impulseconfig, blinkconfig
 ```
 
 **KM300 / ZWD300** (300-generation, advanced dimming):
@@ -806,7 +755,7 @@ These appear on devices with AKM (alternative input) bus connections.
 | Feature | ID | Meaning |
 |---|---|---|
 | `jokerconfig` | 21 | Joker device group-assignment UI shown. Allows reassigning device to a color group. |
-| `highlevel` | 19 | High-level application/scene control (appears on Black devices). |
+| `highlevel` | 19 | Adds "App Button" as a selectable entry in the push-button type dropdown (requires `pushbutton`). The entry is only visible when the button's `buttonSettings/group` is 8 (Joker), or when the `jokerconfig` "Color Group" UI is present and set to Joker. Selecting it sets `buttonSettings/function` to `APP` (15). |
 | `consumption` | 20 | Power consumption measurement is available. |
 | `consumptioneventled` | 50 | LED event driven by consumption threshold (ZWS205). |
 | `consumptiontimer` | 51 | Consumption measurement timer configurable (ZWS205). |
@@ -831,51 +780,61 @@ These appear on devices with AKM (alternative input) bus connections.
 
 For classic VDC devices (`BusMember_vDC`, Python library), features declared here are stored in the ModelFeatures database and used by the configurator frontend. Declare features matching the equivalent physical device for the target group.
 
+> **Recommended:** Use `derive_model_features()` (called automatically at announcement) instead of building feature lists manually. It derives all confirmed-working features from the declared output, sensors, binary inputs, and buttons. See `docs/model-features-auto-assignment.md` for the complete rule reference. The examples below reflect what `derive_model_features()` produces.
+
 **Yellow (primaryGroup=1) — Lighting VDC device:**
 ```python
-# Minimum for a dimmable light
-features = ["dontcare", "outvalue8", "transt", "identification"]
+# Dimmable light (OutputFunction.DIMMER)
+# derive_model_features() produces:
+features = ["dontcare", "blink", "outvalue8", "transt", "dimtimeconfig", "identification"]
 
-# For a switch (non-dimming):
-features = ["dontcare", "outvalue8", "identification"]
+# Switched light (OutputFunction.ON_OFF)
+features = ["dontcare", "blink", "outvalue8", "outconfigswitch", "impulseconfig", "identification"]
 
-# For a color light (multi-channel):
-features = ["dontcare", "outvalue8", "transt", "identification", "outputchannels"]
+# Color light (OutputFunction.FULL_COLOR_DIMMER)
+features = ["dontcare", "blink", "outvalue8", "transt", "outputchannels", "dimtimeconfig", "identification"]
 ```
 
 **Grey (primaryGroup=2) — Shade VDC device:**
 ```python
-# Roller blind / awning:
-features = ["dontcare", "shadeprops", "shadeposition", "identification"]
+# Roller blind / awning (OutputFunction.POSITIONAL, no slat channel)
+# derive_model_features() produces:
+features = ["dontcare", "blink", "shadeprops", "shadeposition",
+            "locationconfig", "operationlock", "windprotectionconfigawning", "identification"]
 
-# Venetian blind:
-features = ["dontcare", "shadeprops", "shadeposition",
-            "motiontimefins", "shadebladeang", "identification"]
-
-# With wind protection:
-features += ["locationconfig", "windprotectionconfigblind"]
+# Venetian blind (POSITIONAL + channelType 9 or 10)
+features = ["dontcare", "blink", "shadeprops", "shadeposition",
+            "motiontimefins", "shadebladeang",
+            "locationconfig", "operationlock", "windprotectionconfigblind", "identification"]
 ```
 
 **Blue (primaryGroup=3) — Heating valve VDC device:**
 ```python
-# Standard valve:
-features = ["dontcare", "outvalue8", "heatinggroup", "heatingoutmode",
-            "heatingprops", "pwmvalue", "valvetype", "identification"]
+# Standard ON/OFF valve (OutputFunction.ON_OFF)
+# derive_model_features() produces:
+features = ["dontcare", "blink", "outvalue8", "pwmvalue",
+            "outconfigswitch", "impulseconfig",
+            "heatinggroup", "heatingprops", "valvetype", "extendedvalvetypes",
+            "identification"]
+# Note: "heatingoutmode" is NOT supported — it writes via DS485, not via VDC
 ```
 
 **Cyan (primaryGroup=4) — Audio VDC device:**
 ```python
 # Audio device with volume control:
-features = ["dontcare", "outvalue8", "identification"]
+features = ["dontcare", "blink", "outvalue8", "transt", "identification"]
 ```
 
 **Black (primaryGroup=8) — Joker VDC device:**
 ```python
-# Generic switch joker:
-features = ["dontcare", "outvalue8", "jokerconfig", "highlevel", "identification"]
+# Generic switch joker (OutputFunction.ON_OFF):
+# derive_model_features() produces:
+features = ["dontcare", "blink", "outvalue8", "outconfigswitch", "impulseconfig",
+            "jokerconfig", "identification"]
 
-# Sensor/input only:
-features = ["jokerconfig", "highlevel", "identification"]
+# Sensor/input only (no output, button with group=8):
+features = ["jokerconfig", "highlevel", "pushbsensor", "pushbutton",
+            "pushbadvanced", "pushbdisabled", "identification"]
 ```
 
 ### 6.2 Feature Registration Flow Analysis (Classic VDC / Python library)
@@ -954,19 +913,39 @@ From `jsonhelper.cpp::toJSON(DeviceReference)`:
 
 ### 7.3 Output Channel Types
 
-`channelDescriptions` response structure controls which output UI is shown:
+`channelDescriptions` response structure controls which output UI is shown. All 27 standard channel types from `src/model/modelconst.h` (ChannelType, DS_REFLECTED_ENUM, IDs 0–26):
 
-| channelType | Name | UI rendering |
-|---|---|---|
-| 0 | POWER_STATE / UNDEFINED | On/off switch |
-| 1 | BRIGHTNESS | Brightness slider |
-| 2 | HUE | Color picker wheel (with SAT) |
-| 3 | SATURATION | Color picker (with HUE) |
-| 4 | COLOR_TEMPERATURE | CT slider (with BRIGHTNESS) |
-| 5 | AUDIO_VOLUME | Volume slider |
-| 7 | VERTICAL_POSITION | Blind position slider |
-| 9 | ANGLE | Blind slat angle slider |
-| 16 | HEATING_POWER | Heating output slider |
+| ID | Firmware name | Python `OutputChannelType` | Typical UI |
+|---|---|---|---|
+| 0 | `none` | `DEFAULT` | Catch-all / unspecified (on/off toggle) |
+| 1 | `brightness` | `BRIGHTNESS` | Brightness slider (0–100 %) |
+| 2 | `hue` | `HUE` | Hue (colour wheel, 0–360°) |
+| 3 | `saturation` | `SATURATION` | Saturation (0–100 %) |
+| 4 | `colortemp` | `COLOR_TEMPERATURE` | Colour temperature slider (100–1000 mired) |
+| 5 | `x` | `CIE_X` | CIE xy chromaticity X (0.0–1.0) |
+| 6 | `y` | `CIE_Y` | CIE xy chromaticity Y (0.0–1.0) |
+| 7 | `shadePositionOutside` | `SHADE_POSITION_OUTSIDE` | External blind / roller shutter position (0–100 %) |
+| 8 | `shadePositionIndoor` | `SHADE_POSITION_INDOOR` | Indoor curtain / blind position (0–100 %) |
+| 9 | `shadeOpeningAngleOutside` | `SHADE_OPENING_ANGLE_OUTSIDE` | External slat / blade tilt angle (0–100 %) |
+| 10 | `shadeOpeningAngleIndoor` | `SHADE_OPENING_ANGLE_INDOOR` | Indoor slat / blade tilt angle (0–100 %) |
+| 11 | `transparency` | `TRANSPARENCY` | Electrochromic glass transparency (0–100 %) |
+| 12 | `airFlowIntensity` | `AIR_FLOW_INTENSITY` | Fan / ventilation speed (0–100 %) |
+| 13 | `airFlowDirection` | `AIR_FLOW_DIRECTION` | Air flow direction / swing |
+| 14 | `airFlapPosition` | `AIR_FLAP_POSITION` | Air flap / damper position (0–100 %) |
+| 15 | `airLouverPosition` | `AIR_LOUVER_POSITION` | Louver position (0–100 %) |
+| 16 | `heatingPower` | `HEATING_POWER` | Heating valve opening / PWM power (0–100 %) |
+| 17 | `coolingCapacity` | `COOLING_CAPACITY` | Cooling capacity (0–100 %) |
+| 18 | `audioVolume` | `AUDIO_VOLUME` | Audio volume slider (0–100 %) |
+| 19 | `powerState` | `POWER_STATE` | Generic power on/off state (0 or 100) |
+| 20 | `airLouverAuto` | `AIR_LOUVER_AUTO` | Louver auto-swing on/off |
+| 21 | `airFlowAuto` | `AIR_FLOW_AUTO` | Air flow auto-mode on/off |
+| 22 | `waterTemperature` | `WATER_TEMPERATURE` | Water / boiler temperature setpoint (°C) |
+| 23 | `waterFlowRate` | `WATER_FLOW_RATE` | Water flow rate (l/min) |
+| 24 | `powerLevel` | `POWER_LEVEL` | Generic power level (0–100 %) |
+| 25 | `videoStation` | `VIDEO_STATION` | TV channel / video station number |
+| 26 | `videoInputSource` | `VIDEO_INPUT_SOURCE` | Video input source selector |
+
+Channel IDs 192–239 are reserved for proprietary / device-specific channels.
 
 For enum/dropdown channels, add `values` sub-elements:
 ```
@@ -997,34 +976,34 @@ binaryInputStates:
     error:          0
 ```
 
-**BinaryInputType values** (`sensorFunction`):
+**BinaryInputType values** (`sensorFunction`). Firmware C++ enum names from `src/model/modelconst.h`; Python library uses different symbolic names (`BinaryInputType` in `enums.py`):
 
-| Value | Name |
-|---|---|
-| 0 | AppMode |
-| 1 | Presence |
-| 2 | RoomBrightness |
-| 3 | PresenceInDarkness |
-| 4 | TwilightExternal |
-| 5 | Movement |
-| 6 | MovementInDarkness |
-| 7 | SmokeDetector |
-| 8 | WindDetector |
-| 9 | RainDetector |
-| 10 | SunRadiation |
-| 11 | RoomThermostat |
-| 12 | BatteryLow |
-| 13 | WindowContact |
-| 14 | DoorContact |
-| 15 | WindowTilt |
-| 16 | GarageDoorContact |
-| 17 | SunProtection |
-| 18 | FrostDetector |
-| 19 | HeatingSystem |
-| 20 | HeatingSystemMode |
-| 21 | PowerUp |
-| 22 | Malfunction |
-| 23 | Service |
+| Value | Firmware C++ name | Python `BinaryInputType` |
+|---|---|---|
+| 0 | `AppMode` | `GENERIC` |
+| 1 | `Presence` | `PRESENCE` |
+| 2 | `RoomBrightness` | `BRIGHTNESS` |
+| 3 | `PresenceInDarkness` | `PRESENCE_IN_DARKNESS` |
+| 4 | `TwilightExternal` | `TWILIGHT` |
+| 5 | `Movement` | `MOTION` |
+| 6 | `MovementInDarkness` | `MOTION_IN_DARKNESS` |
+| 7 | `SmokeDetector` | `SMOKE` |
+| 8 | `WindDetector` | `WIND` |
+| 9 | `RainDetector` | `RAIN` |
+| 10 | `SunRadiation` | `SUN_RADIATION` |
+| 11 | `RoomThermostat` | `THERMOSTAT` |
+| 12 | `BatteryLow` | `BATTERY_LOW` |
+| 13 | `WindowContact` | `WINDOW_OPEN` |
+| 14 | `DoorContact` | `DOOR_OPEN` |
+| 15 | `WindowTilt` | `WINDOW_TILTED` |
+| 16 | `GarageDoorContact` | `GARAGE_DOOR_OPEN` |
+| 17 | `SunProtection` | `SUN_PROTECTION` |
+| 18 | `FrostDetector` | `FROST` |
+| 19 | `HeatingSystem` | `HEATING_SYSTEM_ENABLED` |
+| 20 | `HeatingSystemMode` | `HEATING_CHANGE_OVER` |
+| 21 | `PowerUp` | `INITIALIZATION` |
+| 22 | `Malfunction` | `MALFUNCTION` |
+| 23 | `Service` | `SERVICE` |
 
 ### 7.5 Sensor Inputs
 
@@ -1034,13 +1013,15 @@ Queried live from VdSD via `sensorDescriptions` (requires `capabilities.dynamicD
 sensorDescriptions:
   "roomTemperature":
     dsIndex:        0
-    sensorType:     65         ← SensorType ID (65 = room temperature °C)
+    sensorType:     1          ← SensorType ID (VDC API numbering: 1 = TEMPERATURE °C)
     sensorUsage:    0
     min:            -40.0
     max:            85.0
     resolution:     0.1
     updateInterval: 60
 ```
+
+> **Important:** The `sensorType` integer in VDC API (`sensorDescriptions`) uses the **VDC API numbering** (Python `SensorType` enum, values 0–34), **not** the dSS firmware's internal hardware-bus `SensorType` enum (which uses non-sequential values like TemperatureIndoors=9, ActivePowerVA=65, etc.). These two numbering systems are completely independent; always use the VDC API values (0–34) when building sensor descriptions.
 
 ### 7.6 Device States and Properties
 

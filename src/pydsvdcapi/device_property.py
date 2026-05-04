@@ -53,6 +53,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import (
     TYPE_CHECKING,
@@ -139,6 +140,7 @@ class DeviceProperty:
         "_value",
         "_uplink_converter_code",
         "_uplink_converter_fn",
+        "_initial_value_ready",
     )
 
     def __init__(
@@ -175,6 +177,9 @@ class DeviceProperty:
         # ---- value converter (optional, persisted) -------------------
         self._uplink_converter_code: Optional[str] = None
         self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
+
+        # Set when the first real (non-None) value has been received.
+        self._initial_value_ready: asyncio.Event = asyncio.Event()
 
     # ---- read-only accessors -----------------------------------------
 
@@ -319,6 +324,8 @@ class DeviceProperty:
     @value.setter
     def value(self, v: Optional[Union[float, str]]) -> None:
         self._value = v
+        if v is not None:
+            self._initial_value_ready.set()
 
     # ---- property dicts ----------------------------------------------
 
@@ -443,6 +450,7 @@ class DeviceProperty:
         # Restore persisted value.
         if "value" in state:
             self._value = state["value"]
+            self._initial_value_ready.set()
         # Converter
         if "uplinkConverter" in state:
             self.set_uplink_converter(state["uplinkConverter"])
@@ -492,6 +500,7 @@ class DeviceProperty:
             self._value = self._resolve_enum_label(value)
         else:
             self._value = str(value)
+        self._initial_value_ready.set()
 
         # Trigger auto-save since property values are persisted.
         self._vdsd._schedule_auto_save_if_enabled()

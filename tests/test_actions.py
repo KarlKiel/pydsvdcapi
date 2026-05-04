@@ -18,7 +18,7 @@ from pydsvdcapi.actions import (
     StandardAction,
 )
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.enums import ColorClass, ColorGroup
+from pydsvdcapi.enums import ColorGroup
 from pydsvdcapi.property_handling import elements_to_dict
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
@@ -63,7 +63,7 @@ def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
 def _make_vdsd(device: Device, **kwargs: Any) -> Vdsd:
     defaults: dict[str, Any] = {
         "device": device,
-        "primary_group": ColorClass.YELLOW,
+        "primary_group": ColorGroup.YELLOW,
         "name": "Action Test vdSD",
         "model": "Test Action vdSD",
     }
