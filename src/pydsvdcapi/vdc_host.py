@@ -1144,29 +1144,7 @@ class VdcHost:
             len(msg.vdsm_request_get_property.query),
             query_names,
         )
-        # DIAG: show sub-element count for each query element
-        for q in msg.vdsm_request_get_property.query:
-            if q.name in ("modelFeatures", "sensorDescriptions", "binaryInputDescriptions"):
-                logger.info(
-                    "[DIAG] query '%s' sub-elements: %d → %s",
-                    q.name, len(q.elements),
-                    [e.name for e in q.elements],
-                )
-                if q.name in ("modelFeatures",):
-                    logger.info("[DIAG] props['modelFeatures'] = %r", props.get("modelFeatures"))
-
         resp = build_get_property_response(msg, props)
-
-        # DIAG: show what we returned for diagnostic query elements
-        for p in resp.vdc_response_get_property.properties:
-            if p.name in ("modelFeatures", "sensorDescriptions", "binaryInputDescriptions"):
-                logger.info(
-                    "[DIAG] response '%s': sub-elements=%d → %s",
-                    p.name,
-                    len(p.elements),
-                    [(e.name, len(e.elements), str(e.value)[:40] if e.HasField("value") else "-") for e in p.elements],
-                )
-
         return resp
 
     def _handle_set_property(self, msg: pb.Message) -> pb.Message:
@@ -1384,7 +1362,7 @@ class VdcHost:
                         )
                     # apply_pending_channels is async; schedule it.
                     import asyncio
-                    asyncio.ensure_future(output.apply_pending_channels())
+                    asyncio.create_task(output.apply_pending_channels())
                     logger.info(
                         "vdSD '%s' channelStates updated via setProperty",
                         vdsd.dsuid,
@@ -1956,10 +1934,7 @@ class VdcHost:
                     dsuid_str,
                 )
                 continue
-            output.call_scene(scene, force=force, group=group)
-            # Trigger the on_channel_applied callback so the
-            # integrator can react to the new values.
-            await output.apply_pending_channels()
+            await output.dispatch_scene(scene, force=force, group=group)
             logger.debug(
                 "callScene %d (force=%s, group=%d, zone=%d) on vdSD %s",
                 scene, force, group, zone_id, dsuid_str,

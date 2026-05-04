@@ -40,13 +40,13 @@ Device/Vdsd objects from the persisted data.
 Usage example::
 
     from pydsvdcapi import Vdc, Device, Vdsd
-    from pydsvdcapi.enums import ColorClass
+    from pydsvdcapi.enums import ColorGroup
 
     vdc = Vdc(host=host, implementation_id="x-acme-light")
 
     # Single-vdSD device (common case)
     device = Device(vdc=vdc, dsuid=my_dsuid)
-    vdsd = Vdsd(device=device, primary_group=ColorClass.YELLOW,
+    vdsd = Vdsd(device=device, primary_group=ColorGroup.YELLOW,
                 name="Kitchen Light")
     device.add_vdsd(vdsd)
     await device.announce(session)
@@ -54,9 +54,9 @@ Usage example::
     # Multi-vdSD device (e.g. combined light + shade)
     base = DsUid.from_enocean("0512ABCD")
     device2 = Device(vdc=vdc, dsuid=base)
-    vdsd_light = Vdsd(device=device2, primary_group=ColorClass.YELLOW,
+    vdsd_light = Vdsd(device=device2, primary_group=ColorGroup.YELLOW,
                       subdevice_index=0, name="Light")
-    vdsd_shade = Vdsd(device=device2, primary_group=ColorClass.GREY,
+    vdsd_shade = Vdsd(device=device2, primary_group=ColorGroup.GREY,
                       subdevice_index=1, name="Shade")
     device2.add_vdsd(vdsd_light)
     device2.add_vdsd(vdsd_shade)
@@ -81,7 +81,7 @@ from typing import (
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid
-from pydsvdcapi.enums import ColorClass, ColorGroup
+from pydsvdcapi.enums import ColorGroup
 
 if TYPE_CHECKING:
     from pydsvdcapi.actions import (
@@ -260,7 +260,7 @@ class Vdsd:
         self,
         *,
         device: Device,
-        primary_group: ColorClass,
+        primary_group: ColorGroup,
         subdevice_index: int = 0,
         name: str,
         model: str,
@@ -327,11 +327,14 @@ class Vdsd:
         self.device_class_version: Optional[str] = device_class_version
 
         # --- vdSD-specific properties ---------------------------------
-        self._primary_group: ColorClass = primary_group
+        if primary_group is None:
+            raise ValueError("primary_group is mandatory and must not be None.")
+        self._primary_group: ColorGroup = primary_group
         self.zone_id: int = zone_id
         self._model_features: Set[str] = (
             set(model_features) if model_features else set()
         )
+        self._features_derived: bool = False
         self.prog_mode: Optional[bool] = prog_mode
         self.current_config_id: Optional[str] = current_config_id
         self._configurations: List[str] = (
@@ -402,7 +405,7 @@ class Vdsd:
         return self._subdevice_index
 
     @property
-    def primary_group(self) -> Optional[ColorClass]:
+    def primary_group(self) -> Optional[ColorGroup]:
         """The primary dS class (colour) of this device."""
         return self._primary_group
 
@@ -593,12 +596,28 @@ class Vdsd:
     # ---- model features management -----------------------------------
 
     def add_model_feature(self, feature: str) -> None:
-        """Add a model feature flag."""
+        """Add a model feature flag.
+
+        :raises ValueError: if *feature* is a member of
+            :attr:`_UNSUPPORTED_MODEL_FEATURES` (i.e. it has no effect on
+            TCP/IP VDC devices and must never be declared).
+        """
+        if feature in self._UNSUPPORTED_MODEL_FEATURES:
+            raise ValueError(
+                f"modelFeature {feature!r} is not supported for TCP/IP VDC "
+                "devices and must not be declared — see "
+                "docs/model-features-auto-assignment.md for details."
+            )
         self._model_features.add(feature)
 
     def remove_model_feature(self, feature: str) -> None:
-        """Remove a model feature flag (no-op if absent)."""
+        """Remove a model feature flag (no-op if absent).
+
+        Also prevents :meth:`announce` from auto-deriving features,
+        so that manual removals are not silently overwritten.
+        """
         self._model_features.discard(feature)
+        self._features_derived = True
 
     # Channel-type IDs that support transitions (used by derive_model_features).
     _TRANST_CHANNEL_TYPES: frozenset = frozenset(
@@ -610,11 +629,29 @@ class Vdsd:
     # Channel-type IDs for ventilation control.
     _VENTILATION_CHANNEL_TYPES: frozenset = frozenset({12, 13, 14, 15, 20, 21})
 
-    # Output-group IDs that represent climate/heating outputs.
-    _HEATING_OUTPUT_GROUPS: frozenset = frozenset({3, 9, 10, 12, 48})
-
-    # Primary-group IDs that represent climate sub-types with ventilation/FCU.
-    _VENT_FCU_PRIMARY_GROUPS: frozenset = frozenset({10, 12, 64, 69})
+    # Features that cannot be used with TCP/IP VDC devices and must never be
+    # declared.  Two root causes:
+    #   1. Output-mode selectors (outmode, outmodeswitch, …) write to the dSS
+    #      m_OutputMode field via DS485 CfgFunction_Mode.  The written value is
+    #      never forwarded to the VDC, so VDC devices cannot observe or react
+    #      to the change.
+    #   2. Hardware-only features (ledauto, leddark, dimmodeconfig, …) relate
+    #      to physical device capabilities that have no VDC write-back path.
+    _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset({
+        # LED indicators — not API-controlled on VDC devices
+        "ledauto", "leddark",
+        # Hardware dimmer type selection — no VDC path
+        "dimmodeconfig",
+        # Hardware LED on consumption events — no VDC path
+        "consumptioneventled",
+        # Output-mode selectors that write via DS485, not via VDC
+        "outmode", "outmodeswitch", "heatingoutmode", "umroutmode",
+        "extradimmer", "optypeconfig", "outmodetempcontrol", "outmodeenoceanvalve",
+        # Button-type features tied to physical TKM hardware
+        "twowayconfig", "pushbcombined",
+        # Hardware-device-specific features with no VDC equivalent
+        "ftwdisplaysettings", "ftwbacklighttimeout", "grkl387workaround",
+    })
 
     def derive_model_features(self) -> None:
         """Derive and add model-feature flags from the configured components.
@@ -643,25 +680,25 @@ class Vdsd:
 
         **Output / channel rules**
 
-        * Any output present → ``"dontcare"``, ``"ledauto"``
+        * Any output present → ``"dontcare"``, ``"blink"``
         * Any channel with ``channelType`` in 1–12, 14–18, or 22–24 →
           ``"transt"``
-        * Output ``defaultGroup`` 2 (GREY/shades) → ``"shadeprops"``
-        * Output ``defaultGroup`` 2 + ``function`` POSITIONAL (2) →
+        * ``primaryGroup`` 2 (GREY / outdoor shade) → ``"shadeprops"``
+        * ``primaryGroup`` 2 + ``function`` POSITIONAL (2) →
           ``"shadeposition"``; additionally ``channelType`` 9 or 10
           present → ``"shadebladeang"`` + ``"motiontimefins"``
-        * Output ``defaultGroup`` ≠ 2 → ``"outvalue8"``
+        * ``primaryGroup`` ≠ 2 → ``"outvalue8"``
         * Both ``channelType`` 2 (HUE) and 3 (SATURATION) present, or
           both 1 (BRIGHTNESS) and 4 (COLOR_TEMPERATURE) present →
           ``"outputchannels"``
         * ``function`` DIMMER (1), DIMMER_COLOR_TEMP (3), or
-          FULL_COLOR_DIMMER (4) → ``"dimtimeconfig"``,
-          ``"outmodeauto"``, ``"dimmodeconfig"``,
-          ``"customtransitiontime"``
-        * Output ``defaultGroup`` in {3, 9, 10, 12, 48} + ``function``
-          ON_OFF (0) → ``"heatingoutmode"`` + ``"pwmvalue"``
+          FULL_COLOR_DIMMER (4) → ``"dimtimeconfig"``
+        * ``function`` ON_OFF (0) → ``"outconfigswitch"`` +
+          ``"impulseconfig"``
+        * ``primaryGroup`` 3 (BLUE) + ``function`` ON_OFF (0) →
+          ``"pwmvalue"``
         * ``channelType`` 16 (HEATING_POWER) present →
-          ``"heatingoutmode"`` + ``"pwmvalue"``
+          ``"pwmvalue"``
         * Any ventilation channel (types 12, 13, 14, 15, 20, 21)
           present → ``"ventconfig"``
 
@@ -670,69 +707,58 @@ class Vdsd:
         * ``sensorType`` in {14, 15, 16, 17} (ACTIVE_POWER,
           ELECTRIC_CURRENT, ENERGY_METER, APPARENT_POWER) →
           ``"consumption"``
-        * ``sensorType`` 14 (ACTIVE_POWER) → ``"consumptioneventled"``
-        * ``sensorType`` 16 (ENERGY_METER) → ``"consumptiontimer"``
-        * ``sensorType`` 1 (TEMPERATURE) + ``primaryGroup`` in
-          {3, 48} (BLUE_CLIMATE, BLUE_TEMPERATURE_CONTROL) →
-          ``"temperatureoffset"``
+        * ``sensorType`` 1 (TEMPERATURE) + ``primaryGroup`` 3
+          (BLUE) → ``"temperatureoffset"``
 
         **Binary input rules**
 
-        * Binary input with ``group`` 8 → ``"akmsensor"`` +
+        * Any binary input present → ``"akmsensor"`` +
           ``"akminput"`` + ``"akmdelay"``
 
         **Button rules**
 
-        * Any button → ``"pushbutton"`` + ``"pushbadvanced"``
+        * Any button → ``"pushbutton"`` + ``"pushbadvanced"`` +
+          ``"pushbdisabled"``
         * Button with ``group`` ≠ 8 → ``"pushbarea"``
         * Button with ``group`` ≠ 8 + ``supportsLocalKeyMode`` →
           ``"pushbdevice"``
         * Button with ``group`` == 8 → ``"pushbsensor"`` +
           ``"highlevel"``
-        * Button with ``buttonType`` in {2, 3, 4, 5} →
-          ``"pushbcombined"``
-        * Any button with ``dsIndex`` ≥ 1 → ``"twowayconfig"``
 
         **Primary-group rules**
 
-        * ``primaryGroup`` 3 (BLUE_CLIMATE) → ``"heatingprops"`` +
+        * ``primaryGroup`` 3 (BLUE) → ``"heatingprops"`` +
           ``"heatinggroup"``; if output present also ``"valvetype"`` +
-          ``"extendedvalvetypes"``
-        * ``primaryGroup`` in {10, 12, 64, 69} (BLUE_VENTILATION,
-          BLUE_RECIRCULATION, APARTMENT_VENTILATION,
-          APARTMENT_RECIRCULATION) + output present → ``"fcu"`` +
-          ``"ventconfig"``
+          ``"extendedvalvetypes"``; additionally, if ventilation channel
+          types (12, 13, 14, 15, 20, 21) present → ``"fcu"``
         * ``primaryGroup`` 2 (GREY) + output present →
-          ``"locationconfig"`` + ``"windprotectionconfigblind"`` (when
-          ``channelType`` 9 or 10 present) or
-          ``"windprotectionconfigawning"`` (otherwise)
-        * ``primaryGroup`` 8 (BLACK/Joker) → ``"jokerconfig"`` +
-          ``"highlevel"``
+          ``"locationconfig"`` + ``"operationlock"`` +
+          ``"windprotectionconfigblind"`` (when ``channelType`` 9 or 10
+          present) or ``"windprotectionconfigawning"`` (otherwise)
+        * ``primaryGroup`` 8 (BLACK/Joker) → ``"jokerconfig"``
 
         **Identification rules**
 
-        * ``on_identify`` callback registered → ``"blink"`` +
-          ``"identification"`` + ``"blinkconfig"``
+        * ``on_identify`` callback registered → ``"identification"``
 
-        Note: ``"outmode"``, ``"outmodeswitch"``, ``"outmodegeneric"``,
-        ``"outmodetempcontrol"``, ``"leddark"``, ``"extradimmer"``,
-        ``"umvrelay"``, ``"umroutmode"``, ``"jokertempcontrol"``,
-        ``"impulseconfig"``, ``"outconfigswitch"``,
-        ``"customactivityconfig"``, ``"ftwtempcontrolventilationselect"``,
-        ``"ftwdisplaysettings"``, ``"ftwbacklighttimeout"`` and all
-        hardware-specific features are **never** auto-derived.
-        Add them manually via :meth:`add_model_feature` when needed.
-        The features ``"outmodeenoceanvalve"``, ``"apartmentapplication"``,
-        ``"setumr200config"``, ``"operationlock"``, and
-        ``"grkl387workaround"`` are injected by the dSS firmware and
-        **must not** be set from a vDC.
+        Note: features in :attr:`_UNSUPPORTED_MODEL_FEATURES` are
+        **never** auto-derived and will raise :exc:`ValueError` if
+        passed to :meth:`add_model_feature`.  These are features whose
+        configuration is written to the dSS hardware register via DS485
+        and never forwarded to VDC devices, or features tied to physical
+        hardware capabilities with no VDC write-back path.  See
+        ``docs/model-features-auto-assignment.md`` for the full list and
+        rationale.
         """
+        # primaryGroup integer — needed by both output and sensor rules
+        pg = int(self._primary_group)
+
         # ---- output / channel rules ----------------------------------
+        ch_types: set = set()  # populated below when output present
         if self._output is not None:
             self._model_features.add("dontcare")
-            self._model_features.add("ledauto")
+            self._model_features.add("blink")
 
-            dg = self._output.default_group
             fn = int(self._output.function)
             ch_types = {
                 int(ch.channel_type)
@@ -744,8 +770,8 @@ class Vdsd:
             if ch_types & self._TRANST_CHANNEL_TYPES:
                 self._model_features.add("transt")
 
-            # shade vs. normal output
-            if dg == 2:  # GREY / shade group
+            # shade vs. normal output — determined by primaryGroup (ColorGroup.GREY=2)
+            if pg == 2:  # ColorGroup.GREY — outdoor shade device
                 self._model_features.add("shadeprops")
                 if fn == 2:  # OutputFunction.POSITIONAL
                     self._model_features.add("shadeposition")
@@ -761,23 +787,21 @@ class Vdsd:
             if {2, 3} <= ch_types or {1, 4} <= ch_types:
                 self._model_features.add("outputchannels")
 
-            # advanced dimmer features: DIMMER (1), DIMMER_COLOR_TEMP (3),
-            # FULL_COLOR_DIMMER (4)
+            # dimmer features: DIMMER (1), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4)
             if fn in {1, 3, 4}:
                 self._model_features.add("dimtimeconfig")
-                self._model_features.add("outmodeauto")
-                self._model_features.add("dimmodeconfig")
-                self._model_features.add("customtransitiontime")
 
-            # heating/climate valve output modes:
-            #   default group is a heating/climate group + ON_OFF function
-            if dg in self._HEATING_OUTPUT_GROUPS and fn == 0:
-                self._model_features.add("heatingoutmode")
+            # ON_OFF (binary) output features
+            if fn == 0:  # OutputFunction.ON_OFF
+                self._model_features.add("outconfigswitch")
+                self._model_features.add("impulseconfig")
+
+            # heating/climate valve: BLUE + ON_OFF → PWM UI component
+            if pg == 3 and fn == 0:  # ColorGroup.BLUE
                 self._model_features.add("pwmvalue")
 
             # HEATING_POWER channel (16) always implies valve/heating output
             if 16 in ch_types:
-                self._model_features.add("heatingoutmode")
                 self._model_features.add("pwmvalue")
 
             # ventilation control channels → ventconfig
@@ -793,34 +817,24 @@ class Vdsd:
         if sensor_types & {14, 15, 16, 17}:
             self._model_features.add("consumption")
 
-        # LED indication on consumption events (active power sensor)
-        if 14 in sensor_types:
-            self._model_features.add("consumptioneventled")
-
-        # consumption timer UI (cumulative energy sensor)
-        if 16 in sensor_types:
-            self._model_features.add("consumptiontimer")
-
         # temperature offset UI: climate device with a room-temperature sensor
-        pg = int(self._primary_group) if self._primary_group is not None else 0
-        if 1 in sensor_types and pg in {3, 48}:  # TEMPERATURE + climate groups
+        if 1 in sensor_types and pg == 3:  # TEMPERATURE + BLUE
             self._model_features.add("temperatureoffset")
 
         # ---- binary input rules --------------------------------------
-        for bi in self._binary_inputs.values():
-            if bi.group == 8:
-                self._model_features.add("akmsensor")
-                self._model_features.add("akminput")
-                self._model_features.add("akmdelay")
+        if self._binary_inputs:  # any binary input → AKM sensor UI
+            self._model_features.add("akmsensor")
+            self._model_features.add("akminput")
+            self._model_features.add("akmdelay")
 
         # ---- button rules --------------------------------------------
         if self._button_inputs:
             self._model_features.add("pushbutton")
             self._model_features.add("pushbadvanced")
+            self._model_features.add("pushbdisabled")
 
             for btn in self._button_inputs.values():
                 grp = btn.group
-                bt = int(btn.button_type)
 
                 if grp != 8:
                     self._model_features.add("pushbarea")
@@ -830,30 +844,21 @@ class Vdsd:
                     self._model_features.add("pushbsensor")
                     self._model_features.add("highlevel")
 
-                if bt in {2, 3, 4, 5}:
-                    self._model_features.add("pushbcombined")
-
-                if btn.ds_index >= 1:
-                    self._model_features.add("twowayconfig")
-
         # ---- primary-group rules -------------------------------------
-        # (pg already computed above for the temperature-offset rule)
 
-        if pg == 3:  # ColorClass.BLUE_CLIMATE
+        if pg == 3:  # ColorGroup.BLUE — all climate devices
             self._model_features.add("heatingprops")
             self._model_features.add("heatinggroup")
             if self._output is not None:
                 self._model_features.add("valvetype")
                 self._model_features.add("extendedvalvetypes")
+                # FCU / ventilation devices are identified by airflow channel types
+                if ch_types & self._VENTILATION_CHANNEL_TYPES:
+                    self._model_features.add("fcu")
 
-        if pg in self._VENT_FCU_PRIMARY_GROUPS and self._output is not None:
-            # BLUE_VENTILATION (10), BLUE_RECIRCULATION (12),
-            # APARTMENT_VENTILATION (64), APARTMENT_RECIRCULATION (69)
-            self._model_features.add("fcu")
-            self._model_features.add("ventconfig")
-
-        if pg == 2 and self._output is not None:  # ColorClass.GREY
+        if pg == 2 and self._output is not None:  # ColorGroup.GREY
             self._model_features.add("locationconfig")
+            self._model_features.add("operationlock")
             ch_types_grey = {
                 int(ch.channel_type)
                 for ch in self._output.channels.values()
@@ -863,18 +868,16 @@ class Vdsd:
             else:  # no slat channel → awning / roller blind
                 self._model_features.add("windprotectionconfigawning")
 
-        if pg == 8:  # ColorClass.BLACK (Joker)
+        if pg == 8:  # ColorGroup.BLACK — joker / configurable
             self._model_features.add("jokerconfig")
-            self._model_features.add("highlevel")
 
         # ---- identification / blink ----------------------------------
         if self._on_identify is not None:
-            self._model_features.add("blink")
             self._model_features.add("identification")
-            self._model_features.add("blinkconfig")
 
-        logger.info(
-            "[DIAG] derive_model_features '%s': %s",
+        self._features_derived = True
+        logger.debug(
+            "derive_model_features '%s': %s",
             self.name, sorted(self._model_features),
         )
 
@@ -1537,7 +1540,7 @@ class Vdsd:
             "deviceClassVersion": self.device_class_version,
             "active": self._active,
             # vdSD-specific properties
-            "primaryGroup": int(self._primary_group) if self._primary_group is not None else None,
+            "primaryGroup": int(self._primary_group),
             "zoneID": self.zone_id,
             "progMode": self.prog_mode,
             "currentConfigId": self.current_config_id,
@@ -1550,12 +1553,11 @@ class Vdsd:
         else:
             props["modelFeatures"] = {}
 
-        # configurations (§4.1.1) — list of config/profile IDs.
-        if self._configurations:
-            props["configurations"] = {
-                str(i): {"id": cid}
-                for i, cid in enumerate(self._configurations)
-            }
+        # configurations (§4.1.1) — mandatory; empty dict when no profiles.
+        props["configurations"] = {
+            str(i): {"id": cid}
+            for i, cid in enumerate(self._configurations)
+        }
 
         # Button input component properties (§4.2 / §4.1.2).
         if self._button_inputs:
@@ -1742,7 +1744,7 @@ class Vdsd:
         node: Dict[str, Any] = {
             "subdeviceIndex": self._subdevice_index,
             "dSUID": str(self._dsuid),
-            "primaryGroup": int(self._primary_group) if self._primary_group is not None else None,
+            "primaryGroup": int(self._primary_group),
             "name": self.name,
             "model": self.model,
             "modelVersion": self.model_version,
@@ -1856,7 +1858,7 @@ class Vdsd:
             if "subdeviceIndex" in state:
                 self._subdevice_index = int(state["subdeviceIndex"])
             if "primaryGroup" in state:
-                self._primary_group = ColorClass(
+                self._primary_group = ColorGroup(
                     int(state["primaryGroup"])
                 )
             if "name" in state:
@@ -2054,6 +2056,75 @@ class Vdsd:
 
     # ---- announcement ------------------------------------------------
 
+    async def _wait_for_initial_values(
+        self, timeout: float = 61.0
+    ) -> None:
+        """Wait until every value-bearing component has reported its first value.
+
+        Raises
+        ------
+        RuntimeError
+            If *timeout* seconds elapse before all components have provided
+            an initial value, with a message listing which ones are missing.
+        """
+        import asyncio
+
+        pending: list[tuple[str, asyncio.Event]] = []
+
+        if self._output is not None:
+            for ch in self._output._channels.values():
+                if not ch._initial_value_ready.is_set():
+                    pending.append((
+                        f"OutputChannel[{ch.ds_index}] '{ch.name}'",
+                        ch._initial_value_ready,
+                    ))
+
+        for si in self._sensor_inputs.values():
+            if not si._initial_value_ready.is_set():
+                pending.append((
+                    f"SensorInput[{si.ds_index}]",
+                    si._initial_value_ready,
+                ))
+
+        for st in self._device_states.values():
+            if not st._initial_value_ready.is_set():
+                pending.append((
+                    f"DeviceState '{st.name}'",
+                    st._initial_value_ready,
+                ))
+
+        for prop in self._device_properties.values():
+            if not prop._initial_value_ready.is_set():
+                pending.append((
+                    f"DeviceProperty '{prop.name}'",
+                    prop._initial_value_ready,
+                ))
+
+        if not pending:
+            return
+
+        logger.info(
+            "vdSD '%s': waiting up to %.0fs for initial values from: %s",
+            self.name,
+            timeout,
+            ", ".join(label for label, _ in pending),
+        )
+
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*[ev.wait() for _, ev in pending]),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            still_missing = [
+                label for label, ev in pending if not ev.is_set()
+            ]
+            raise RuntimeError(
+                f"vdSD '{self.name}': timed out after {timeout:.0f}s waiting "
+                f"for initial values. The following components did not report: "
+                f"{', '.join(still_missing)}"
+            ) from None
+
     async def announce(self, session: VdcSession) -> bool:
         """Announce this vdSD to the connected vdSM.
 
@@ -2068,6 +2139,14 @@ class Vdsd:
         bool
             ``True`` if the vdSM accepted the announcement.
         """
+        # Wait for all value-bearing components to have an initial value.
+        await self._wait_for_initial_values()
+
+        # Auto-derive modelFeatures if the caller has not yet called
+        # derive_model_features() or remove_model_feature().
+        if not self._features_derived:
+            self.derive_model_features()
+
         vdc = self._device.vdc
         msg = pb.Message()
         msg.type = pb.VDC_SEND_ANNOUNCE_DEVICE
@@ -2447,7 +2526,7 @@ class Device:
             def reconfigure(dev: Device):
                 dev.get_vdsd(0).name = "Updated Name"
                 dev.add_vdsd(Vdsd(device=dev, subdevice_index=2,
-                                  primary_group=ColorClass.GREY))
+                                  primary_group=ColorGroup.GREY))
 
             await device.update(session, reconfigure)
         """
@@ -2535,8 +2614,8 @@ class Device:
             vdsd = self._vdsds.get(idx)
             if vdsd is None:
                 # Create a new Vdsd for this persisted entry.
-                primary_group = ColorClass(
-                    vdsd_state.get("primaryGroup", ColorClass.BLACK)
+                primary_group = ColorGroup(
+                    vdsd_state.get("primaryGroup", ColorGroup.BLACK)
                 )
                 vdsd = Vdsd(
                     device=self,

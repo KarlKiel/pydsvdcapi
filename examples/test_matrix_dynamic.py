@@ -100,7 +100,7 @@ DEVICES: list[DeviceConfig] = [
     DeviceConfig(
         name="PG3_Blue_Heating",
         color_class=ColorClass.BLUE_CLIMATE,
-        output_group=int(ColorGroup.BLUE_HEATING),
+        output_group=int(ColorGroup.BLUE),
         output_function=OutputFunction.POSITIONAL,
         channel_types=[OutputChannelType.HEATING_POWER],
         extra_features=["heatingoutmode", "pwmvalue"],

@@ -16,10 +16,9 @@ from pydsvdcapi.binary_input import (
 )
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import (
+    ColorGroup,
     BinaryInputType,
     BinaryInputUsage,
-    ColorClass,
-    ColorGroup,
     InputError,
 )
 from pydsvdcapi.property_handling import elements_to_dict
@@ -64,7 +63,7 @@ def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
 def _make_vdsd(device: Device, **kwargs: Any) -> Vdsd:
     defaults: dict[str, Any] = {
         "device": device,
-        "primary_group": ColorClass.BLACK,
+        "primary_group": ColorGroup.BLACK,
         "name": "BI Test vdSD",
         "model": "Test BI vdSD",
     }

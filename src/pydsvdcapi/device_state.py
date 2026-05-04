@@ -50,6 +50,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import (
@@ -103,6 +104,7 @@ class DeviceState:
         "_last_change",
         "_uplink_converter_code",
         "_uplink_converter_fn",
+        "_initial_value_ready",
     )
 
     def __init__(
@@ -132,6 +134,9 @@ class DeviceState:
         # ---- value converter (optional, persisted) -------------------
         self._uplink_converter_code: Optional[str] = None
         self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
+
+        # Set when the first real (non-None) value has been received.
+        self._initial_value_ready: asyncio.Event = asyncio.Event()
 
     # ---- read-only accessors -----------------------------------------
 
@@ -237,6 +242,7 @@ class DeviceState:
             self._last_update = now
             if old != self._value:
                 self._last_change = now
+            self._initial_value_ready.set()
 
     # ---- value resolution --------------------------------------------
 
@@ -423,6 +429,7 @@ class DeviceState:
             self._last_update = now
             if old != self._value:
                 self._last_change = now
+            self._initial_value_ready.set()
 
         session = session or self._vdsd._session
         if session is None or not session.is_active:

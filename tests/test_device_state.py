@@ -11,7 +11,7 @@ import pytest
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.device_state import DeviceState
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.enums import ColorClass, ColorGroup, OutputFunction, OutputUsage
+from pydsvdcapi.enums import ColorGroup, OutputFunction, OutputUsage
 from pydsvdcapi.output import Output
 from pydsvdcapi.property_handling import NO_VALUE, elements_to_dict
 from pydsvdcapi.session import VdcSession
@@ -57,7 +57,7 @@ def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
 def _make_vdsd(device: Device, **kwargs: Any) -> Vdsd:
     defaults: dict[str, Any] = {
         "device": device,
-        "primary_group": ColorClass.YELLOW,
+        "primary_group": ColorGroup.YELLOW,
         "name": "State Test vdSD",
         "model": "Test State vdSD",
     }

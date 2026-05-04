@@ -76,6 +76,7 @@ persisted.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -330,6 +331,9 @@ class OutputChannel:
         #: Monotonic timestamp of last confirmed hardware apply.
         self._last_update: Optional[float] = None
 
+        # Set when the first real value has been received from the device.
+        self._initial_value_ready: asyncio.Event = asyncio.Event()
+
         # ---- value converters (optional, persisted) ------------------
         self._uplink_converter_code: Optional[str] = None
         self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
@@ -502,6 +506,7 @@ class OutputChannel:
             direction="uplink",
         )
         self._value = self._clamp(value)
+        self._initial_value_ready.set()
         self._last_update = time.monotonic()
         logger.debug(
             "OutputChannel[%d] '%s' device-side update → %s",
@@ -534,6 +539,7 @@ class OutputChannel:
             direction="downlink",
         )
         self._value = self._clamp(value)
+        self._initial_value_ready.set()
         # Age = NULL until the device confirms the value.
         self._last_update = None
         logger.debug(

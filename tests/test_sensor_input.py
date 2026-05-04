@@ -12,11 +12,12 @@ import pytest
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import (
-    ColorClass,
     ColorGroup,
     InputError,
+    SENSOR_TYPE_VALID_USAGES,
     SensorType,
     SensorUsage,
+    validate_sensor_type_usage,
 )
 from pydsvdcapi.property_handling import elements_to_dict
 from pydsvdcapi.sensor_input import SensorInput
@@ -61,7 +62,7 @@ def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
 def _make_vdsd(device: Device, **kwargs: Any) -> Vdsd:
     defaults: dict[str, Any] = {
         "device": device,
-        "primary_group": ColorClass.BLACK,
+        "primary_group": ColorGroup.BLACK,
         "name": "SI Test vdSD",
         "model": "Test SI vdSD",
     }
@@ -592,12 +593,12 @@ class TestSensorInputPushNotification:
 
         si0 = SensorInput(
             vdsd=vdsd, ds_index=0, name="Temperature",
-            sensor_type=SensorType.TEMPERATURE,
+            sensor_type=SensorType.TEMPERATURE, sensor_usage=SensorUsage.ROOM,
             min_value=-20.0, max_value=60.0, resolution=0.1,
         )
         si1 = SensorInput(
             vdsd=vdsd, ds_index=1, name="Humidity",
-            sensor_type=SensorType.HUMIDITY,
+            sensor_type=SensorType.HUMIDITY, sensor_usage=SensorUsage.ROOM,
             min_value=0.0, max_value=100.0, resolution=1.0,
         )
         vdsd.add_sensor_input(si0)
@@ -803,12 +804,12 @@ class TestVdsdSensorInputProperties:
 
         si0 = SensorInput(
             vdsd=vdsd, ds_index=0, name="Temperature",
-            sensor_type=SensorType.TEMPERATURE,
+            sensor_type=SensorType.TEMPERATURE, sensor_usage=SensorUsage.ROOM,
             min_value=-20.0, max_value=60.0, resolution=0.1,
         )
         si1 = SensorInput(
             vdsd=vdsd, ds_index=1, name="Humidity",
-            sensor_type=SensorType.HUMIDITY,
+            sensor_type=SensorType.HUMIDITY, sensor_usage=SensorUsage.ROOM,
             min_value=0.0, max_value=100.0, resolution=1.0,
         )
         vdsd.add_sensor_input(si0)
@@ -1741,12 +1742,12 @@ class TestVdsdAliveTimerLifecycle:
 
         si0 = SensorInput(
             vdsd=vdsd, ds_index=0, alive_sign_interval=10.0,
-            sensor_type=SensorType.TEMPERATURE,
+            sensor_type=SensorType.TEMPERATURE, sensor_usage=SensorUsage.ROOM,
             min_value=-20.0, max_value=60.0, resolution=0.1,
         )
         si1 = SensorInput(
             vdsd=vdsd, ds_index=1, alive_sign_interval=20.0,
-            sensor_type=SensorType.HUMIDITY,
+            sensor_type=SensorType.HUMIDITY, sensor_usage=SensorUsage.ROOM,
             min_value=0.0, max_value=100.0, resolution=1.0,
         )
         vdsd.add_sensor_input(si0)
@@ -1967,3 +1968,171 @@ class TestSensorTypeEnumValues:
     def test_sensor_usage(self, value: int, name: str):
         su = SensorUsage(value)
         assert su.name == name
+
+
+# ===========================================================================
+# Sensor type / usage validation  (ds-basics Table 23)
+# ===========================================================================
+
+
+class TestSensorTypeUsageValidation:
+    """Tests for validate_sensor_type_usage and SENSOR_TYPE_VALID_USAGES."""
+
+    # ---- standalone function ----
+
+    def test_none_type_rejected(self):
+        with pytest.raises(ValueError, match="NONE"):
+            validate_sensor_type_usage(SensorType.NONE, SensorUsage.ROOM)
+
+    def test_undefined_usage_rejected(self):
+        with pytest.raises(ValueError, match="UNDEFINED"):
+            validate_sensor_type_usage(SensorType.TEMPERATURE, SensorUsage.UNDEFINED)
+
+    def test_type_not_in_table23_accepts_any_explicit_usage(self):
+        # SUPPLY_VOLTAGE is not in Table 23 → any non-UNDEFINED usage is accepted
+        validate_sensor_type_usage(SensorType.SUPPLY_VOLTAGE, SensorUsage.ROOM)
+        validate_sensor_type_usage(SensorType.SUPPLY_VOLTAGE, SensorUsage.OUTDOOR)
+        validate_sensor_type_usage(SensorType.SUPPLY_VOLTAGE, SensorUsage.DEVICE_LEVEL)
+
+    def test_type_not_in_table23_rejects_undefined_usage(self):
+        with pytest.raises(ValueError, match="UNDEFINED"):
+            validate_sensor_type_usage(SensorType.SUPPLY_VOLTAGE, SensorUsage.UNDEFINED)
+
+    @pytest.mark.parametrize("usage", [
+        SensorUsage.ROOM, SensorUsage.OUTDOOR,
+        SensorUsage.DEVICE_LEVEL, SensorUsage.DEVICE_LAST_RUN, SensorUsage.DEVICE_AVERAGE,
+    ])
+    def test_temperature_valid_usages(self, usage: SensorUsage):
+        validate_sensor_type_usage(SensorType.TEMPERATURE, usage)
+
+    def test_temperature_rejects_user_interaction(self):
+        with pytest.raises(ValueError, match="USER_INTERACTION"):
+            validate_sensor_type_usage(SensorType.TEMPERATURE, SensorUsage.USER_INTERACTION)
+
+    @pytest.mark.parametrize("sensor_type", [
+        SensorType.CO_CONCENTRATION,
+        SensorType.CO2_CONCENTRATION,
+    ])
+    def test_concentration_room_only_valid(self, sensor_type: SensorType):
+        validate_sensor_type_usage(sensor_type, SensorUsage.ROOM)
+
+    @pytest.mark.parametrize("sensor_type", [
+        SensorType.CO_CONCENTRATION,
+        SensorType.CO2_CONCENTRATION,
+    ])
+    def test_concentration_rejects_outdoor(self, sensor_type: SensorType):
+        with pytest.raises(ValueError, match="OUTDOOR"):
+            validate_sensor_type_usage(sensor_type, SensorUsage.OUTDOOR)
+
+    @pytest.mark.parametrize("sensor_type", [
+        SensorType.AIR_PRESSURE,
+        SensorType.WIND_SPEED,
+        SensorType.WIND_DIRECTION,
+        SensorType.WIND_GUST_SPEED,
+        SensorType.WIND_GUST_DIRECTION,
+        SensorType.PRECIPITATION,
+    ])
+    def test_outdoor_only_types_accept_outdoor(self, sensor_type: SensorType):
+        validate_sensor_type_usage(sensor_type, SensorUsage.OUTDOOR)
+
+    @pytest.mark.parametrize("sensor_type", [
+        SensorType.AIR_PRESSURE,
+        SensorType.WIND_SPEED,
+        SensorType.WIND_DIRECTION,
+        SensorType.WIND_GUST_SPEED,
+        SensorType.WIND_GUST_DIRECTION,
+        SensorType.PRECIPITATION,
+    ])
+    def test_outdoor_only_types_reject_room(self, sensor_type: SensorType):
+        with pytest.raises(ValueError, match="ROOM"):
+            validate_sensor_type_usage(sensor_type, SensorUsage.ROOM)
+
+    @pytest.mark.parametrize("sensor_type", [
+        SensorType.ACTIVE_POWER,
+        SensorType.ELECTRIC_CURRENT,
+        SensorType.ENERGY_METER,
+        SensorType.APPARENT_POWER,
+        SensorType.SOUND_PRESSURE_LEVEL,
+        SensorType.GENERATED_ACTIVE_POWER,
+        SensorType.GENERATED_ENERGY,
+        SensorType.WATER_QUANTITY,
+        SensorType.WATER_FLOW_RATE,
+        SensorType.LENGTH,
+        SensorType.MASS,
+        SensorType.DURATION,
+    ])
+    @pytest.mark.parametrize("usage", [
+        SensorUsage.DEVICE_LEVEL, SensorUsage.DEVICE_LAST_RUN, SensorUsage.DEVICE_AVERAGE,
+    ])
+    def test_device_only_types_accept_device_usages(
+        self, sensor_type: SensorType, usage: SensorUsage
+    ):
+        validate_sensor_type_usage(sensor_type, usage)
+
+    @pytest.mark.parametrize("sensor_type", [
+        SensorType.ACTIVE_POWER,
+        SensorType.ENERGY_METER,
+        SensorType.APPARENT_POWER,
+    ])
+    def test_device_only_types_reject_room(self, sensor_type: SensorType):
+        with pytest.raises(ValueError, match="ROOM"):
+            validate_sensor_type_usage(sensor_type, SensorUsage.ROOM)
+
+    def test_error_message_contains_valid_usages(self):
+        with pytest.raises(ValueError, match="Valid usages"):
+            validate_sensor_type_usage(SensorType.WIND_SPEED, SensorUsage.ROOM)
+
+    # ---- validation via SensorInput constructor ----
+
+    def _make_base(self) -> tuple:
+        from pydsvdcapi.vdc import Vdc
+        from pydsvdcapi.vdc_host import VdcHost
+        from pydsvdcapi.vdsd import Device, Vdsd
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        return vdsd
+
+    def test_constructor_accepts_valid_combination(self):
+        vdsd = self._make_base()
+        si = SensorInput(
+            vdsd=vdsd,
+            sensor_type=SensorType.ACTIVE_POWER,
+            sensor_usage=SensorUsage.DEVICE_LEVEL,
+            min_value=0.0,
+            max_value=4096.0,
+            resolution=1.0,
+        )
+        assert si.sensor_type == SensorType.ACTIVE_POWER
+
+    def test_constructor_rejects_invalid_combination(self):
+        vdsd = self._make_base()
+        with pytest.raises(ValueError, match="ROOM.*not valid.*ACTIVE_POWER|ACTIVE_POWER.*ROOM"):
+            SensorInput(
+                vdsd=vdsd,
+                sensor_type=SensorType.ACTIVE_POWER,
+                sensor_usage=SensorUsage.ROOM,
+                min_value=0.0,
+                max_value=4096.0,
+                resolution=1.0,
+            )
+
+    # ---- SENSOR_TYPE_VALID_USAGES coverage ----
+
+    def test_all_table23_types_have_entries(self):
+        expected = {
+            SensorType.TEMPERATURE, SensorType.HUMIDITY, SensorType.ILLUMINATION,
+            SensorType.CO_CONCENTRATION, SensorType.CO2_CONCENTRATION,
+            SensorType.AIR_PRESSURE,
+            SensorType.WIND_SPEED, SensorType.WIND_DIRECTION,
+            SensorType.WIND_GUST_SPEED, SensorType.WIND_GUST_DIRECTION,
+            SensorType.PRECIPITATION,
+            SensorType.ACTIVE_POWER, SensorType.ELECTRIC_CURRENT,
+            SensorType.ENERGY_METER, SensorType.APPARENT_POWER,
+            SensorType.SOUND_PRESSURE_LEVEL,
+            SensorType.GENERATED_ACTIVE_POWER, SensorType.GENERATED_ENERGY,
+            SensorType.WATER_QUANTITY, SensorType.WATER_FLOW_RATE,
+            SensorType.LENGTH, SensorType.MASS, SensorType.DURATION,
+        }
+        assert expected.issubset(set(SENSOR_TYPE_VALID_USAGES.keys()))

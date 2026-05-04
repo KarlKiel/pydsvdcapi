@@ -10,6 +10,7 @@ vDC API protocol, derived from the official documentation:
 """
 
 from enum import IntEnum, unique
+from typing import Dict, FrozenSet, Union
 
 
 # ---------------------------------------------------------------------------
@@ -104,73 +105,106 @@ class EntityType(IntEnum):
 
 
 # ---------------------------------------------------------------------------
-#  Application groups / colours  (ds-basics Table 2)
+#  Primary group (device colour) and application class (output profile)
 # ---------------------------------------------------------------------------
 
 
 @unique
-class ColorClass(IntEnum):
-    """digitalSTROM device colour class.
-
-    Used for the ``primaryGroup`` property of a vdSD.  This is the device's
-    "colour class" as defined in the digitalSTROM specification — distinct from
-    the output *group* numbers used for scene calls (see :class:`ColorGroup`).
-
-    Values 1–8 correspond to the basic colour classes.  Values 9–12 are
-    additional climate sub-groups.  Value 9 (WHITE) also serves as a
-    **Single Device** marker (Einzelgerät), enabling the SingleDevice
-    configurator UI in the dSS.  Values 48, 64, 65 and 69 are apartment-level
-    group designations.  (Firmware: ApplicationType enum in modelconst.h.)
-    """
-
-    YELLOW = 1        # gelb/hell — Light
-    GREY = 2          # Grau/Schatten — Shade / Blinds
-    BLUE_CLIMATE = 3  # Blau/Klima — Climate (heating, cooling, ventilation…)
-    CYAN = 4          # Cyan/Audio — Audio
-    MAGENTA = 5       # Magenta/Video — Video
-    RED = 6           # Rot/Sicherheit — Security
-    GREEN = 7         # Grün/Zugang — Access
-    BLACK = 8         # Schwarz/Joker — Joker / Configurable
-    WHITE = 9         # Weiß/Einzelgerät — Single Device; also used as cooling sub-group
-    BLUE_VENTILATION = 10       # Lüftung — Ventilation
-    BLUE_WINDOW = 11            # Fenster — Window
-    BLUE_RECIRCULATION = 12     # Umluft — Recirculation / fan-coil
-    BLUE_TEMPERATURE_CONTROL = 48   # Raumtemperaturregelung
-    APARTMENT_VENTILATION = 64      # Apartment-level ventilation
-    AWNINGS = 65                    # Markisen — Awnings
-    APARTMENT_RECIRCULATION = 69    # Apartment-level recirculation
-
-
 class ColorGroup(IntEnum):
-    """digitalSTROM output application groups.
+    """digitalSTROM primary group ID (``primaryGroup`` of a vdSD).
 
-    Used to identify which *output group* a device belongs to (e.g. for scene
-    calls).  These numbers are used in protobuf group fields, :class:`Output`
-    ``default_group`` / ``active_group``, :class:`ButtonInput` ``group``, etc.
+    Identifies the colour / functional category of the device as a whole.
+    This value is sent in the ``primaryGroup`` field of the vdSD announcement.
 
-    Note: the values 1–8 overlap with :class:`ColorClass`, but value 9 differs:
-    here it is ``BLUE_COOLING`` (output group), whereas in :class:`ColorClass`
-    9 is ``WHITE`` (SingleDevice colour class).
+    For TCP/IP VDC (this library) **only values 1–9 are valid**.  The extended
+    Blue sub-types 10 (Ventilation), 11 (Window), and 12 (Recirculation) exist
+    in the dSS data model but are only set via the backend-VDC path and cannot
+    be declared by a TCP/IP VDC.  Use ``BLUE = 3`` for all climate sub-types
+    (heating, cooling, ventilation, window openers, fan-coil units).
 
-    Values are firmware-verified from ApplicationType enum (modelconst.h).
+    **Do NOT use for output fields** (``Output.default_group``,
+    ``Output.active_group``, ``Output.groups``) — those require
+    :class:`ColorClass` values (dS Application Group IDs), which are a
+    different integer set.
+
+    **Do NOT use for input group fields** — button, binary-input, and sensor
+    inputs each have their own enum (:class:`ButtonGroup`,
+    :class:`BinaryInputGroup`, :class:`SensorGroup`).
+
+    ``RED = 6`` and ``GREEN = 7`` are deprecated in the dSS firmware.
+    Both outdoor and indoor shades use ``GREY = 2``.
     """
 
-    YELLOW = 1        # gelb/Licht — Light
-    GREY = 2          # grau/Schatten — Shade / Blinds
-    BLUE_HEATING = 3  # blau/Heizung — Heating
-    CYAN = 4          # cyan/Audio — Audio
-    MAGENTA = 5       # magenta/Video — Video
-    RED = 6           # rot/Sicherheit — Security
-    GREEN = 7         # grün/Zugang — Access
-    BLACK = 8         # schwarz/variabel — Joker / Configurable
-    BLUE_COOLING = 9          # blau/Kühlung — Cooling
-    BLUE_VENTILATION = 10     # blau/Lüftung — Ventilation
-    BLUE_WINDOW = 11          # blau/Fenster — Window
-    BLUE_RECIRCULATION = 12   # blau/Umluft — Recirculation / fan-coil
-    BLUE_TEMPERATURE_CONTROL = 48   # Raumtemperaturregelung
-    APARTMENT_VENTILATION = 64      # Apartment Ventilation
-    AWNINGS = 65                    # Markisen — Awnings
-    APARTMENT_RECIRCULATION = 69    # Apartment-level recirculation
+    YELLOW = 1   # gelb/Licht — Lights / Dimmers
+    GREY = 2     # grau/Schatten — Shades (outdoor and indoor)
+    BLUE = 3     # blau/Klima — All climate: heating, cooling, ventilation, windows, FCU
+    CYAN = 4     # cyan/Audio — Audio
+    MAGENTA = 5  # magenta/Video — Video
+    RED = 6      # rot/Sicherheit — Security (deprecated)
+    GREEN = 7    # grün/Zugang — Access control (deprecated)
+    BLACK = 8    # schwarz/variabel — Joker / configurable
+    WHITE = 9    # weiß/Einzelgerät — Single device / appliance
+
+
+@unique
+class ColorClass(IntEnum):
+    """dS Application Group ID for output ``defaultGroup``, ``activeGroup``, and ``groups``.
+
+    These are the official digitalSTROM Application Group IDs (ds-basics.pdf
+    Table 2) used to identify the specific application profile of an output.
+    Placed in ``outputDescription.defaultGroup``, ``outputSettings.activeGroup``,
+    and ``outputSettings.groups``.
+
+    **Range constraints:**
+
+    * ``groups``: only values 1–63 are valid; global app groups (≥ 64) cannot
+      appear in the group membership bitfield.
+    * ``activeGroup``: if the value is < 64, it must also appear in ``groups``.
+      Values ≥ 64 (global app groups) are exempt from this requirement.
+    * ``defaultGroup``: informational; stored by dSS but not used at runtime.
+
+    Typical mapping — ``primaryGroup`` (ColorGroup) sets the device colour;
+    ``activeGroup`` / ``defaultGroup`` (ColorClass) sets the specific
+    application sub-type within that colour:
+
+    +---------------+---------+------------------------------+--------------+
+    | ColorGroup    | pg value| ColorClass (activeGroup)     | Device type  |
+    +===============+=========+==============================+==============+
+    | YELLOW (1)    |    1    | LIGHTS (1)                   | Lights       |
+    | GREY (2)      |    2    | BLINDS (2)                   | Shades       |
+    | BLUE (3)      |    3    | HEATING (3)                  | Heating      |
+    | BLUE (3)      |    3    | COOLING (9)                  | Cooling      |
+    | BLUE (3)      |    3    | VENTILATION (10)             | Ventilation  |
+    | BLUE (3)      |    3    | WINDOW (11)                  | Windows      |
+    | BLUE (3)      |    3    | RECIRCULATION (12)           | Fan-coil     |
+    | BLUE (3)      |    3    | TEMPERATURE_CONTROL (48)     | Temp control |
+    | BLUE (3)      |    3    | APARTMENT_VENTILATION (64)   | Apt. vent.   |
+    | CYAN (4)      |    4    | AUDIO (4)                    | Audio        |
+    | MAGENTA (5)   |    5    | VIDEO (5)                    | Video        |
+    | RED (6)       |    6    | SECURITY (6)  [deprecated]   | Alarms       |
+    | GREEN (7)     |    7    | ACCESS (7)    [deprecated]   | Door/access  |
+    | BLACK (8)     |    8    | JOKER (8)                    | Joker        |
+    | WHITE (9)     |    9    | NONE (0)                     | Appliance    |
+    +---------------+---------+------------------------------+--------------+
+    """
+
+    NONE = 0                       # No specific application (WHITE single devices)
+    LIGHTS = 1                     # Room lights → primary channel: brightness
+    BLINDS = 2                     # Shades, curtains, blinds, awnings → shade position
+    HEATING = 3                    # Heating → primary channel: heatingPower
+    AUDIO = 4                      # Audio / music → primary channel: audioVolume
+    VIDEO = 5                      # Video / TV → primary channel: audioVolume
+    SECURITY = 6                   # Security / alarms [deprecated ColorGroup RED]
+    ACCESS = 7                     # Access control / door bells [deprecated ColorGroup GREEN]
+    JOKER = 8                      # Joker / configurable (BLACK)
+    COOLING = 9                    # Cooling → primary channel: coolingCapacity
+    VENTILATION = 10               # Room ventilation → primary channel: airFlowIntensity
+    WINDOW = 11                    # Window openers
+    RECIRCULATION = 12             # Recirculation / fan-coil units → airFlowIntensity
+    TEMPERATURE_CONTROL = 48       # Single-room temperature control (valid in groups)
+    APARTMENT_VENTILATION = 64     # Apartment-wide ventilation system (NOT valid in groups)
+    AWNINGS = 65                   # Awnings global app group (NOT valid in groups)
+    APARTMENT_RECIRCULATION = 69   # Apartment-wide recirculation (NOT valid in groups)
 
 # ---------------------------------------------------------------------------
 #  Scene numbers  (ds-basics Appendix B)
@@ -678,12 +712,53 @@ class OutputFunction(IntEnum):
 
 @unique
 class OutputMode(IntEnum):
-    """Output operating mode."""
+    """Output capability hint declared in ``outputSettings/mode`` of the vDC API.
+
+    These four values are defined by the **vDC API protocol specification**.
+    They tell the dSS **configurator** (web/app frontend) what kind of UI
+    controls to render for this output.  The dSS firmware runtime itself
+    does **not** consume this field for TCP/IP VDC devices — it is completely
+    ignored during scanning, scene handling, and all other runtime processing.
+
+    Do **not** confuse with :class:`OutputHardwareMode`, which contains the
+    physical hardware dimmer-circuit types from the DS485 bus spec
+    (``KM_Switch=16``, ``RMSDimmer=17``, …).  Those values have no meaning
+    for VDC devices.
+
+    Correct mapping to :class:`OutputFunction`:
+
+    ============================  ===========
+    ``OutputFunction``            ``OutputMode``
+    ============================  ===========
+    ``ON_OFF``                    ``BINARY``
+    ``DIMMER``                    ``GRADUAL``
+    ``POSITIONAL``                ``GRADUAL``
+    ``DIMMER_COLOR_TEMP``         ``GRADUAL``
+    ``FULL_COLOR_DIMMER``         ``GRADUAL``
+    ``BIPOLAR``                   ``GRADUAL``
+    ``INTERNALLY_CONTROLLED``     ``DISABLED``
+    ``CUSTOM``                    ``DISABLED``
+    ============================  ===========
+
+    :class:`~pydsvdcapi.output.Output` auto-derives the correct value from
+    the ``function`` argument when ``mode`` is not passed explicitly.
+    """
 
     DISABLED = 0
+    """Output is disabled — no UI controls are shown for this output."""
+
     BINARY = 1
+    """Binary on/off output — configurator shows a toggle only (no slider)."""
+
     GRADUAL = 2
+    """Continuous-range output — configurator shows the full slider in
+    "Edit Device Values".  Required for all dimmer and position outputs."""
+
     DEFAULT = 127
+    """Unspecified sentinel — the configurator receives no capability hint and
+    typically falls back to showing nothing, so "Edit Device Values" will not
+    open.  Do not use this value; let :class:`~pydsvdcapi.output.Output`
+    auto-derive the correct mode from the output function instead."""
 
 
 # ---------------------------------------------------------------------------
@@ -758,6 +833,78 @@ class SensorUsage(IntEnum):
     DEVICE_LEVEL = 4
     DEVICE_LAST_RUN = 5
     DEVICE_AVERAGE = 6
+
+
+# ---------------------------------------------------------------------------
+#  Sensor type/usage validation  (ds-basics Table 23)
+# ---------------------------------------------------------------------------
+
+_DEVICE: FrozenSet[SensorUsage] = frozenset({
+    SensorUsage.DEVICE_LEVEL, SensorUsage.DEVICE_LAST_RUN, SensorUsage.DEVICE_AVERAGE,
+})
+_ROOM_OUTDOOR_DEVICE: FrozenSet[SensorUsage] = frozenset({
+    SensorUsage.ROOM, SensorUsage.OUTDOOR,
+    SensorUsage.DEVICE_LEVEL, SensorUsage.DEVICE_LAST_RUN, SensorUsage.DEVICE_AVERAGE,
+})
+
+SENSOR_TYPE_VALID_USAGES: Dict[SensorType, FrozenSet[SensorUsage]] = {
+    # Room + outdoor + device-level (ds-basics Table 23: rows for type 1/2/3)
+    SensorType.TEMPERATURE:  _ROOM_OUTDOOR_DEVICE,
+    SensorType.HUMIDITY:     _ROOM_OUTDOOR_DEVICE,
+    SensorType.ILLUMINATION: _ROOM_OUTDOOR_DEVICE,
+    # Room only
+    SensorType.CO_CONCENTRATION:  frozenset({SensorUsage.ROOM}),
+    SensorType.CO2_CONCENTRATION: frozenset({SensorUsage.ROOM}),
+    # Outdoor only
+    SensorType.AIR_PRESSURE:       frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_SPEED:          frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_DIRECTION:      frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_GUST_SPEED:     frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_GUST_DIRECTION: frozenset({SensorUsage.OUTDOOR}),
+    SensorType.PRECIPITATION:       frozenset({SensorUsage.OUTDOOR}),
+    # Device-level only
+    SensorType.ACTIVE_POWER:           _DEVICE,
+    SensorType.ELECTRIC_CURRENT:       _DEVICE,
+    SensorType.ENERGY_METER:           _DEVICE,
+    SensorType.APPARENT_POWER:         _DEVICE,
+    SensorType.SOUND_PRESSURE_LEVEL:   _DEVICE,
+    SensorType.GENERATED_ACTIVE_POWER: _DEVICE,
+    SensorType.GENERATED_ENERGY:       _DEVICE,
+    SensorType.WATER_QUANTITY:         _DEVICE,
+    SensorType.WATER_FLOW_RATE:        _DEVICE,
+    SensorType.LENGTH:                 _DEVICE,
+    SensorType.MASS:                   _DEVICE,
+    SensorType.DURATION:               _DEVICE,
+}
+
+
+def validate_sensor_type_usage(
+    sensor_type: "SensorType",
+    sensor_usage: "SensorUsage",
+) -> None:
+    """Raise ValueError if (sensor_type, sensor_usage) violates ds-basics Table 23.
+
+    Both arguments are mandatory — SensorType.NONE and SensorUsage.UNDEFINED
+    are rejected.  Sensor types not listed in SENSOR_TYPE_VALID_USAGES are
+    accepted with any explicit (non-UNDEFINED) usage.
+    """
+    if sensor_type is SensorType.NONE:
+        raise ValueError(
+            "SensorType.NONE is not a valid sensor type for a deployed sensor."
+        )
+    if sensor_usage is SensorUsage.UNDEFINED:
+        raise ValueError(
+            "SensorUsage.UNDEFINED is not a valid usage; specify ROOM, OUTDOOR, "
+            "DEVICE_LEVEL, DEVICE_LAST_RUN, or DEVICE_AVERAGE."
+        )
+    valid = SENSOR_TYPE_VALID_USAGES.get(sensor_type)
+    if valid is not None and sensor_usage not in valid:
+        valid_names = [u.name for u in sorted(valid, key=int)]
+        raise ValueError(
+            f"SensorUsage.{sensor_usage.name} is not valid for "
+            f"SensorType.{sensor_type.name} (ds-basics Table 23). "
+            f"Valid usages: {valid_names}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -895,6 +1042,36 @@ class ButtonFunction(IntEnum):
 
 
 @unique
+class ButtonFunctionJoker(IntEnum):
+    """Button function lower 4 bits when group=8 (Joker/Black) — ds-basics Table 55."""
+
+    ALARM     = 1   # alarm call
+    PANIC     = 2   # panic call
+    PRESENCE  = 3   # leave / come home (presence toggle)
+    DOOR_BELL = 5   # door bell call
+    APP       = 15  # freely assignable app button
+
+
+def button_function_for_group(
+    group: int, value: int
+) -> Union[ButtonFunction, ButtonFunctionJoker, int]:
+    """Return the correct ButtonFunction enum for *group* and raw *value*.
+
+    Group 8 (Joker/Black) uses Table 55; all other groups use Table 54.
+    Reserved values that don't appear in the table are returned as a plain int.
+    """
+    if group == 8:
+        try:
+            return ButtonFunctionJoker(value)
+        except ValueError:
+            return value
+    try:
+        return ButtonFunction(value)
+    except ValueError:
+        return value
+
+
+@unique
 class ButtonMode(IntEnum):
     """Button input mode (firmware: ButtonInputMode enum, modelconst.h).
 
@@ -935,15 +1112,60 @@ class ButtonMode(IntEnum):
 
 
 @unique
-class ButtonGroup(IntEnum):
-    """Target group for a button input (LTNUM upper 4 bits)."""
+class SensorGroup(IntEnum):
+    """Target group for a sensor input (``sensorSettings/group``).
 
-    LIGHT = 1
-    BLINDS = 2
-    CLIMATE = 3
-    AUDIO = 4
-    VIDEO = 5
-    JOKER = 8
+    Determines which colour group this sensor reading belongs to.
+    Note: Joker/Black uses 0 in this field (not 8).
+    """
+
+    JOKER = 0          # schwarz/Joker — generic / no group
+    LIGHT = 1          # gelb/Licht — lighting
+    SHADOW = 2         # grau/Schatten — shading / blinds
+    CLIMATE = 3        # blau/Klima — heating / climate
+    AUDIO = 4          # cyan/Audio — audio
+    VIDEO = 5          # magenta/Video — video
+    SECURITY = 6       # rot/Sicherheit — security
+    ACCESS = 7         # grün/Zugang — access control
+
+
+@unique
+class BinaryInputGroup(IntEnum):
+    """Target group for a binary input (``binaryInputSettings/group``).
+
+    Determines which colour group this binary input belongs to.
+    Note: Joker/Black uses 8 in this field.
+    """
+
+    LIGHT = 1          # gelb/Licht — lighting
+    SHADOW = 2         # grau/Schatten — shading / blinds
+    CLIMATE = 3        # blau/Klima — heating / climate
+    AUDIO = 4          # cyan/Audio — audio
+    VIDEO = 5          # magenta/Video — video
+    SECURITY = 6       # rot/Sicherheit — security
+    ACCESS = 7         # grün/Zugang — access control
+    JOKER = 8          # schwarz/Joker — generic / configurable
+
+
+@unique
+class ButtonGroup(IntEnum):
+    """Target group for a button input (``buttonInputSettings/group``).
+
+    Determines which colour group this button controls.
+    """
+
+    LIGHT = 1          # gelb/hell — lighting
+    SHADOW = 2         # grau/Schatten — shading / blinds
+    CLIMATE = 3        # blau/Heizung — heating / climate
+    AUDIO = 4          # cyan/Audio — audio
+    VIDEO = 5          # magenta/Video — video
+    SECURITY = 6       # rot/Sicherheit — security
+    ACCESS = 7         # grün/Zugang — access control
+    JOKER = 8          # schwarz/variabel — joker / configurable
+    COOLING = 9        # blau/Kühlung — cooling
+    VENTILATION = 10   # blau/Lüftung — ventilation
+    WINDOW = 11        # blau/Fenster — window openers
+    TEMPERATURE = 48   # Raumtemperaturregelung — room temperature control
 
 
 @unique
@@ -1073,7 +1295,19 @@ class AirFlowDirection(IntEnum):
 
 @unique
 class OutputHardwareMode(IntEnum):
-    """Low-level output hardware mode (for reference / device parameters)."""
+    """Physical hardware dimmer-circuit type for DS485 bus devices (reference only).
+
+    These values describe **how the hardware circuit physically works** —
+    RMS-based dimmer, phase-cut, relay, positioning motor, etc.  They are
+    read by the dSS from the DS485 bus registers of physical hardware devices.
+
+    **Not used for VDC devices.**  The firmware never reads or applies these
+    values from the vDC API.  VDC output capability is declared through
+    :class:`OutputMode` (the simple 0/1/2 vDC API values) instead.
+
+    Provided for reference when reading dSS device diagnostics or comparing
+    against physical hardware specifications.
+    """
 
     DISABLED = 0
     SWITCHED = 16
