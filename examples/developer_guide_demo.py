@@ -59,7 +59,6 @@ import shutil
 import signal
 import sys
 from pathlib import Path
-from typing import Dict, Optional
 
 # ---------------------------------------------------------------------------
 # Make the package importable when running from the repository root.
@@ -75,46 +74,8 @@ if str(_project_root) not in sys.path:
 # integration needs.  Only the few items not in __init__ (ActionParameter,
 # DsUidNamespace, genericVDC_pb2) are imported directly.
 
-from pydsvdcapi import (                     # noqa: E402
-    # -- Enums --
-    BinaryInputType,
-    BinaryInputUsage,
-    ButtonFunction,
-    ButtonMode,
-    ButtonType,
-    ColorClass,
-    ColorGroup,
-    OutputChannelType,
-    OutputFunction,
-    OutputMode,
-    SensorType,
-    SensorUsage,
-    # -- Components --
-    BinaryInput,
-    ButtonInput,
-    create_button_group,
-    CustomAction,
-    Device,
-    DeviceActionDescription,
-    DeviceEvent,
-    DeviceProperty,
-    Output,
-    OutputChannel,
-    SensorInput,
-    Vdc,
-    VdcCapabilities,
-    VdcHost,
-    Vdsd,
-    # -- Property type constants --
-    PROPERTY_TYPE_NUMERIC,
-    PROPERTY_TYPE_STRING,
-)
-from pydsvdcapi.actions import ActionParameter  # noqa: E402
-from pydsvdcapi.dsuid import DsUid, DsUidNamespace  # noqa: E402
-from pydsvdcapi import genericVDC_pb2 as pb   # noqa: E402
-
 # Mock device simulators (separate file for clarity).
-from mock_devices import (                    # noqa: E402
+from mock_devices import (  # noqa: E402
     MockDevice1,
     MockDevice2,
     MockDevice3,
@@ -122,6 +83,40 @@ from mock_devices import (                    # noqa: E402
     MockDevice5,
 )
 
+from pydsvdcapi import (  # noqa: E402
+    # -- Property type constants --
+    PROPERTY_TYPE_NUMERIC,
+    BinaryInput,
+    # -- Enums --
+    BinaryInputType,
+    BinaryInputUsage,
+    ButtonFunction,
+    ButtonInput,
+    ButtonMode,
+    ButtonType,
+    ColorClass,
+    ColorGroup,
+    CustomAction,
+    Device,
+    DeviceActionDescription,
+    DeviceEvent,
+    DeviceProperty,
+    Output,
+    OutputChannelType,
+    OutputFunction,
+    OutputMode,
+    SensorInput,
+    SensorType,
+    SensorUsage,
+    Vdc,
+    VdcCapabilities,
+    VdcHost,
+    Vdsd,
+    create_button_group,
+)
+from pydsvdcapi import genericVDC_pb2 as pb  # noqa: E402
+from pydsvdcapi.actions import ActionParameter  # noqa: E402
+from pydsvdcapi.dsuid import DsUid, DsUidNamespace  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -176,7 +171,7 @@ class ColourFormatter(logging.Formatter):
 
 
 # Logging is **off** by default — menu option [6] toggles it.
-_log_handler: Optional[logging.Handler] = None
+_log_handler: logging.Handler | None = None
 _logging_enabled = False
 
 
@@ -247,7 +242,8 @@ async def _read_line(prompt: str) -> str:
 
 
 async def wait_for_session(
-    host: VdcHost, timeout: float = CONNECT_TIMEOUT,
+    host: VdcHost,
+    timeout: float = CONNECT_TIMEOUT,
 ) -> None:
     """Block until the vdSM completes the Hello handshake."""
     info(f"Waiting up to {int(timeout)}s for vdSM on port {host.port}…")
@@ -255,15 +251,11 @@ async def wait_for_session(
     while asyncio.get_event_loop().time() < deadline:
         s = host.session
         if s is not None and s.is_active:
-            info(
-                f"Session established — vdSM {s.vdsm_dsuid}  "
-                f"(API v{s.api_version})"
-            )
+            info(f"Session established — vdSM {s.vdsm_dsuid}  (API v{s.api_version})")
             return
         await asyncio.sleep(0.25)
     raise TimeoutError(
-        f"No vdSM connected within {timeout}s.  "
-        "Is a dSS reachable on the network?"
+        f"No vdSM connected within {timeout}s.  Is a dSS reachable on the network?"
     )
 
 
@@ -275,9 +267,11 @@ async def wait_for_session(
 # For this demo we simply acknowledge anything the vdSM sends that
 # expects a response.
 
+
 async def on_message(
-    session, msg: pb.Message,
-) -> Optional[pb.Message]:
+    session,
+    msg: pb.Message,
+) -> pb.Message | None:
     if msg.message_id > 0:
         resp = pb.Message()
         resp.type = pb.GENERIC_RESPONSE
@@ -306,18 +300,21 @@ def _make_on_channel_applied(label: str):
     pushes new output values (e.g. from a scene call).  A real driver
     would forward these to hardware; here we just print them.
     """
+
     async def on_channel_applied(output: Output, updates: dict) -> None:
         parts = []
         for ch_type, val in updates.items():
             name = ch_type.name if hasattr(ch_type, "name") else str(ch_type)
             parts.append(f"{name}={val:.1f}")
         info(f"{MAGENTA}[{label}] channel applied{RESET}  {', '.join(parts)}")
+
     return on_channel_applied
 
 
 # ---------------------------------------------------------------------------
 # Device 1 — Yellow: single pushbutton + on/off brightness
 # ---------------------------------------------------------------------------
+
 
 def build_device_1(vdc: Vdc) -> Device:
     """Simple on/off light with one pushbutton.
@@ -397,6 +394,7 @@ def build_device_1(vdc: Vdc) -> Device:
 # Device 2 — Yellow: 2-way rocker + dimmer (brightness + colour temperature)
 # ---------------------------------------------------------------------------
 
+
 def build_device_2(vdc: Vdc) -> Device:
     """CT-dimmable light with a two-way rocker button.
 
@@ -463,6 +461,7 @@ def build_device_2(vdc: Vdc) -> Device:
 # ---------------------------------------------------------------------------
 # Device 3 — Grey: garage-door contact + blinds output
 # ---------------------------------------------------------------------------
+
 
 def build_device_3(vdc: Vdc) -> Device:
     """Garage-door contact + motorised blinds (shade position + blade angle).
@@ -541,6 +540,7 @@ def build_device_3(vdc: Vdc) -> Device:
 # ---------------------------------------------------------------------------
 # Device 4 — Yellow: illumination + active-power sensors + RGBW output
 # ---------------------------------------------------------------------------
+
 
 def build_device_4(vdc: Vdc) -> Device:
     """Dual-sensor + full-colour RGBW output.
@@ -628,6 +628,7 @@ def build_device_4(vdc: Vdc) -> Device:
 # ---------------------------------------------------------------------------
 # Device 5 — White: custom property + event + custom action (SingleDevice)
 # ---------------------------------------------------------------------------
+
 
 def build_device_5(vdc: Vdc) -> Device:
     """Custom integration device (SingleDevice / white).
@@ -772,7 +773,8 @@ def build_device_5(vdc: Vdc) -> Device:
 # DEVICE REGISTRY & LIFECYCLE HELPERS
 # ═══════════════════════════════════════════════════════════════════════════
 
-def build_all_devices(vdc: Vdc) -> Dict[str, Device]:
+
+def build_all_devices(vdc: Vdc) -> dict[str, Device]:
     """Build all five devices and return them keyed by label."""
     return {
         "1": build_device_1(vdc),
@@ -785,7 +787,7 @@ def build_all_devices(vdc: Vdc) -> Dict[str, Device]:
 
 async def announce_devices(
     host: VdcHost,
-    devices: Dict[str, Device],
+    devices: dict[str, Device],
 ) -> None:
     """Announce all devices concurrently.
 
@@ -804,14 +806,12 @@ async def announce_devices(
             f"({count}/{total} vdSDs, dSUID={device.dsuid})"
         )
 
-    await asyncio.gather(
-        *[_announce_one(lbl, dev) for lbl, dev in devices.items()]
-    )
+    await asyncio.gather(*[_announce_one(lbl, dev) for lbl, dev in devices.items()])
 
 
 async def vanish_devices(
     host: VdcHost,
-    devices: Dict[str, Device],
+    devices: dict[str, Device],
 ) -> None:
     """Vanish all devices."""
     session = host.session
@@ -820,7 +820,7 @@ async def vanish_devices(
         info(f"{YELLOW}[{label}]{RESET} vanished")
 
 
-def build_mocks(devices: Dict[str, Device]) -> Dict[str, object]:
+def build_mocks(devices: dict[str, Device]) -> dict[str, object]:
     """Wrap each device in its mock simulator."""
     return {
         "1": MockDevice1(devices["1"]),
@@ -831,12 +831,12 @@ def build_mocks(devices: Dict[str, Device]) -> Dict[str, object]:
     }
 
 
-async def start_mocks(mocks: Dict[str, object]) -> None:
+async def start_mocks(mocks: dict[str, object]) -> None:
     for m in mocks.values():
         m.start()
 
 
-async def stop_mocks(mocks: Dict[str, object]) -> None:
+async def stop_mocks(mocks: dict[str, object]) -> None:
     for m in mocks.values():
         await m.stop()
 
@@ -848,11 +848,12 @@ async def stop_mocks(mocks: Dict[str, object]) -> None:
 
 # --- [1] Shutdown & restore -------------------------------------------
 
+
 async def action_shutdown_restore(
     host: VdcHost,
     vdc: Vdc,
-    devices: Dict[str, Device],
-    mocks: Dict[str, object],
+    devices: dict[str, Device],
+    mocks: dict[str, object],
     port: int,
 ) -> tuple:
     """Simulate a VDC breakdown: stop, rebuild from YAML, re-announce.
@@ -923,9 +924,7 @@ async def action_shutdown_restore(
 
     # Wait for auto-announce to complete.
     for _ in range(40):
-        if new_vdc.is_announced and all(
-            d.is_announced for d in new_devices.values()
-        ):
+        if new_vdc.is_announced and all(d.is_announced for d in new_devices.values()):
             break
         await asyncio.sleep(0.5)
 
@@ -944,8 +943,9 @@ async def action_shutdown_restore(
 
 # --- [2] Create converter --------------------------------------------
 
+
 async def action_create_converter(
-    devices: Dict[str, Device],
+    devices: dict[str, Device],
 ) -> None:
     """Attach a W→kW uplink converter to device 4's active-power sensor.
 
@@ -963,7 +963,7 @@ async def action_create_converter(
     converter_code = "value = value / 1000"
     info(f"Converter snippet:  {converter_code!r}")
     info(f"Sensor:             {si_power.name} (ds_index={si_power.ds_index})")
-    info(f"Effect:             raw W → kW (divide by 1000)")
+    info("Effect:             raw W → kW (divide by 1000)")
 
     answer = await _read_line(
         f"\n{BOLD}Apply this converter? [y/N]: {RESET}",
@@ -977,11 +977,12 @@ async def action_create_converter(
 
 # --- [3] Template workflow --------------------------------------------
 
+
 async def action_template_workflow(
     host: VdcHost,
     vdc: Vdc,
-    devices: Dict[str, Device],
-) -> Optional[Device]:
+    devices: dict[str, Device],
+) -> Device | None:
     """Save device 1 as a template, then instantiate a new device from it.
 
     Demonstrates the full template lifecycle:
@@ -1037,7 +1038,8 @@ async def action_template_workflow(
     # ---- Configure and instantiate ──────────────────────────────────
     section("Instantiating from template…")
     dsuid_new = DsUid.from_name_in_space(
-        f"devguide-template-{name}", DsUidNamespace.VDC,
+        f"devguide-template-{name}",
+        DsUidNamespace.VDC,
     )
     tmpl.configure({"vdsds[0].name": name})
 
@@ -1065,8 +1067,9 @@ async def action_template_workflow(
 
 # --- [4] Fire event (device 5) ---------------------------------------
 
+
 async def action_fire_event(
-    mocks: Dict[str, object],
+    mocks: dict[str, object],
 ) -> None:
     """Trigger device 5's custom event and push it to the dSS.
 
@@ -1081,11 +1084,12 @@ async def action_fire_event(
 
 # --- [5] End simulation & cleanup ------------------------------------
 
+
 async def action_end(
     host: VdcHost,
-    devices: Dict[str, Device],
-    mocks: Dict[str, object],
-    template_device: Optional[Device],
+    devices: dict[str, Device],
+    mocks: dict[str, object],
+    template_device: Device | None,
 ) -> None:
     """Vanish all devices, stop host, remove all temporary files."""
     banner("Menu [5] — End simulation & cleanup")
@@ -1117,6 +1121,7 @@ async def action_end(
 
 # --- [6] Toggle logging ----------------------------------------------
 
+
 def action_toggle_logging() -> None:
     enabled = toggle_logging()
     if enabled:
@@ -1130,6 +1135,7 @@ def action_toggle_logging() -> None:
 # INTERACTIVE MENU
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 async def show_menu() -> str:
     loop = asyncio.get_running_loop()
 
@@ -1138,12 +1144,24 @@ async def show_menu() -> str:
         print(f"{BOLD}{CYAN}╔════════════════════════════════════════════════╗{RESET}")
         print(f"{BOLD}{CYAN}║       Developer Guide Demo — Main Menu        ║{RESET}")
         print(f"{BOLD}{CYAN}╠════════════════════════════════════════════════╣{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[1]{RESET} Simulate shutdown & restore               {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[2]{RESET} Create converter (W→kW on device 4)       {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[3]{RESET} Save as template & create new device      {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[4]{RESET} Fire event (device 5)                     {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[5]{RESET} End simulation & cleanup                  {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[6]{RESET} Toggle logging                            {CYAN}║{RESET}")
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[1]{RESET} Simulate shutdown & restore               {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[2]{RESET} Create converter (W→kW on device 4)       {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[3]{RESET} Save as template & create new device      {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[4]{RESET} Fire event (device 5)                     {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[5]{RESET} End simulation & cleanup                  {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[6]{RESET} Toggle logging                            {CYAN}║{RESET}"
+        )
         print(f"{BOLD}{CYAN}╚════════════════════════════════════════════════╝{RESET}")
         print(f"{BOLD}Choice:{RESET} ", end="", flush=True)
         try:
@@ -1163,6 +1181,7 @@ async def show_menu() -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 async def main() -> None:
     _setup_logging_handler()
@@ -1189,6 +1208,7 @@ async def main() -> None:
     if _args.port is not None:
         port = _args.port
     else:
+
         def _ask_port() -> int:
             while True:
                 try:
@@ -1297,9 +1317,7 @@ async def main() -> None:
     # Wait for auto-announce to complete (vDC + all devices).
     section("Waiting for auto-announce to complete…")
     for _ in range(40):
-        if vdc.is_announced and all(
-            d.is_announced for d in devices.values()
-        ):
+        if vdc.is_announced and all(d.is_announced for d in devices.values()):
             break
         await asyncio.sleep(0.5)
 
@@ -1308,7 +1326,7 @@ async def main() -> None:
         await host.stop()
         return
 
-    unannounced = [l for l, d in devices.items() if not d.is_announced]
+    unannounced = [loc for loc, d in devices.items() if not d.is_announced]
     if unannounced:
         warn(f"Devices {unannounced} not announced — aborting.")
         await host.stop()
@@ -1326,7 +1344,7 @@ async def main() -> None:
     info("All mock simulators running.")
 
     # Track devices created via the template workflow.
-    template_device: Optional[Device] = None
+    template_device: Device | None = None
 
     # When stdin is not a real terminal (e.g. background process / no tty),
     # skip the interactive menu and run headlessly until SIGINT / SIGTERM.
@@ -1361,7 +1379,11 @@ async def main() -> None:
 
         if choice == "1":
             host, vdc, devices, mocks = await action_shutdown_restore(
-                host, vdc, devices, mocks, port,
+                host,
+                vdc,
+                devices,
+                mocks,
+                port,
             )
             template_device = None  # lost after rebuild
 
@@ -1370,7 +1392,9 @@ async def main() -> None:
 
         elif choice == "3":
             template_device = await action_template_workflow(
-                host, vdc, devices,
+                host,
+                vdc,
+                devices,
             )
 
         elif choice == "4":

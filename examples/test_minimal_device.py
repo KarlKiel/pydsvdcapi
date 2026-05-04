@@ -5,6 +5,7 @@ Usage::
 
     python examples/test_minimal_device.py [--port PORT]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,7 +20,6 @@ from pydsvdcapi import (
     DsUid,
     DsUidNamespace,
     Output,
-    OutputChannelType,
     OutputFunction,
     OutputMode,
     Vdc,
@@ -34,18 +34,18 @@ STATE_FILE = Path("/tmp/pydsvdcapi_minimal_test.yaml")
 
 RESET = "\033[0m"
 GREEN = "\033[92m"
-CYAN  = "\033[96m"
+CYAN = "\033[96m"
 YELLOW = "\033[93m"
-BOLD  = "\033[1m"
+BOLD = "\033[1m"
 ANSI_GREY = "\033[90m"
 RED = "\033[91m"
 
 
 class ColourFormatter(logging.Formatter):
     LEVEL_COLOURS = {
-        logging.DEBUG:    ANSI_GREY,
-        logging.WARNING:  YELLOW,
-        logging.ERROR:    RED,
+        logging.DEBUG: ANSI_GREY,
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
         logging.CRITICAL: RED + BOLD,
     }
 
@@ -154,6 +154,7 @@ async def main() -> None:
     async def on_applied(out: Output, updates: dict) -> None:
         for ch_type, val in updates.items():
             info(f"{YELLOW}SET{RESET}  MinimalDevice  {ch_type.name}={val:.2f}")
+
     output.on_channel_applied = on_applied
 
     # Add outvalue8 explicitly before announcing.

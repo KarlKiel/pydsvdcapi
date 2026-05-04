@@ -75,18 +75,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.conversion import apply_converter, compile_converter
-from pydsvdcapi.enums import InputError, SensorType, SensorUsage, validate_sensor_type_usage
+from pydsvdcapi.enums import (
+    InputError,
+    SensorType,
+    SensorUsage,
+    validate_sensor_type_usage,
+)
 from pydsvdcapi.property_handling import dict_to_elements
 
 if TYPE_CHECKING:
@@ -218,30 +220,30 @@ class SensorInput:
         self._changes_only_interval: float = changes_only_interval
 
         # ---- state properties (volatile, NOT persisted) --------------
-        self._value: Optional[float] = None
-        self._age: Optional[float] = None
-        self._context_id: Optional[int] = None
-        self._context_msg: Optional[str] = None
+        self._value: float | None = None
+        self._age: float | None = None
+        self._context_id: int | None = None
+        self._context_msg: str | None = None
         self._error: InputError = InputError.OK
         #: Monotonic timestamp of the last value update (for age calc).
-        self._last_update: Optional[float] = None
+        self._last_update: float | None = None
 
         # Set when the first real (non-None) value has been received.
         self._initial_value_ready: asyncio.Event = asyncio.Event()
 
         # ---- push throttling / alive timer state ---------------------
-        self._session: Optional[VdcSession] = None
-        self._last_push_time: Optional[float] = None
-        self._last_pushed_state: Optional[tuple] = None
-        self._alive_timer_handle: Optional[asyncio.TimerHandle] = None
-        self._deferred_push_handle: Optional[asyncio.TimerHandle] = None
+        self._session: VdcSession | None = None
+        self._last_push_time: float | None = None
+        self._last_pushed_state: tuple | None = None
+        self._alive_timer_handle: asyncio.TimerHandle | None = None
+        self._deferred_push_handle: asyncio.TimerHandle | None = None
 
         # ---- value converter (optional, persisted) -------------------
-        self._uplink_converter_code: Optional[str] = None
-        self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
+        self._uplink_converter_code: str | None = None
+        self._uplink_converter_fn: Callable[[Any], Any] | None = None
 
     @classmethod
-    def _restore(cls, *, vdsd: "Vdsd", ds_index: int) -> "SensorInput":
+    def _restore(cls, *, vdsd: Vdsd, ds_index: int) -> SensorInput:
         """Create a bare instance for persistence restoration.
 
         Intended for **internal use only** by the persistence layer.
@@ -269,7 +271,7 @@ class SensorInput:
 
     # ---- converter management ---------------------------------------
 
-    def set_uplink_converter(self, code: Optional[str]) -> None:
+    def set_uplink_converter(self, code: str | None) -> None:
         """Set or clear the uplink value converter.
 
         The converter snippet is a block of Python code that
@@ -312,7 +314,7 @@ class SensorInput:
             self._uplink_converter_code = code
 
     @property
-    def uplink_converter_code(self) -> Optional[str]:
+    def uplink_converter_code(self) -> str | None:
         """The stored uplink converter snippet, or ``None``."""
         return self._uplink_converter_code
 
@@ -419,24 +421,24 @@ class SensorInput:
     # ---- state accessors (volatile) ----------------------------------
 
     @property
-    def value(self) -> Optional[float]:
+    def value(self) -> float | None:
         """Current sensor value (``None`` = unknown)."""
         return self._value
 
     @property
-    def age(self) -> Optional[float]:
+    def age(self) -> float | None:
         """Seconds since the last value update (``None`` = unknown)."""
         if self._last_update is None:
             return None
         return time.monotonic() - self._last_update
 
     @property
-    def context_id(self) -> Optional[int]:
+    def context_id(self) -> int | None:
         """Numerical context ID (``None`` = unavailable)."""
         return self._context_id
 
     @property
-    def context_msg(self) -> Optional[str]:
+    def context_msg(self) -> str | None:
         """Text context message (``None`` = unavailable)."""
         return self._context_msg
 
@@ -446,18 +448,18 @@ class SensorInput:
         return self._error
 
     @error.setter
-    def error(self, value: Union[InputError, int]) -> None:
+    def error(self, value: InputError | int) -> None:
         self._error = InputError(int(value))
 
     # ---- state update (called by the physical device) ----------------
 
     async def update_value(
         self,
-        value: Optional[float],
-        session: Optional[VdcSession] = None,
+        value: float | None,
+        session: VdcSession | None = None,
         *,
-        context_id: Optional[int] = None,
-        context_msg: Optional[str] = None,
+        context_id: int | None = None,
+        context_msg: str | None = None,
     ) -> None:
         """Set the sensor value and push a state notification.
 
@@ -491,14 +493,16 @@ class SensorInput:
             self._context_msg = context_msg
         logger.debug(
             "SensorInput[%d] '%s' value → %s",
-            self._ds_index, self._name, value,
+            self._ds_index,
+            self._name,
+            value,
         )
         await self._push_state(session or self._session)
 
     async def update_error(
         self,
-        error: Union[InputError, int],
-        session: Optional[VdcSession] = None,
+        error: InputError | int,
+        session: VdcSession | None = None,
     ) -> None:
         """Set the error status and push a state notification.
 
@@ -512,13 +516,15 @@ class SensorInput:
         self._error = InputError(int(error))
         logger.debug(
             "SensorInput[%d] '%s' error → %s",
-            self._ds_index, self._name, self._error.name,
+            self._ds_index,
+            self._name,
+            self._error.name,
         )
         await self._push_state(session or self._session)
 
     # ---- property dicts (for getProperty responses) ------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return the ``sensorDescriptions[N]`` property dict.
 
         These are read-only hardware characteristics.
@@ -535,7 +541,7 @@ class SensorInput:
             "aliveSignInterval": self._alive_sign_interval,
         }
 
-    def get_settings_properties(self) -> Dict[str, Any]:
+    def get_settings_properties(self) -> dict[str, Any]:
         """Return the ``sensorSettings[N]`` property dict.
 
         These are read/write, persisted.
@@ -546,12 +552,12 @@ class SensorInput:
             "changesOnlyInterval": self._changes_only_interval,
         }
 
-    def get_state_properties(self) -> Dict[str, Any]:
+    def get_state_properties(self) -> dict[str, Any]:
         """Return the ``sensorStates[N]`` property dict.
 
         These are read-only volatile state.
         """
-        state: Dict[str, Any] = {}
+        state: dict[str, Any] = {}
         state["value"] = self._value  # may be None (NULL)
         state["age"] = self.age  # may be None (NULL)
 
@@ -565,7 +571,7 @@ class SensorInput:
 
     # ---- settings mutation (called from vdc_host setProperty) --------
 
-    def apply_settings(self, incoming: Dict[str, Any]) -> None:
+    def apply_settings(self, incoming: dict[str, Any]) -> None:
         """Apply writable settings from a ``setProperty`` request.
 
         Parameters
@@ -579,20 +585,17 @@ class SensorInput:
             self._group = int(incoming["group"])
             changed = True
         if "minPushInterval" in incoming:
-            self._min_push_interval = float(
-                incoming["minPushInterval"]
-            )
+            self._min_push_interval = float(incoming["minPushInterval"])
             changed = True
         if "changesOnlyInterval" in incoming:
-            self._changes_only_interval = float(
-                incoming["changesOnlyInterval"]
-            )
+            self._changes_only_interval = float(incoming["changesOnlyInterval"])
             changed = True
         if changed:
             logger.debug(
                 "SensorInput[%d] settings updated: group=%d, "
                 "minPushInterval=%.1f, changesOnlyInterval=%.1f",
-                self._ds_index, self._group,
+                self._ds_index,
+                self._group,
                 self._min_push_interval,
                 self._changes_only_interval,
             )
@@ -600,13 +603,13 @@ class SensorInput:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the persisted representation of this sensor input.
 
         Only description and settings properties are included (state
         is volatile and not persisted).
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
             "sensorType": int(self._sensor_type),
@@ -625,7 +628,7 @@ class SensorInput:
             node["uplinkConverter"] = self._uplink_converter_code
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted property tree dict.
 
         Restores both description and settings properties.  State
@@ -648,20 +651,14 @@ class SensorInput:
         if "updateInterval" in state:
             self._update_interval = float(state["updateInterval"])
         if "aliveSignInterval" in state:
-            self._alive_sign_interval = float(
-                state["aliveSignInterval"]
-            )
+            self._alive_sign_interval = float(state["aliveSignInterval"])
         # Settings
         if "group" in state:
             self._group = int(state["group"])
         if "minPushInterval" in state:
-            self._min_push_interval = float(
-                state["minPushInterval"]
-            )
+            self._min_push_interval = float(state["minPushInterval"])
         if "changesOnlyInterval" in state:
-            self._changes_only_interval = float(
-                state["changesOnlyInterval"]
-            )
+            self._changes_only_interval = float(state["changesOnlyInterval"])
         # Converter
         if "uplinkConverter" in state:
             self.set_uplink_converter(state["uplinkConverter"])
@@ -680,7 +677,7 @@ class SensorInput:
 
     async def _push_state(
         self,
-        session: Optional[VdcSession],
+        session: VdcSession | None,
         *,
         force: bool = False,
     ) -> None:
@@ -725,15 +722,12 @@ class SensorInput:
                 return
 
             # minPushInterval: rate-limit pushes.
-            if (
-                self._min_push_interval > 0
-                and elapsed < self._min_push_interval
-            ):
+            if self._min_push_interval > 0 and elapsed < self._min_push_interval:
                 delay = self._min_push_interval - elapsed
                 logger.debug(
-                    "SensorInput[%d]: within minPushInterval — "
-                    "deferring push by %.2fs",
-                    self._ds_index, delay,
+                    "SensorInput[%d]: within minPushInterval — deferring push by %.2fs",
+                    self._ds_index,
+                    delay,
                 )
                 self._schedule_deferred_push(session, delay)
                 return
@@ -749,7 +743,7 @@ class SensorInput:
         """
         state_dict = self.get_state_properties()
 
-        push_tree: Dict[str, Any] = {
+        push_tree: dict[str, Any] = {
             "sensorStates": {
                 str(self._ds_index): state_dict,
             }
@@ -767,13 +761,17 @@ class SensorInput:
             self._last_pushed_state = self._current_state_key()
             logger.debug(
                 "SensorInput[%d] '%s': pushed state %s for vdSD %s",
-                self._ds_index, self._name, state_dict,
+                self._ds_index,
+                self._name,
+                state_dict,
                 self._vdsd.dsuid,
             )
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "SensorInput[%d] '%s': failed to push state: %s",
-                self._ds_index, self._name, exc,
+                self._ds_index,
+                self._name,
+                exc,
             )
 
         # (Re-)schedule the alive timer after every push attempt.
@@ -781,9 +779,7 @@ class SensorInput:
 
     # ---- deferred push (minPushInterval rate limiting) ---------------
 
-    def _schedule_deferred_push(
-        self, session: VdcSession, delay: float
-    ) -> None:
+    def _schedule_deferred_push(self, session: VdcSession, delay: float) -> None:
         """Schedule a push to fire after *delay* seconds.
 
         Replaces any previously scheduled deferred push.
@@ -805,9 +801,7 @@ class SensorInput:
             self._deferred_push_handle.cancel()
             self._deferred_push_handle = None
 
-    def _on_deferred_push_fired(
-        self, session: VdcSession
-    ) -> None:
+    def _on_deferred_push_fired(self, session: VdcSession) -> None:
         """Callback for :meth:`_schedule_deferred_push`."""
         self._deferred_push_handle = None
         if self._vdsd.is_announced:
@@ -869,13 +863,11 @@ class SensorInput:
         session = self._session
         if session is not None and self._vdsd.is_announced:
             logger.debug(
-                "SensorInput[%d] '%s': alive timer fired — "
-                "re-pushing state",
-                self._ds_index, self._name,
+                "SensorInput[%d] '%s': alive timer fired — re-pushing state",
+                self._ds_index,
+                self._name,
             )
-            asyncio.create_task(
-                self._push_state(session, force=True)
-            )
+            asyncio.create_task(self._push_state(session, force=True))
 
     # ---- auto-save ---------------------------------------------------
 

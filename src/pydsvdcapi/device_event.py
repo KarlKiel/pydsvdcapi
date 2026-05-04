@@ -52,13 +52,10 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Optional,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.vdcapi_pb2 import PropertyElement as _PropertyElement
-from pydsvdcapi.property_handling import dict_to_elements
 
 if TYPE_CHECKING:
     from pydsvdcapi.session import VdcSession
@@ -96,7 +93,7 @@ class DeviceEvent:
         vdsd: Vdsd,
         ds_index: int = 0,
         name: str = "",
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> None:
         self._vdsd = vdsd
         self._ds_index = ds_index
@@ -127,17 +124,17 @@ class DeviceEvent:
         self._name = value
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """Optional human-readable description."""
         return self._description
 
     @description.setter
-    def description(self, value: Optional[str]) -> None:
+    def description(self, value: str | None) -> None:
         self._description = value
 
     # ---- property dicts ----------------------------------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return **deviceEventDescriptions** properties (§4.7.1).
 
         Format::
@@ -147,7 +144,7 @@ class DeviceEvent:
         Keys in the parent dict are numeric string indices
         (``str(ds_index)``).  The ``name`` field identifies the event.
         """
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             "name": self._name,
         }
         if self._description is not None:
@@ -156,9 +153,9 @@ class DeviceEvent:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence."""
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
         }
@@ -166,7 +163,7 @@ class DeviceEvent:
             node["description"] = self._description
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted state dict."""
         if "name" in state:
             self._name = state["name"]
@@ -175,9 +172,7 @@ class DeviceEvent:
 
     # ---- raising events ----------------------------------------------
 
-    async def raise_event(
-        self, session: Optional[VdcSession] = None
-    ) -> None:
+    async def raise_event(self, session: VdcSession | None = None) -> None:
         """Raise this event — sends a push notification to the vdSM.
 
         Parameters
@@ -192,9 +187,10 @@ class DeviceEvent:
         session = session or self._vdsd._session
         if session is None or not session.is_active:
             logger.warning(
-                "DeviceEvent[%d] '%s': cannot raise — no active "
-                "session for vdSD %s",
-                self._ds_index, self._name, self._vdsd.dsuid,
+                "DeviceEvent[%d] '%s': cannot raise — no active session for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
             )
             return
 
@@ -211,18 +207,19 @@ class DeviceEvent:
             await session.send_notification(msg)
             logger.debug(
                 "DeviceEvent[%d] '%s': raised for vdSD %s",
-                self._ds_index, self._name, self._vdsd.dsuid,
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
             )
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "DeviceEvent[%d] '%s': failed to raise: %s",
-                self._ds_index, self._name, exc,
+                self._ds_index,
+                self._name,
+                exc,
             )
 
     # ---- repr --------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"DeviceEvent(ds_index={self._ds_index!r}, "
-            f"name={self._name!r})"
-        )
+        return f"DeviceEvent(ds_index={self._ds_index!r}, name={self._name!r})"

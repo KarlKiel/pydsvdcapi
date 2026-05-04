@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
-import pytest
+from typing import Any
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.vdcapi_pb2 import PropertyElement, PropertyValue
 from pydsvdcapi.property_handling import (
     build_get_property_response,
     dict_to_elements,
@@ -15,13 +12,13 @@ from pydsvdcapi.property_handling import (
     expand_setproperty_wildcards,
     match_query,
 )
-
+from pydsvdcapi.vdcapi_pb2 import PropertyElement, PropertyValue
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-SAMPLE_PROPERTIES: Dict[str, Any] = {
+SAMPLE_PROPERTIES: dict[str, Any] = {
     "dSUID": "AABB00112233445566778899AABB001122",
     "name": "Test Entity",
     "model": "Test Model v1",
@@ -47,7 +44,6 @@ def _make_query(*names: str) -> list:
 
 
 class TestDictToElements:
-
     def test_string_value(self):
         elems = dict_to_elements({"name": "hello"})
         assert len(elems) == 1
@@ -89,9 +85,11 @@ class TestDictToElements:
         assert not pv.HasField("v_bool")
 
     def test_nested_dict(self):
-        elems = dict_to_elements({
-            "capabilities": {"metering": True, "identification": False},
-        })
+        elems = dict_to_elements(
+            {
+                "capabilities": {"metering": True, "identification": False},
+            }
+        )
         assert len(elems) == 1
         cap = elems[0]
         assert cap.name == "capabilities"
@@ -114,9 +112,11 @@ class TestDictToElements:
 
     def test_nested_dict_with_integer_keys(self):
         """Options-style nested dict with integer keys must serialize."""
-        elems = dict_to_elements({
-            "options": {0: "Off", 1: "Initializing", 2: "Running", 3: "Error"},
-        })
+        elems = dict_to_elements(
+            {
+                "options": {0: "Off", 1: "Initializing", 2: "Running", 3: "Error"},
+            }
+        )
         assert len(elems) == 1
         opt = elems[0]
         assert opt.name == "options"
@@ -162,7 +162,6 @@ class TestDictToElements:
 
 
 class TestElementsToDict:
-
     def test_simple_values(self):
         elems = [
             PropertyElement(
@@ -204,9 +203,7 @@ class TestElementsToDict:
         setProperty handler can expand them.
         """
         elems = [
-            PropertyElement(
-                name="", value=PropertyValue(v_string="x")
-            ),
+            PropertyElement(name="", value=PropertyValue(v_string="x")),
         ]
         d = elements_to_dict(elems)
         assert d == {"": "x"}
@@ -224,7 +221,6 @@ class TestElementsToDict:
 
 
 class TestMatchQuery:
-
     def test_specific_property(self):
         result = match_query(SAMPLE_PROPERTIES, _make_query("name"))
         assert len(result) == 1
@@ -232,17 +228,13 @@ class TestMatchQuery:
         assert result[0].value.v_string == "Test Entity"
 
     def test_multiple_specific_properties(self):
-        result = match_query(
-            SAMPLE_PROPERTIES, _make_query("name", "zoneID")
-        )
+        result = match_query(SAMPLE_PROPERTIES, _make_query("name", "zoneID"))
         assert len(result) == 2
         names = {e.name for e in result}
         assert names == {"name", "zoneID"}
 
     def test_unknown_property_omitted(self):
-        result = match_query(
-            SAMPLE_PROPERTIES, _make_query("nonexistent")
-        )
+        result = match_query(SAMPLE_PROPERTIES, _make_query("nonexistent"))
         assert len(result) == 0
 
     def test_wildcard_returns_all(self):
@@ -275,18 +267,14 @@ class TestMatchQuery:
         result = match_query(SAMPLE_PROPERTIES, query)
         cap = result[0]
         sub_names = {e.name for e in cap.elements}
-        assert sub_names == {
-            "metering", "identification", "dynamicDefinitions"
-        }
+        assert sub_names == {"metering", "identification", "dynamicDefinitions"}
 
     def test_nested_no_sub_query_expands_all(self):
         query = _make_query("capabilities")
         result = match_query(SAMPLE_PROPERTIES, query)
         cap = result[0]
         sub_names = {e.name for e in cap.elements}
-        assert sub_names == {
-            "metering", "identification", "dynamicDefinitions"
-        }
+        assert sub_names == {"metering", "identification", "dynamicDefinitions"}
 
     def test_null_value(self):
         result = match_query(SAMPLE_PROPERTIES, _make_query("configURL"))
@@ -341,7 +329,6 @@ class TestMatchQuery:
 
 
 class TestBuildGetPropertyResponse:
-
     def test_returns_correct_message_type(self):
         req = pb.Message()
         req.type = pb.VDSM_REQUEST_GET_PROPERTY
@@ -392,6 +379,7 @@ class TestVdcHostPropertyDispatch:
 
     def _make_host(self):
         from pydsvdcapi.vdc_host import VdcHost
+
         host = VdcHost(
             name="Test Host",
             mac="AA:BB:CC:DD:EE:FF",
@@ -418,6 +406,7 @@ class TestVdcHostPropertyDispatch:
 
     def test_get_property_vdc(self):
         from pydsvdcapi.vdc import Vdc
+
         host = self._make_host()
         vdc = Vdc(
             host=host,
@@ -467,6 +456,7 @@ class TestVdcHostPropertyDispatch:
 
     def test_set_property_vdc_zone_id(self):
         from pydsvdcapi.vdc import Vdc
+
         host = self._make_host()
         vdc = Vdc(
             host=host,
@@ -523,6 +513,7 @@ class TestVdcHostPropertyDispatch:
         q.name = "model"
 
         from unittest.mock import MagicMock
+
         mock_session = MagicMock()
 
         resp = await host._dispatch_message(mock_session, req)
@@ -548,6 +539,7 @@ class TestVdcHostPropertyDispatch:
         msg.message_id = 0
 
         from unittest.mock import MagicMock
+
         mock_session = MagicMock()
 
         await host._dispatch_message(mock_session, msg)
@@ -613,9 +605,7 @@ class TestExpandSetpropertyWildcards:
 
         d = elements_to_dict([scenes])
         assert "" in d["scenes"]
-        expanded = expand_setproperty_wildcards(
-            d["scenes"], [0, 5, 14]
-        )
+        expanded = expand_setproperty_wildcards(d["scenes"], [0, 5, 14])
         assert expanded == {
             "0": {"dontCare": True},
             "5": {"dontCare": True},

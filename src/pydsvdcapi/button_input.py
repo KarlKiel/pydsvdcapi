@@ -111,14 +111,10 @@ import asyncio
 import enum
 import logging
 import time
+from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
@@ -150,7 +146,7 @@ logger = logging.getLogger(__name__)
 #:
 #: ``UNDEFINED`` maps to an empty list because the element layout is
 #: determined by the integrating application.
-BUTTON_TYPE_ELEMENTS: Dict[ButtonType, List[ButtonElementID]] = {
+BUTTON_TYPE_ELEMENTS: dict[ButtonType, list[ButtonElementID]] = {
     ButtonType.UNDEFINED: [],
     ButtonType.SINGLE_PUSHBUTTON: [
         ButtonElementID.CENTER,
@@ -305,9 +301,9 @@ class ClickDetector:
         self._state: _ClickState = _ClickState.IDLE
         self._tip_count: int = 0
 
-        self._tip_timer: Optional[asyncio.TimerHandle] = None
-        self._multi_click_timer: Optional[asyncio.TimerHandle] = None
-        self._hold_repeat_timer: Optional[asyncio.TimerHandle] = None
+        self._tip_timer: asyncio.TimerHandle | None = None
+        self._multi_click_timer: asyncio.TimerHandle | None = None
+        self._hold_repeat_timer: asyncio.TimerHandle | None = None
 
     # ---- public API --------------------------------------------------
 
@@ -401,9 +397,7 @@ class ClickDetector:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        self._tip_timer = loop.call_later(
-            self._tip_timeout, self._on_tip_timeout
-        )
+        self._tip_timer = loop.call_later(self._tip_timeout, self._on_tip_timeout)
 
     def _cancel_tip_timer(self) -> None:
         if self._tip_timer is not None:
@@ -460,18 +454,14 @@ class ClickDetector:
                 2: ButtonClickType.TIP_2X,
                 3: ButtonClickType.TIP_3X,
             }
-            ct = click_map.get(
-                self._tip_count, ButtonClickType.TIP_4X
-            )
+            ct = click_map.get(self._tip_count, ButtonClickType.TIP_4X)
         else:
             click_map = {
                 1: ButtonClickType.CLICK_1X,
                 2: ButtonClickType.CLICK_2X,
                 3: ButtonClickType.CLICK_3X,
             }
-            ct = click_map.get(
-                self._tip_count, ButtonClickType.CLICK_3X
-            )
+            ct = click_map.get(self._tip_count, ButtonClickType.CLICK_3X)
 
         self._emit(ct, False)
         self._tip_count = 0
@@ -505,9 +495,7 @@ class ClickDetector:
 
     # ---- event emission ----------------------------------------------
 
-    def _emit(
-        self, click_type: ButtonClickType, value: bool
-    ) -> None:
+    def _emit(self, click_type: ButtonClickType, value: bool) -> None:
         """Invoke the registered callback, scheduling coroutines."""
         try:
             result = self._on_click(click_type, value)
@@ -523,8 +511,7 @@ class ClickDetector:
 
     def __repr__(self) -> str:
         return (
-            f"ClickDetector(state={self._state.value!r}, "
-            f"tip_count={self._tip_count})"
+            f"ClickDetector(state={self._state.value!r}, tip_count={self._tip_count})"
         )
 
 
@@ -585,18 +572,18 @@ class ButtonInput:
         ds_index: int = 0,
         name: str = "",
         supports_local_key_mode: bool = False,
-        button_id: Optional[int] = None,
+        button_id: int | None = None,
         button_type: ButtonType = ButtonType.UNDEFINED,
         button_element_id: ButtonElementID = ButtonElementID.CENTER,
         # Settings (writable, persisted)
         group: int = 0,
-        function: Union[ButtonFunction, ButtonFunctionJoker, int] = ButtonFunction.DEVICE,
-        mode: Union[ButtonMode, int] = ButtonMode.STANDARD,
+        function: ButtonFunction | ButtonFunctionJoker | int = ButtonFunction.DEVICE,
+        mode: ButtonMode | int = ButtonMode.STANDARD,
         channel: int = 0,
         sets_local_priority: bool = False,
         calls_present: bool = False,
         # Click detector configuration
-        click_detector_config: Optional[Dict[str, Any]] = None,
+        click_detector_config: dict[str, Any] | None = None,
     ) -> None:
         # ---- parent reference ----------------------------------------
         self._vdsd: Vdsd = vdsd
@@ -605,31 +592,33 @@ class ButtonInput:
         self._ds_index: int = ds_index
         self._name: str = name
         self._supports_local_key_mode: bool = supports_local_key_mode
-        self._button_id: Optional[int] = button_id
+        self._button_id: int | None = button_id
         self._button_type: ButtonType = button_type
         self._button_element_id: ButtonElementID = button_element_id
 
         # ---- settings properties (read/write, persisted) -------------
         self._group: int = group
-        self._function: Union[ButtonFunction, ButtonFunctionJoker, int] = button_function_for_group(group, int(function))
+        self._function: ButtonFunction | ButtonFunctionJoker | int = (
+            button_function_for_group(group, int(function))
+        )
         self._mode: ButtonMode = ButtonMode(int(mode))
         self._channel: int = channel
         self._sets_local_priority: bool = sets_local_priority
         self._calls_present: bool = calls_present
 
         # ---- state properties (volatile, NOT persisted) --------------
-        self._value: Optional[bool] = None
+        self._value: bool | None = None
         self._click_type: ButtonClickType = ButtonClickType.IDLE
-        self._action_id: Optional[int] = None
-        self._action_mode: Optional[ActionMode] = None
+        self._action_id: int | None = None
+        self._action_mode: ActionMode | None = None
         self._error: InputError = InputError.OK
         #: Monotonic timestamp of the last state event (for age calc).
-        self._last_update: Optional[float] = None
+        self._last_update: float | None = None
         #: Whether the most recent event was an action (vs. click).
         self._last_state_is_action: bool = False
 
         # ---- session reference (set on announcement) -----------------
-        self._session: Optional[VdcSession] = None
+        self._session: VdcSession | None = None
 
         # ---- click detector (state machine) --------------------------
         valid_keys = {
@@ -639,9 +628,7 @@ class ButtonInput:
             "use_tip_events",
         }
         config = {
-            k: v
-            for k, v in (click_detector_config or {}).items()
-            if k in valid_keys
+            k: v for k, v in (click_detector_config or {}).items() if k in valid_keys
         }
         self._click_detector = ClickDetector(
             on_click=self._on_click_detected,
@@ -670,7 +657,7 @@ class ButtonInput:
         return self._supports_local_key_mode
 
     @property
-    def button_id(self) -> Optional[int]:
+    def button_id(self) -> int | None:
         """Physical button ID (shared by all elements of one button).
 
         ``None`` means no fixed assignment.
@@ -711,12 +698,12 @@ class ButtonInput:
         self._schedule_auto_save()
 
     @property
-    def function(self) -> Union[ButtonFunction, ButtonFunctionJoker, int]:
+    def function(self) -> ButtonFunction | ButtonFunctionJoker | int:
         """Button function / LTNUM (writable, persisted)."""
         return self._function
 
     @function.setter
-    def function(self, value: Union[ButtonFunction, ButtonFunctionJoker, int]) -> None:
+    def function(self, value: ButtonFunction | ButtonFunctionJoker | int) -> None:
         self._function = button_function_for_group(self._group, int(value))
         self._schedule_auto_save()
 
@@ -726,7 +713,7 @@ class ButtonInput:
         return self._mode
 
     @mode.setter
-    def mode(self, value: Union[ButtonMode, int]) -> None:
+    def mode(self, value: ButtonMode | int) -> None:
         self._mode = ButtonMode(int(value))
         self._schedule_auto_save()
 
@@ -766,7 +753,7 @@ class ButtonInput:
     # ---- state accessors (volatile) ----------------------------------
 
     @property
-    def value(self) -> Optional[bool]:
+    def value(self) -> bool | None:
         """Current boolean value (``None`` = unknown).
 
         ``True`` = active (pressed), ``False`` = inactive (released).
@@ -782,7 +769,7 @@ class ButtonInput:
         return self._click_type
 
     @property
-    def action_id(self) -> Optional[int]:
+    def action_id(self) -> int | None:
         """Scene ID of the most recent direct action call.
 
         ``None`` when the last event was a click, not an action.
@@ -790,7 +777,7 @@ class ButtonInput:
         return self._action_id
 
     @property
-    def action_mode(self) -> Optional[ActionMode]:
+    def action_mode(self) -> ActionMode | None:
         """Action mode of the most recent direct action call.
 
         ``None`` when the last event was a click, not an action.
@@ -798,7 +785,7 @@ class ButtonInput:
         return self._action_mode
 
     @property
-    def age(self) -> Optional[float]:
+    def age(self) -> float | None:
         """Seconds since the last state event (``None`` = unknown)."""
         if self._last_update is None:
             return None
@@ -810,7 +797,7 @@ class ButtonInput:
         return self._error
 
     @error.setter
-    def error(self, value: Union[InputError, int]) -> None:
+    def error(self, value: InputError | int) -> None:
         self._error = InputError(int(value))
 
     # ---- state machine (press / release) API -------------------------
@@ -842,9 +829,9 @@ class ButtonInput:
 
     async def update_click(
         self,
-        click_type: Union[ButtonClickType, int],
-        value: Optional[bool] = None,
-        session: Optional[VdcSession] = None,
+        click_type: ButtonClickType | int,
+        value: bool | None = None,
+        session: VdcSession | None = None,
     ) -> None:
         """Set the click type directly and push state.
 
@@ -881,8 +868,8 @@ class ButtonInput:
     async def update_action(
         self,
         action_id: int,
-        action_mode: Union[ActionMode, int] = ActionMode.NORMAL,
-        session: Optional[VdcSession] = None,
+        action_mode: ActionMode | int = ActionMode.NORMAL,
+        session: VdcSession | None = None,
     ) -> None:
         """Set a direct scene call and push state.
 
@@ -917,8 +904,8 @@ class ButtonInput:
 
     async def update_error(
         self,
-        error: Union[InputError, int],
-        session: Optional[VdcSession] = None,
+        error: InputError | int,
+        session: VdcSession | None = None,
     ) -> None:
         """Set the error status and push a state notification.
 
@@ -962,12 +949,12 @@ class ButtonInput:
 
     # ---- property dicts (for getProperty responses) ------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return the ``buttonInputDescriptions[N]`` property dict.
 
         These are read-only hardware characteristics.
         """
-        desc: Dict[str, Any] = {
+        desc: dict[str, Any] = {
             "name": self._name,
             "dsIndex": self._ds_index,
             "supportsLocalKeyMode": self._supports_local_key_mode,
@@ -978,7 +965,7 @@ class ButtonInput:
             desc["buttonID"] = self._button_id
         return desc
 
-    def get_settings_properties(self) -> Dict[str, Any]:
+    def get_settings_properties(self) -> dict[str, Any]:
         """Return the ``buttonInputSettings[N]`` property dict.
 
         These are read/write, persisted.
@@ -992,7 +979,7 @@ class ButtonInput:
             "callsPresent": self._calls_present,
         }
 
-    def get_state_properties(self) -> Dict[str, Any]:
+    def get_state_properties(self) -> dict[str, Any]:
         """Return the ``buttonInputStates[N]`` property dict.
 
         The format depends on the most recent event type:
@@ -1001,7 +988,7 @@ class ButtonInput:
         * **Action mode** — ``actionId``, ``actionMode``, ``age``,
           ``error``
         """
-        state: Dict[str, Any] = {}
+        state: dict[str, Any] = {}
 
         if self._last_state_is_action:
             state["actionId"] = self._action_id
@@ -1020,7 +1007,7 @@ class ButtonInput:
 
     # ---- settings mutation (called from vdc_host setProperty) --------
 
-    def apply_settings(self, incoming: Dict[str, Any]) -> None:
+    def apply_settings(self, incoming: dict[str, Any]) -> None:
         """Apply writable settings from a ``setProperty`` request.
 
         Parameters
@@ -1034,7 +1021,9 @@ class ButtonInput:
             self._group = int(incoming["group"])
             changed = True
         if "function" in incoming:
-            self._function = button_function_for_group(self._group, int(incoming["function"]))
+            self._function = button_function_for_group(
+                self._group, int(incoming["function"])
+            )
             changed = True
         if "mode" in incoming:
             self._mode = ButtonMode(int(incoming["mode"]))
@@ -1043,9 +1032,7 @@ class ButtonInput:
             self._channel = int(incoming["channel"])
             changed = True
         if "setsLocalPriority" in incoming:
-            self._sets_local_priority = bool(
-                incoming["setsLocalPriority"]
-            )
+            self._sets_local_priority = bool(incoming["setsLocalPriority"])
             changed = True
         if "callsPresent" in incoming:
             self._calls_present = bool(incoming["callsPresent"])
@@ -1064,13 +1051,13 @@ class ButtonInput:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the persisted representation of this button input.
 
         Only description and settings properties are included (state
         is volatile and not persisted).
         """
-        tree: Dict[str, Any] = {
+        tree: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
             "supportsLocalKeyMode": self._supports_local_key_mode,
@@ -1092,7 +1079,7 @@ class ButtonInput:
         )
         return tree
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted property tree dict.
 
         Restores both description and settings properties.  State
@@ -1104,30 +1091,26 @@ class ButtonInput:
         if "name" in state:
             self._name = state["name"]
         if "supportsLocalKeyMode" in state:
-            self._supports_local_key_mode = bool(
-                state["supportsLocalKeyMode"]
-            )
+            self._supports_local_key_mode = bool(state["supportsLocalKeyMode"])
         if "buttonID" in state:
             self._button_id = int(state["buttonID"])
         if "buttonType" in state:
             self._button_type = ButtonType(int(state["buttonType"]))
         if "buttonElementID" in state:
-            self._button_element_id = ButtonElementID(
-                int(state["buttonElementID"])
-            )
+            self._button_element_id = ButtonElementID(int(state["buttonElementID"]))
         # Settings
         if "group" in state:
             self._group = int(state["group"])
         if "function" in state:
-            self._function = button_function_for_group(self._group, int(state["function"]))
+            self._function = button_function_for_group(
+                self._group, int(state["function"])
+            )
         if "mode" in state:
             self._mode = ButtonMode(int(state["mode"]))
         if "channel" in state:
             self._channel = int(state["channel"])
         if "setsLocalPriority" in state:
-            self._sets_local_priority = bool(
-                state["setsLocalPriority"]
-            )
+            self._sets_local_priority = bool(state["setsLocalPriority"])
         if "callsPresent" in state:
             self._calls_present = bool(state["callsPresent"])
 
@@ -1135,7 +1118,7 @@ class ButtonInput:
 
     async def _push_state(
         self,
-        session: Optional[VdcSession],
+        session: VdcSession | None,
     ) -> None:
         """Push current state to the vdSM.
 
@@ -1154,7 +1137,7 @@ class ButtonInput:
 
         state_dict = self.get_state_properties()
 
-        push_tree: Dict[str, Any] = {
+        push_tree: dict[str, Any] = {
             "buttonInputStates": {
                 str(self._ds_index): state_dict,
             }
@@ -1235,7 +1218,7 @@ class ButtonInput:
 
 def get_required_elements(
     button_type: ButtonType,
-) -> List[ButtonElementID]:
+) -> list[ButtonElementID]:
     """Return the standard :class:`ButtonElementID` values for a button type.
 
     Parameters
@@ -1261,13 +1244,13 @@ def create_button_group(
     name_prefix: str = "Button",
     supports_local_key_mode: bool = False,
     group: int = 0,
-    function: Union[ButtonFunction, int] = ButtonFunction.DEVICE,
-    mode: Union[ButtonMode, int] = ButtonMode.STANDARD,
+    function: ButtonFunction | int = ButtonFunction.DEVICE,
+    mode: ButtonMode | int = ButtonMode.STANDARD,
     channel: int = 0,
     sets_local_priority: bool = False,
     calls_present: bool = False,
-    click_detector_config: Optional[Dict[str, Any]] = None,
-) -> List[ButtonInput]:
+    click_detector_config: dict[str, Any] | None = None,
+) -> list[ButtonInput]:
     """Create all :class:`ButtonInput` instances for a multi-element button.
 
     The button type determines how many elements are created and which
@@ -1318,7 +1301,7 @@ def create_button_group(
             f"layout — create ButtonInput instances manually."
         )
 
-    buttons: List[ButtonInput] = []
+    buttons: list[ButtonInput] = []
     for i, element_id in enumerate(elements):
         element_label = element_id.name.replace("_", " ").title()
         btn = ButtonInput(

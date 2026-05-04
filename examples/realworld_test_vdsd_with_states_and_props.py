@@ -137,6 +137,7 @@ GREY = "\033[90m"
 # Logging setup
 # ---------------------------------------------------------------------------
 
+
 class ColourFormatter(logging.Formatter):
     """Minimal colour formatter for console output."""
 
@@ -168,13 +169,16 @@ def setup_logging() -> None:
 # Callbacks
 # ---------------------------------------------------------------------------
 
+
 async def on_message(msg) -> None:
     """Log unhandled incoming protobuf messages from the vdSM."""
     logger = logging.getLogger("on_message")
     logger.info(
         "%sRX%s  type=%s  msg_id=%s",
-        CYAN, RESET,
-        msg.type, msg.message_id,
+        CYAN,
+        RESET,
+        msg.type,
+        msg.message_id,
     )
 
 
@@ -187,25 +191,36 @@ async def on_channel_applied(output: Output, updates: dict) -> None:
         parts.append(f"{name}={value:.1f}")
     logger.info(
         "%sAPPLY%s  [%s] %s",
-        GREEN, RESET, output.name, ", ".join(parts),
+        GREEN,
+        RESET,
+        output.name,
+        ", ".join(parts),
     )
 
 
 async def on_control_value(
-    vdsd: "Vdsd", name: str, value: float,
-    group: int | None, zone_id: int | None,
+    vdsd: Vdsd,
+    name: str,
+    value: float,
+    group: int | None,
+    zone_id: int | None,
 ) -> None:
     """Called when the dSS pushes a control value."""
     logger = logging.getLogger("control_value")
     logger.info(
         "%sCONTROL%s  [%s] %s = %.2f",
-        CYAN, RESET, vdsd.name, name, value,
+        CYAN,
+        RESET,
+        vdsd.name,
+        name,
+        value,
     )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def wait_for_session(host: VdcHost, timeout: float) -> None:
     """Block until the VdcHost has an active session or timeout."""
@@ -241,15 +256,18 @@ def section(text: str) -> None:
 # Verification helpers
 # ---------------------------------------------------------------------------
 
+
 def verify_state_descriptions(
-    logger, vdsd_name: str, props: dict, expected: list[dict],
+    logger,
+    vdsd_name: str,
+    props: dict,
+    expected: list[dict],
 ) -> None:
     """Verify deviceStateDescriptions in get_properties() output."""
     desc = props.get("deviceStateDescriptions")
     assert desc is not None, f"{vdsd_name}: missing deviceStateDescriptions"
     assert len(desc) == len(expected), (
-        f"{vdsd_name}: expected {len(expected)} state descriptions, "
-        f"got {len(desc)}"
+        f"{vdsd_name}: expected {len(expected)} state descriptions, got {len(desc)}"
     )
     for exp in expected:
         key = exp["name"]
@@ -266,21 +284,24 @@ def verify_state_descriptions(
             assert desc[key]["description"] == exp["description"]
     logger.info(
         "  %sPASS%s — %s: %d deviceStateDescriptions correct.",
-        GREEN, RESET, vdsd_name, len(expected),
+        GREEN,
+        RESET,
+        vdsd_name,
+        len(expected),
     )
 
 
 def verify_property_descriptions(
-    logger, vdsd_name: str, props: dict, expected: list[dict],
+    logger,
+    vdsd_name: str,
+    props: dict,
+    expected: list[dict],
 ) -> None:
     """Verify devicePropertyDescriptions in get_properties() output."""
     desc = props.get("devicePropertyDescriptions")
-    assert desc is not None, (
-        f"{vdsd_name}: missing devicePropertyDescriptions"
-    )
+    assert desc is not None, f"{vdsd_name}: missing devicePropertyDescriptions"
     assert len(desc) == len(expected), (
-        f"{vdsd_name}: expected {len(expected)} property descriptions, "
-        f"got {len(desc)}"
+        f"{vdsd_name}: expected {len(expected)} property descriptions, got {len(desc)}"
     )
     for exp in expected:
         pkey = exp["name"]
@@ -297,21 +318,24 @@ def verify_property_descriptions(
                 )
     logger.info(
         "  %sPASS%s — %s: %d devicePropertyDescriptions correct.",
-        GREEN, RESET, vdsd_name, len(expected),
+        GREEN,
+        RESET,
+        vdsd_name,
+        len(expected),
     )
 
 
 def verify_event_descriptions(
-    logger, vdsd_name: str, props: dict, expected: list[dict],
+    logger,
+    vdsd_name: str,
+    props: dict,
+    expected: list[dict],
 ) -> None:
     """Verify deviceEventDescriptions in get_properties() output."""
     desc = props.get("deviceEventDescriptions")
-    assert desc is not None, (
-        f"{vdsd_name}: missing deviceEventDescriptions"
-    )
+    assert desc is not None, f"{vdsd_name}: missing deviceEventDescriptions"
     assert len(desc) == len(expected), (
-        f"{vdsd_name}: expected {len(expected)} event descriptions, "
-        f"got {len(desc)}"
+        f"{vdsd_name}: expected {len(expected)} event descriptions, got {len(desc)}"
     )
     for exp in expected:
         ekey = exp["name"]
@@ -323,13 +347,17 @@ def verify_event_descriptions(
             assert desc[ekey]["description"] == exp["description"]
     logger.info(
         "  %sPASS%s — %s: %d deviceEventDescriptions correct.",
-        GREEN, RESET, vdsd_name, len(expected),
+        GREEN,
+        RESET,
+        vdsd_name,
+        len(expected),
     )
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main() -> None:
     setup_logging()
@@ -405,13 +433,15 @@ async def main() -> None:
 
     # --- Device States (§4.6.1 / §4.6.2) ---
     sensor_state_operating = DeviceState(
-        vdsd=vdsd_sensor, ds_index=0,
+        vdsd=vdsd_sensor,
+        ds_index=0,
         name="operatingState",
         options={0: "Off", 1: "Initializing", 2: "Running", 3: "Error"},
         description="Current operating state of the sensor node",
     )
     sensor_state_connectivity = DeviceState(
-        vdsd=vdsd_sensor, ds_index=1,
+        vdsd=vdsd_sensor,
+        ds_index=1,
         name="connectivity",
         options={0: "Offline", 1: "Online", 2: "Degraded"},
         description="Network connectivity status",
@@ -421,27 +451,34 @@ async def main() -> None:
 
     # --- Device Properties (§4.6.3 / §4.6.4) ---
     sensor_prop_battery = DeviceProperty(
-        vdsd=vdsd_sensor, ds_index=0,
+        vdsd=vdsd_sensor,
+        ds_index=0,
         name="batteryLevel",
         type=PROPERTY_TYPE_NUMERIC,
-        min_value=0.0, max_value=100.0,
-        resolution=1.0, siunit="%",
+        min_value=0.0,
+        max_value=100.0,
+        resolution=1.0,
+        siunit="%",
         default=100.0,
         description="Battery charge level",
     )
     sensor_prop_firmware = DeviceProperty(
-        vdsd=vdsd_sensor, ds_index=1,
+        vdsd=vdsd_sensor,
+        ds_index=1,
         name="firmwareVersion",
         type=PROPERTY_TYPE_STRING,
         default="0.0.0",
         description="Current firmware version",
     )
     sensor_prop_interval = DeviceProperty(
-        vdsd=vdsd_sensor, ds_index=2,
+        vdsd=vdsd_sensor,
+        ds_index=2,
         name="reportingInterval",
         type=PROPERTY_TYPE_NUMERIC,
-        min_value=1.0, max_value=3600.0,
-        resolution=1.0, siunit="s",
+        min_value=1.0,
+        max_value=3600.0,
+        resolution=1.0,
+        siunit="s",
         default=60.0,
         description="Sensor reporting interval in seconds",
     )
@@ -451,12 +488,14 @@ async def main() -> None:
 
     # --- Device Events (§4.7) ---
     sensor_evt_tamper = DeviceEvent(
-        vdsd=vdsd_sensor, ds_index=0,
+        vdsd=vdsd_sensor,
+        ds_index=0,
         name="tamperAlarm",
         description="Enclosure tamper switch triggered",
     )
     sensor_evt_lowbat = DeviceEvent(
-        vdsd=vdsd_sensor, ds_index=1,
+        vdsd=vdsd_sensor,
+        ds_index=1,
         name="lowBattery",
         description="Battery level critically low",
     )
@@ -494,13 +533,15 @@ async def main() -> None:
 
     # --- Device States ---
     plug_state_relay = DeviceState(
-        vdsd=vdsd_plug, ds_index=0,
+        vdsd=vdsd_plug,
+        ds_index=0,
         name="relayState",
         options={0: "Open", 1: "Closed"},
         description="Physical relay contact state",
     )
     plug_state_overheat = DeviceState(
-        vdsd=vdsd_plug, ds_index=1,
+        vdsd=vdsd_plug,
+        ds_index=1,
         name="overheatingProtection",
         options={0: "Normal", 1: "Warning", 2: "ThermalShutdown"},
         description="Thermal protection status",
@@ -510,25 +551,32 @@ async def main() -> None:
 
     # --- Device Properties ---
     plug_prop_power = DeviceProperty(
-        vdsd=vdsd_plug, ds_index=0,
+        vdsd=vdsd_plug,
+        ds_index=0,
         name="currentPower",
         type=PROPERTY_TYPE_NUMERIC,
-        min_value=0.0, max_value=3680.0,
-        resolution=0.1, siunit="W",
+        min_value=0.0,
+        max_value=3680.0,
+        resolution=0.1,
+        siunit="W",
         default=0.0,
         description="Current power consumption",
     )
     plug_prop_energy = DeviceProperty(
-        vdsd=vdsd_plug, ds_index=1,
+        vdsd=vdsd_plug,
+        ds_index=1,
         name="totalEnergy",
         type=PROPERTY_TYPE_NUMERIC,
-        min_value=0.0, max_value=999999.0,
-        resolution=0.01, siunit="kWh",
+        min_value=0.0,
+        max_value=999999.0,
+        resolution=0.01,
+        siunit="kWh",
         default=0.0,
         description="Total accumulated energy",
     )
     plug_prop_mode = DeviceProperty(
-        vdsd=vdsd_plug, ds_index=2,
+        vdsd=vdsd_plug,
+        ds_index=2,
         name="operatingMode",
         type=PROPERTY_TYPE_ENUMERATION,
         options={0: "Normal", 1: "Timer", 2: "AlwaysOn"},
@@ -541,12 +589,14 @@ async def main() -> None:
 
     # --- Device Events ---
     plug_evt_overcurrent = DeviceEvent(
-        vdsd=vdsd_plug, ds_index=0,
+        vdsd=vdsd_plug,
+        ds_index=0,
         name="overcurrentTrip",
         description="Overcurrent protection tripped",
     )
     plug_evt_button = DeviceEvent(
-        vdsd=vdsd_plug, ds_index=1,
+        vdsd=vdsd_plug,
+        ds_index=1,
         name="localButtonPress",
         description="Physical button on plug pressed",
     )
@@ -560,18 +610,23 @@ async def main() -> None:
     section("Device topology")
     logger.info("VdcHost: %s  dSUID: %s", host.name, host.dsuid)
     logger.info("vDC:     %s  dSUID: %s", vdc.name, vdc.dsuid)
-    logger.info("Device:  dSUID: %s  (%d sub-devices)",
-                device.dsuid, len(device.vdsds))
+    logger.info("Device:  dSUID: %s  (%d sub-devices)", device.dsuid, len(device.vdsds))
     for idx in sorted(device.vdsds):
         v = device.vdsds[idx]
-        logger.info("  vdSD[%d] '%s'  group=%s  dSUID=%s",
-                     idx, v.name, v.primary_group.name, v.dsuid)
+        logger.info(
+            "  vdSD[%d] '%s'  group=%s  dSUID=%s",
+            idx,
+            v.name,
+            v.primary_group.name,
+            v.dsuid,
+        )
         logger.info("    States:     %d", len(v.device_states))
         logger.info("    Properties: %d", len(v.device_properties))
         logger.info("    Events:     %d", len(v.device_events))
         if v.output:
-            logger.info("    Output:     %s (%s)",
-                        v.output.name, v.output.function.name)
+            logger.info(
+                "    Output:     %s (%s)", v.output.name, v.output.function.name
+            )
 
     # ==================================================================
     # PHASE 1a — Verify get_properties() exposure
@@ -582,80 +637,186 @@ async def main() -> None:
     sensor_props = vdsd_sensor.get_properties()
 
     # State descriptions
-    verify_state_descriptions(logger, "Sensor", sensor_props, [
-        {"index": 0, "name": "operatingState",
-         "values": {"Off": NO_VALUE, "Initializing": NO_VALUE, "Running": NO_VALUE, "Error": NO_VALUE},
-         "description": "Current operating state of the sensor node"},
-        {"index": 1, "name": "connectivity",
-         "values": {"Offline": NO_VALUE, "Online": NO_VALUE, "Degraded": NO_VALUE},
-         "description": "Network connectivity status"},
-    ])
+    verify_state_descriptions(
+        logger,
+        "Sensor",
+        sensor_props,
+        [
+            {
+                "index": 0,
+                "name": "operatingState",
+                "values": {
+                    "Off": NO_VALUE,
+                    "Initializing": NO_VALUE,
+                    "Running": NO_VALUE,
+                    "Error": NO_VALUE,
+                },
+                "description": "Current operating state of the sensor node",
+            },
+            {
+                "index": 1,
+                "name": "connectivity",
+                "values": {
+                    "Offline": NO_VALUE,
+                    "Online": NO_VALUE,
+                    "Degraded": NO_VALUE,
+                },
+                "description": "Network connectivity status",
+            },
+        ],
+    )
 
     # Device states (no values set yet)
     dev_states = sensor_props.get("deviceStates")
     assert dev_states is not None
     assert dev_states["operatingState"]["value"] is None, "No value should be set yet"
-    logger.info("  %sPASS%s — Sensor: deviceStates present, no values yet.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor: deviceStates present, no values yet.", GREEN, RESET
+    )
 
     # Property descriptions
-    verify_property_descriptions(logger, "Sensor", sensor_props, [
-        {"index": 0, "name": "batteryLevel", "type": "numeric",
-         "min": 0.0, "max": 100.0, "resolution": 1.0, "siunit": "%",
-         "default": 100.0},
-        {"index": 1, "name": "firmwareVersion", "type": "string",
-         "default": "0.0.0"},
-        {"index": 2, "name": "reportingInterval", "type": "numeric",
-         "min": 1.0, "max": 3600.0, "resolution": 1.0, "siunit": "s",
-         "default": 60.0},
-    ])
+    verify_property_descriptions(
+        logger,
+        "Sensor",
+        sensor_props,
+        [
+            {
+                "index": 0,
+                "name": "batteryLevel",
+                "type": "numeric",
+                "min": 0.0,
+                "max": 100.0,
+                "resolution": 1.0,
+                "siunit": "%",
+                "default": 100.0,
+            },
+            {
+                "index": 1,
+                "name": "firmwareVersion",
+                "type": "string",
+                "default": "0.0.0",
+            },
+            {
+                "index": 2,
+                "name": "reportingInterval",
+                "type": "numeric",
+                "min": 1.0,
+                "max": 3600.0,
+                "resolution": 1.0,
+                "siunit": "s",
+                "default": 60.0,
+            },
+        ],
+    )
 
     # Device properties (no values set yet)
     dev_props = sensor_props.get("deviceProperties")
     assert dev_props is not None
     assert dev_props["batteryLevel"] is None, "No value should be set yet"
-    logger.info("  %sPASS%s — Sensor: deviceProperties present, no values yet.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor: deviceProperties present, no values yet.", GREEN, RESET
+    )
 
     # Event descriptions
-    verify_event_descriptions(logger, "Sensor", sensor_props, [
-        {"index": 0, "name": "tamperAlarm",
-         "description": "Enclosure tamper switch triggered"},
-        {"index": 1, "name": "lowBattery",
-         "description": "Battery level critically low"},
-    ])
+    verify_event_descriptions(
+        logger,
+        "Sensor",
+        sensor_props,
+        [
+            {
+                "index": 0,
+                "name": "tamperAlarm",
+                "description": "Enclosure tamper switch triggered",
+            },
+            {
+                "index": 1,
+                "name": "lowBattery",
+                "description": "Battery level critically low",
+            },
+        ],
+    )
 
     # --- Smart Plug ---
     plug_props = vdsd_plug.get_properties()
 
-    verify_state_descriptions(logger, "Plug", plug_props, [
-        {"index": 0, "name": "relayState",
-         "values": {"Open": NO_VALUE, "Closed": NO_VALUE},
-         "description": "Physical relay contact state"},
-        {"index": 1, "name": "overheatingProtection",
-         "values": {"Normal": NO_VALUE, "Warning": NO_VALUE, "ThermalShutdown": NO_VALUE},
-         "description": "Thermal protection status"},
-    ])
+    verify_state_descriptions(
+        logger,
+        "Plug",
+        plug_props,
+        [
+            {
+                "index": 0,
+                "name": "relayState",
+                "values": {"Open": NO_VALUE, "Closed": NO_VALUE},
+                "description": "Physical relay contact state",
+            },
+            {
+                "index": 1,
+                "name": "overheatingProtection",
+                "values": {
+                    "Normal": NO_VALUE,
+                    "Warning": NO_VALUE,
+                    "ThermalShutdown": NO_VALUE,
+                },
+                "description": "Thermal protection status",
+            },
+        ],
+    )
 
-    verify_property_descriptions(logger, "Plug", plug_props, [
-        {"index": 0, "name": "currentPower", "type": "numeric",
-         "min": 0.0, "max": 3680.0, "resolution": 0.1, "siunit": "W"},
-        {"index": 1, "name": "totalEnergy", "type": "numeric",
-         "min": 0.0, "max": 999999.0, "resolution": 0.01, "siunit": "kWh"},
-        {"index": 2, "name": "operatingMode", "type": "enumeration"},
-    ])
+    verify_property_descriptions(
+        logger,
+        "Plug",
+        plug_props,
+        [
+            {
+                "index": 0,
+                "name": "currentPower",
+                "type": "numeric",
+                "min": 0.0,
+                "max": 3680.0,
+                "resolution": 0.1,
+                "siunit": "W",
+            },
+            {
+                "index": 1,
+                "name": "totalEnergy",
+                "type": "numeric",
+                "min": 0.0,
+                "max": 999999.0,
+                "resolution": 0.01,
+                "siunit": "kWh",
+            },
+            {"index": 2, "name": "operatingMode", "type": "enumeration"},
+        ],
+    )
     # Verify enumeration values are exposed (p44-vdc label→None format)
     plug_mode_desc = plug_props["devicePropertyDescriptions"]["operatingMode"]
-    assert plug_mode_desc["values"] == {"Normal": NO_VALUE, "Timer": NO_VALUE, "AlwaysOn": NO_VALUE}
-    logger.info("  %sPASS%s — Plug: operatingMode enumeration values correct.",
-                GREEN, RESET)
+    assert plug_mode_desc["values"] == {
+        "Normal": NO_VALUE,
+        "Timer": NO_VALUE,
+        "AlwaysOn": NO_VALUE,
+    }
+    logger.info(
+        "  %sPASS%s — Plug: operatingMode enumeration values correct.", GREEN, RESET
+    )
 
-    verify_event_descriptions(logger, "Plug", plug_props, [
-        {"index": 0, "name": "overcurrentTrip",
-         "description": "Overcurrent protection tripped"},
-        {"index": 1, "name": "localButtonPress",
-         "description": "Physical button on plug pressed"},
-    ])
+    verify_event_descriptions(
+        logger,
+        "Plug",
+        plug_props,
+        [
+            {
+                "index": 0,
+                "name": "overcurrentTrip",
+                "description": "Overcurrent protection tripped",
+            },
+            {
+                "index": 1,
+                "name": "localButtonPress",
+                "description": "Physical button on plug pressed",
+            },
+        ],
+    )
 
     # ==================================================================
     # PHASE 1b — Set initial values
@@ -663,8 +824,8 @@ async def main() -> None:
     section("Setting initial state and property values")
 
     # Sensor states — integer option keys (match dSS internal format)
-    sensor_state_operating.value = 2      # Running
-    sensor_state_connectivity.value = 1   # Online
+    sensor_state_operating.value = 2  # Running
+    sensor_state_connectivity.value = 1  # Online
     logger.info("  Sensor operatingState = 2 (Running)")
     logger.info("  Sensor connectivity   = 1 (Online)")
 
@@ -677,15 +838,15 @@ async def main() -> None:
     logger.info("  Sensor reportingInterval  = 120.0s")
 
     # Plug states — integer option keys (match dSS internal format)
-    plug_state_relay.value = 1      # Closed
-    plug_state_overheat.value = 0   # Normal
+    plug_state_relay.value = 1  # Closed
+    plug_state_overheat.value = 0  # Normal
     logger.info("  Plug relayState             = 1 (Closed)")
     logger.info("  Plug overheatingProtection  = 0 (Normal)")
 
     # Plug properties
     plug_prop_power.value = 150.5
     plug_prop_energy.value = 42.73
-    plug_prop_mode.value = "Timer"     # enum text label
+    plug_prop_mode.value = "Timer"  # enum text label
     logger.info("  Plug currentPower     = 150.5W")
     logger.info("  Plug totalEnergy      = 42.73kWh")
     logger.info("  Plug operatingMode    = 'Timer'")
@@ -697,15 +858,13 @@ async def main() -> None:
     assert sensor_props["deviceProperties"]["batteryLevel"] == 87.0
     assert sensor_props["deviceProperties"]["firmwareVersion"] == "2.3.1"
     assert sensor_props["deviceProperties"]["reportingInterval"] == 120.0
-    logger.info("  %sPASS%s — Sensor values appear in get_properties().",
-                GREEN, RESET)
+    logger.info("  %sPASS%s — Sensor values appear in get_properties().", GREEN, RESET)
 
     plug_props = vdsd_plug.get_properties()
     assert plug_props["deviceStates"]["relayState"]["value"] == "Closed"
     assert plug_props["deviceProperties"]["currentPower"] == 150.5
     assert plug_props["deviceProperties"]["operatingMode"] == "Timer"
-    logger.info("  %sPASS%s — Plug values appear in get_properties().",
-                GREEN, RESET)
+    logger.info("  %sPASS%s — Plug values appear in get_properties().", GREEN, RESET)
 
     # Remember values for Phase 2 comparison.
     saved_sensor_battery = 87.0
@@ -806,8 +965,9 @@ async def main() -> None:
     r_device = list(r_vdc.devices.values())[0]
     assert str(r_device.dsuid) == original_device_dsuid
     assert len(r_device.vdsds) == 2
-    logger.info("Device restored: dSUID=%s  vdSDs=%d",
-                r_device.dsuid, len(r_device.vdsds))
+    logger.info(
+        "Device restored: dSUID=%s  vdSDs=%d", r_device.dsuid, len(r_device.vdsds)
+    )
 
     # ---- Verify vdSDs ------------------------------------------------
     r_sensor = r_device.get_vdsd(0)
@@ -820,10 +980,20 @@ async def main() -> None:
     assert r_plug.primary_group == VDSD_PLUG_GROUP
     r_sensor.on_control_value = on_control_value
     r_plug.on_control_value = on_control_value
-    logger.info("  vdSD[0] '%s' group=%s  %sPASS%s",
-                r_sensor.name, r_sensor.primary_group.name, GREEN, RESET)
-    logger.info("  vdSD[1] '%s' group=%s  %sPASS%s",
-                r_plug.name, r_plug.primary_group.name, GREEN, RESET)
+    logger.info(
+        "  vdSD[0] '%s' group=%s  %sPASS%s",
+        r_sensor.name,
+        r_sensor.primary_group.name,
+        GREEN,
+        RESET,
+    )
+    logger.info(
+        "  vdSD[1] '%s' group=%s  %sPASS%s",
+        r_plug.name,
+        r_plug.primary_group.name,
+        GREEN,
+        RESET,
+    )
 
     # ==================================================================
     # PHASE 2a — Verify device state descriptions restored
@@ -838,20 +1008,29 @@ async def main() -> None:
     assert rs_operating is not None
     assert rs_connectivity is not None
     assert rs_operating.name == "operatingState"
-    assert rs_operating.options == {0: "Off", 1: "Initializing", 2: "Running", 3: "Error"}
+    assert rs_operating.options == {
+        0: "Off",
+        1: "Initializing",
+        2: "Running",
+        3: "Error",
+    }
     assert rs_operating.description == "Current operating state of the sensor node"
     assert rs_connectivity.name == "connectivity"
     assert rs_connectivity.options == {0: "Offline", 1: "Online", 2: "Degraded"}
-    logger.info("  %sPASS%s — Sensor: 2 state descriptions restored correctly.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor: 2 state descriptions restored correctly.", GREEN, RESET
+    )
 
     # State values are volatile — should be None after restart.
     assert rs_operating.value is None, (
         f"State value should be None after restart, got {rs_operating.value!r}"
     )
     assert rs_connectivity.value is None
-    logger.info("  %sPASS%s — Sensor: state values are None (volatile, as expected).",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor: state values are None (volatile, as expected).",
+        GREEN,
+        RESET,
+    )
 
     assert len(r_plug.device_states) == 2
     rp_relay = r_plug.get_device_state(0)
@@ -860,11 +1039,11 @@ async def main() -> None:
     assert rp_relay.options == {0: "Open", 1: "Closed"}
     assert rp_overheat.name == "overheatingProtection"
     assert rp_overheat.options == {0: "Normal", 1: "Warning", 2: "ThermalShutdown"}
-    logger.info("  %sPASS%s — Plug: 2 state descriptions restored correctly.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Plug: 2 state descriptions restored correctly.", GREEN, RESET
+    )
     assert rp_relay.value is None
-    logger.info("  %sPASS%s — Plug: state values are None (volatile).",
-                GREEN, RESET)
+    logger.info("  %sPASS%s — Plug: state values are None (volatile).", GREEN, RESET)
 
     # ==================================================================
     # PHASE 2b — Verify device property descriptions & values restored
@@ -888,19 +1067,20 @@ async def main() -> None:
     assert rsp_battery.siunit == "%"
     assert rsp_battery.default == 100.0
     assert rsp_battery.description == "Battery charge level"
-    logger.info("  %sPASS%s — Sensor batteryLevel description restored.",
-                GREEN, RESET)
+    logger.info("  %sPASS%s — Sensor batteryLevel description restored.", GREEN, RESET)
 
     assert rsp_firmware.name == "firmwareVersion"
     assert rsp_firmware.type == "string"
     assert rsp_firmware.default == "0.0.0"
-    logger.info("  %sPASS%s — Sensor firmwareVersion description restored.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor firmwareVersion description restored.", GREEN, RESET
+    )
 
     assert rsp_interval.name == "reportingInterval"
     assert rsp_interval.siunit == "s"
-    logger.info("  %sPASS%s — Sensor reportingInterval description restored.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor reportingInterval description restored.", GREEN, RESET
+    )
 
     # Values — device properties ARE persisted (unlike states).
     assert rsp_battery.value == saved_sensor_battery, (
@@ -912,10 +1092,15 @@ async def main() -> None:
     assert rsp_interval.value == saved_sensor_interval, (
         f"Expected interval={saved_sensor_interval}, got {rsp_interval.value}"
     )
-    logger.info("  %sPASS%s — Sensor property VALUES restored: "
-                "battery=%.1f, firmware='%s', interval=%.1f",
-                GREEN, RESET,
-                rsp_battery.value, rsp_firmware.value, rsp_interval.value)
+    logger.info(
+        "  %sPASS%s — Sensor property VALUES restored: "
+        "battery=%.1f, firmware='%s', interval=%.1f",
+        GREEN,
+        RESET,
+        rsp_battery.value,
+        rsp_firmware.value,
+        rsp_interval.value,
+    )
 
     # Plug properties
     assert len(r_plug.device_properties) == 3
@@ -930,10 +1115,15 @@ async def main() -> None:
     assert rpp_mode.type == "enumeration"
     assert rpp_mode.options == {0: "Normal", 1: "Timer", 2: "AlwaysOn"}
     assert rpp_mode.value == saved_plug_mode
-    logger.info("  %sPASS%s — Plug property VALUES restored: "
-                "power=%.1f, energy=%.2f, mode='%s'",
-                GREEN, RESET,
-                rpp_power.value, rpp_energy.value, rpp_mode.value)
+    logger.info(
+        "  %sPASS%s — Plug property VALUES restored: "
+        "power=%.1f, energy=%.2f, mode='%s'",
+        GREEN,
+        RESET,
+        rpp_power.value,
+        rpp_energy.value,
+        rpp_mode.value,
+    )
 
     # ==================================================================
     # PHASE 2c — Verify device event descriptions restored
@@ -942,16 +1132,16 @@ async def main() -> None:
 
     assert len(r_sensor.device_events) == 2
     assert r_sensor.get_device_event(0).name == "tamperAlarm"
-    assert r_sensor.get_device_event(0).description == "Enclosure tamper switch triggered"
+    assert (
+        r_sensor.get_device_event(0).description == "Enclosure tamper switch triggered"
+    )
     assert r_sensor.get_device_event(1).name == "lowBattery"
-    logger.info("  %sPASS%s — Sensor: 2 event descriptions restored.",
-                GREEN, RESET)
+    logger.info("  %sPASS%s — Sensor: 2 event descriptions restored.", GREEN, RESET)
 
     assert len(r_plug.device_events) == 2
     assert r_plug.get_device_event(0).name == "overcurrentTrip"
     assert r_plug.get_device_event(1).name == "localButtonPress"
-    logger.info("  %sPASS%s — Plug: 2 event descriptions restored.",
-                GREEN, RESET)
+    logger.info("  %sPASS%s — Plug: 2 event descriptions restored.", GREEN, RESET)
 
     # ==================================================================
     # PHASE 2d — Verify get_properties() on restored vdSDs
@@ -964,8 +1154,9 @@ async def main() -> None:
     assert "devicePropertyDescriptions" in r_sensor_props
     assert "deviceProperties" in r_sensor_props
     assert "deviceEventDescriptions" in r_sensor_props
-    logger.info("  %sPASS%s — Sensor: all 5 device-level property groups present.",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Sensor: all 5 device-level property groups present.", GREEN, RESET
+    )
 
     r_plug_props = r_plug.get_properties()
     assert "deviceStateDescriptions" in r_plug_props
@@ -974,8 +1165,11 @@ async def main() -> None:
     # Verify persisted values come through
     assert r_plug_props["deviceProperties"]["currentPower"] == saved_plug_power
     assert r_plug_props["deviceProperties"]["operatingMode"] == saved_plug_mode
-    logger.info("  %sPASS%s — Plug: property values exposed correctly in get_properties().",
-                GREEN, RESET)
+    logger.info(
+        "  %sPASS%s — Plug: property values exposed correctly in get_properties().",
+        GREEN,
+        RESET,
+    )
 
     # ==================================================================
     # PHASE 2e — Re-announce & push state updates

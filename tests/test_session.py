@@ -6,8 +6,7 @@ import pytest
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
-from pydsvdcapi.session import SUPPORTED_API_VERSION, SessionState, VdcSession
-
+from pydsvdcapi.session import SessionState, VdcSession
 
 HOST_DSUID = "198C033E330755E78015F97AD093DD1C00"
 VDSM_DSUID = "AABBCCDDEEFF00112233445566778899AA"
@@ -98,8 +97,8 @@ def _generic_response(msg_id, code=pb.ERR_OK):
 # Hello handshake
 # ---------------------------------------------------------------------------
 
-class TestHello:
 
+class TestHello:
     @pytest.mark.asyncio
     async def test_successful_hello(self):
         """A valid hello should transition the session to ACTIVE and
@@ -227,8 +226,8 @@ class TestHello:
 # Ping / Pong
 # ---------------------------------------------------------------------------
 
-class TestPingPong:
 
+class TestPingPong:
     @pytest.mark.asyncio
     async def test_ping_receives_pong(self):
         vdsm, vdc = _make_pair()
@@ -300,8 +299,8 @@ class TestPingPong:
 # Bye
 # ---------------------------------------------------------------------------
 
-class TestBye:
 
+class TestBye:
     @pytest.mark.asyncio
     async def test_bye_acknowledged(self):
         vdsm, vdc = _make_pair()
@@ -333,8 +332,8 @@ class TestBye:
 # Message callback
 # ---------------------------------------------------------------------------
 
-class TestMessageCallback:
 
+class TestMessageCallback:
     @pytest.mark.asyncio
     async def test_callback_invoked_for_unhandled_messages(self):
         """Messages that are not hello/ping/bye should be forwarded to
@@ -368,6 +367,7 @@ class TestMessageCallback:
     @pytest.mark.asyncio
     async def test_callback_response_sent_back(self):
         """If the callback returns a Message, it should be sent."""
+
         async def handler(session, msg):
             resp = pb.Message()
             resp.type = pb.GENERIC_RESPONSE
@@ -404,8 +404,8 @@ class TestMessageCallback:
 # Connection loss
 # ---------------------------------------------------------------------------
 
-class TestConnectionLoss:
 
+class TestConnectionLoss:
     @pytest.mark.asyncio
     async def test_eof_ends_session(self):
         vdsm, vdc = _make_pair()
@@ -428,8 +428,8 @@ class TestConnectionLoss:
 # send_message (outbound from vDC host)
 # ---------------------------------------------------------------------------
 
-class TestSendMessage:
 
+class TestSendMessage:
     @pytest.mark.asyncio
     async def test_send_message_during_active_session(self):
         vdsm, vdc = _make_pair()
@@ -471,8 +471,8 @@ class TestSendMessage:
 # Session close
 # ---------------------------------------------------------------------------
 
-class TestSessionClose:
 
+class TestSessionClose:
     @pytest.mark.asyncio
     async def test_close_terminates_session(self):
         vdsm, vdc = _make_pair()
@@ -492,8 +492,8 @@ class TestSessionClose:
 # Repr
 # ---------------------------------------------------------------------------
 
-class TestSessionRepr:
 
+class TestSessionRepr:
     @pytest.mark.asyncio
     async def test_repr_before_hello(self):
         _, vdc = _make_pair()
@@ -517,8 +517,8 @@ class TestSessionRepr:
 # Message ID tracking
 # ---------------------------------------------------------------------------
 
-class TestMessageIdTracking:
 
+class TestMessageIdTracking:
     @pytest.mark.asyncio
     async def test_hello_updates_last_known_id(self):
         """Receiving a hello with msg_id=1 should set last_known to 1."""
@@ -580,8 +580,8 @@ class TestMessageIdTracking:
 # send_request (outgoing request with auto message ID)
 # ---------------------------------------------------------------------------
 
-class TestSendRequest:
 
+class TestSendRequest:
     @pytest.mark.asyncio
     async def test_send_request_assigns_next_id(self):
         """send_request should assign last_known + 1 as message_id."""
@@ -599,9 +599,7 @@ class TestSendRequest:
         announce.vdc_send_announce_vdc.dSUID = "C" * 34
 
         async def send_and_respond():
-            req_task = asyncio.create_task(
-                session.send_request(announce, timeout=2.0)
-            )
+            req_task = asyncio.create_task(session.send_request(announce, timeout=2.0))
             # Read what was sent.
             received = await vdsm.receive()
             assert received is not None
@@ -636,9 +634,7 @@ class TestSendRequest:
             msg = pb.Message()
             msg.type = pb.VDC_SEND_ANNOUNCE_DEVICE
             msg.vdc_send_announce_device.dSUID = "D" * 34
-            req_task = asyncio.create_task(
-                session.send_request(msg, timeout=2.0)
-            )
+            req_task = asyncio.create_task(session.send_request(msg, timeout=2.0))
             received = await vdsm.receive()
             assert received is not None
             ids_seen.append(received.message_id)
@@ -668,9 +664,7 @@ class TestSendRequest:
         announce.type = pb.VDC_SEND_ANNOUNCE_VDC
         announce.vdc_send_announce_vdc.dSUID = "E" * 34
 
-        req_task = asyncio.create_task(
-            session.send_request(announce, timeout=2.0)
-        )
+        req_task = asyncio.create_task(session.send_request(announce, timeout=2.0))
         received = await vdsm.receive()
         assert received is not None
         assert received.message_id == 51
@@ -740,8 +734,8 @@ class TestSendRequest:
 # send_notification (outgoing with message_id = 0)
 # ---------------------------------------------------------------------------
 
-class TestSendNotification:
 
+class TestSendNotification:
     @pytest.mark.asyncio
     async def test_send_notification_sets_zero_id(self):
         """send_notification should set message_id to 0."""
@@ -781,8 +775,8 @@ class TestSendNotification:
 # GENERIC_RESPONSE correlation
 # ---------------------------------------------------------------------------
 
-class TestResponseCorrelation:
 
+class TestResponseCorrelation:
     @pytest.mark.asyncio
     async def test_response_matched_to_pending_request(self):
         """A GENERIC_RESPONSE with matching msg_id resolves the future."""
@@ -797,9 +791,7 @@ class TestResponseCorrelation:
         announce.type = pb.VDC_SEND_ANNOUNCE_VDC
         announce.vdc_send_announce_vdc.dSUID = "A" * 34
 
-        req_task = asyncio.create_task(
-            session.send_request(announce, timeout=2.0)
-        )
+        req_task = asyncio.create_task(session.send_request(announce, timeout=2.0))
         outgoing = await vdsm.receive()
         assert outgoing is not None
 
@@ -827,9 +819,7 @@ class TestResponseCorrelation:
         announce.type = pb.VDC_SEND_ANNOUNCE_DEVICE
         announce.vdc_send_announce_device.dSUID = "B" * 34
 
-        req_task = asyncio.create_task(
-            session.send_request(announce, timeout=2.0)
-        )
+        req_task = asyncio.create_task(session.send_request(announce, timeout=2.0))
         outgoing = await vdsm.receive()
         assert outgoing is not None
         await vdsm.send(
@@ -885,9 +875,7 @@ class TestResponseCorrelation:
         msg.type = pb.VDC_SEND_ANNOUNCE_VDC
         msg.vdc_send_announce_vdc.dSUID = "X" * 34
 
-        req_task = asyncio.create_task(
-            session.send_request(msg, timeout=5.0)
-        )
+        req_task = asyncio.create_task(session.send_request(msg, timeout=5.0))
         # Let the request be sent.
         await vdsm.receive()
 

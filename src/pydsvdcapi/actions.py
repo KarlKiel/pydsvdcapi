@@ -90,10 +90,6 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    List,
-    Optional,
-    Union,
 )
 
 if TYPE_CHECKING:
@@ -146,12 +142,12 @@ class ActionParameter:
         self,
         name: str = "",
         type: str = "string",
-        min_value: Optional[float] = None,
-        max_value: Optional[float] = None,
-        resolution: Optional[float] = None,
-        siunit: Optional[str] = None,
-        options: Optional[Dict[Union[int, str], str]] = None,
-        default: Optional[Union[float, str]] = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        resolution: float | None = None,
+        siunit: str | None = None,
+        options: dict[int | str, str] | None = None,
+        default: float | str | None = None,
     ) -> None:
         self._name = name
         self._type = type
@@ -159,9 +155,7 @@ class ActionParameter:
         self._max_value = max_value
         self._resolution = resolution
         self._siunit = siunit
-        self._options: Optional[Dict[Union[int, str], str]] = (
-            dict(options) if options else None
-        )
+        self._options: dict[int | str, str] | None = dict(options) if options else None
         self._default = default
 
     # ---- accessors ---------------------------------------------------
@@ -185,64 +179,62 @@ class ActionParameter:
         self._type = value
 
     @property
-    def min_value(self) -> Optional[float]:
+    def min_value(self) -> float | None:
         """Minimum value (numeric only)."""
         return self._min_value
 
     @min_value.setter
-    def min_value(self, value: Optional[float]) -> None:
+    def min_value(self, value: float | None) -> None:
         self._min_value = value
 
     @property
-    def max_value(self) -> Optional[float]:
+    def max_value(self) -> float | None:
         """Maximum value (numeric only)."""
         return self._max_value
 
     @max_value.setter
-    def max_value(self, value: Optional[float]) -> None:
+    def max_value(self, value: float | None) -> None:
         self._max_value = value
 
     @property
-    def resolution(self) -> Optional[float]:
+    def resolution(self) -> float | None:
         """Resolution / LSB size (numeric only)."""
         return self._resolution
 
     @resolution.setter
-    def resolution(self, value: Optional[float]) -> None:
+    def resolution(self, value: float | None) -> None:
         self._resolution = value
 
     @property
-    def siunit(self) -> Optional[str]:
+    def siunit(self) -> str | None:
         """SI unit string (numeric only)."""
         return self._siunit
 
     @siunit.setter
-    def siunit(self, value: Optional[str]) -> None:
+    def siunit(self, value: str | None) -> None:
         self._siunit = value
 
     @property
-    def options(self) -> Optional[Dict[Union[int, str], str]]:
+    def options(self) -> dict[int | str, str] | None:
         """Option key → label mapping (enumeration only, copy)."""
         return dict(self._options) if self._options is not None else None
 
     @options.setter
-    def options(
-        self, value: Optional[Dict[Union[int, str], str]]
-    ) -> None:
+    def options(self, value: dict[int | str, str] | None) -> None:
         self._options = dict(value) if value is not None else None
 
     @property
-    def default(self) -> Optional[Union[float, str]]:
+    def default(self) -> float | str | None:
         """Default value."""
         return self._default
 
     @default.setter
-    def default(self, value: Optional[Union[float, str]]) -> None:
+    def default(self, value: float | str | None) -> None:
         self._default = value
 
     # ---- property generation -----------------------------------------
 
-    def get_properties(self) -> Dict[str, Any]:
+    def get_properties(self) -> dict[str, Any]:
         """Return the parameter descriptor dict (§4.5.1).
 
         Format::
@@ -252,7 +244,7 @@ class ActionParameter:
         The parameter name is **not** included here — it serves as the
         key in the parent ``params`` mapping.
         """
-        props: Dict[str, Any] = {"type": self._type}
+        props: dict[str, Any] = {"type": self._type}
         if self._type == "numeric":
             if self._min_value is not None:
                 props["min"] = self._min_value
@@ -263,18 +255,16 @@ class ActionParameter:
             if self._siunit is not None:
                 props["siunit"] = self._siunit
         if self._type == "enumeration" and self._options:
-            props["options"] = {
-                str(k): v for k, v in self._options.items()
-            }
+            props["options"] = {str(k): v for k, v in self._options.items()}
         if self._default is not None:
             props["default"] = self._default
         return props
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence."""
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "name": self._name,
             "type": self._type,
         }
@@ -287,37 +277,24 @@ class ActionParameter:
         if self._siunit is not None:
             node["siunit"] = self._siunit
         if self._options is not None:
-            node["options"] = {
-                str(k): v for k, v in self._options.items()
-            }
+            node["options"] = {str(k): v for k, v in self._options.items()}
         if self._default is not None:
             node["default"] = self._default
         return node
 
     @classmethod
-    def from_persisted(cls, data: Dict[str, Any]) -> "ActionParameter":
+    def from_persisted(cls, data: dict[str, Any]) -> ActionParameter:
         """Restore an ActionParameter from a persisted dict."""
         options_raw = data.get("options")
         options = None
         if isinstance(options_raw, dict):
-            options = {
-                _parse_option_key(k): v
-                for k, v in options_raw.items()
-            }
+            options = {_parse_option_key(k): v for k, v in options_raw.items()}
         return cls(
             name=data.get("name", ""),
             type=data.get("type", "string"),
-            min_value=(
-                float(data["minValue"]) if "minValue" in data else None
-            ),
-            max_value=(
-                float(data["maxValue"]) if "maxValue" in data else None
-            ),
-            resolution=(
-                float(data["resolution"])
-                if "resolution" in data
-                else None
-            ),
+            min_value=(float(data["minValue"]) if "minValue" in data else None),
+            max_value=(float(data["maxValue"]) if "maxValue" in data else None),
+            resolution=(float(data["resolution"]) if "resolution" in data else None),
             siunit=data.get("siunit"),
             options=options,
             default=data.get("default"),
@@ -326,10 +303,7 @@ class ActionParameter:
     # ---- repr --------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"ActionParameter(name={self._name!r}, "
-            f"type={self._type!r})"
-        )
+        return f"ActionParameter(name={self._name!r}, type={self._type!r})"
 
 
 # ---------------------------------------------------------------------------
@@ -369,24 +343,22 @@ class DeviceActionDescription:
 
     def __init__(
         self,
-        vdsd: "Vdsd",
+        vdsd: Vdsd,
         ds_index: int = 0,
         name: str = "",
-        params: Optional[List[ActionParameter]] = None,
-        description: Optional[str] = None,
+        params: list[ActionParameter] | None = None,
+        description: str | None = None,
     ) -> None:
         self._vdsd = vdsd
         self._ds_index = ds_index
         self._name = name
-        self._params: List[ActionParameter] = (
-            list(params) if params else []
-        )
+        self._params: list[ActionParameter] = list(params) if params else []
         self._description = description
 
     # ---- read-only accessors -----------------------------------------
 
     @property
-    def vdsd(self) -> "Vdsd":
+    def vdsd(self) -> Vdsd:
         """The owning vdSD."""
         return self._vdsd
 
@@ -407,26 +379,26 @@ class DeviceActionDescription:
         self._name = value
 
     @property
-    def params(self) -> List[ActionParameter]:
+    def params(self) -> list[ActionParameter]:
         """Parameter descriptors (copy of the list)."""
         return list(self._params)
 
     @params.setter
-    def params(self, value: List[ActionParameter]) -> None:
+    def params(self, value: list[ActionParameter]) -> None:
         self._params = list(value) if value else []
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """Optional human-readable description."""
         return self._description
 
     @description.setter
-    def description(self, value: Optional[str]) -> None:
+    def description(self, value: str | None) -> None:
         self._description = value
 
     # ---- property generation -----------------------------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return **deviceActionDescriptions** properties (§4.5.2).
 
         Format::
@@ -438,42 +410,35 @@ class DeviceActionDescription:
         The ``params`` dict is keyed by parameter name; each value is
         the parameter descriptor (§4.5.1) without the name itself.
         """
-        props: Dict[str, Any] = {"name": self._name}
+        props: dict[str, Any] = {"name": self._name}
         if self._params:
-            props["params"] = {
-                p.name: p.get_properties() for p in self._params
-            }
+            props["params"] = {p.name: p.get_properties() for p in self._params}
         if self._description is not None:
             props["description"] = self._description
         return props
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence."""
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
         }
         if self._params:
-            node["params"] = [
-                p.get_property_tree() for p in self._params
-            ]
+            node["params"] = [p.get_property_tree() for p in self._params]
         if self._description is not None:
             node["description"] = self._description
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted state dict."""
         if "name" in state:
             self._name = state["name"]
         if "params" in state:
             raw_params = state["params"]
             if isinstance(raw_params, list):
-                self._params = [
-                    ActionParameter.from_persisted(p)
-                    for p in raw_params
-                ]
+                self._params = [ActionParameter.from_persisted(p) for p in raw_params]
         if "description" in state:
             self._description = state.get("description")
 
@@ -481,8 +446,7 @@ class DeviceActionDescription:
 
     def __repr__(self) -> str:
         return (
-            f"DeviceActionDescription(ds_index={self._ds_index!r}, "
-            f"name={self._name!r})"
+            f"DeviceActionDescription(ds_index={self._ds_index!r}, name={self._name!r})"
         )
 
 
@@ -524,24 +488,22 @@ class StandardAction:
 
     def __init__(
         self,
-        vdsd: "Vdsd",
+        vdsd: Vdsd,
         ds_index: int = 0,
         name: str = "",
         action: str = "",
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
     ) -> None:
         self._vdsd = vdsd
         self._ds_index = ds_index
         self._name = name
         self._action = action
-        self._params: Optional[Dict[str, Any]] = (
-            dict(params) if params else None
-        )
+        self._params: dict[str, Any] | None = dict(params) if params else None
 
     # ---- read-only accessors -----------------------------------------
 
     @property
-    def vdsd(self) -> "Vdsd":
+    def vdsd(self) -> Vdsd:
         """The owning vdSD."""
         return self._vdsd
 
@@ -571,17 +533,17 @@ class StandardAction:
         self._action = value
 
     @property
-    def params(self) -> Optional[Dict[str, Any]]:
+    def params(self) -> dict[str, Any] | None:
         """Parameter name → value overrides (copy)."""
         return dict(self._params) if self._params is not None else None
 
     @params.setter
-    def params(self, value: Optional[Dict[str, Any]]) -> None:
+    def params(self, value: dict[str, Any] | None) -> None:
         self._params = dict(value) if value is not None else None
 
     # ---- property generation -----------------------------------------
 
-    def get_properties(self) -> Dict[str, Any]:
+    def get_properties(self) -> dict[str, Any]:
         """Return **standardActions** properties (§4.5.3).
 
         Format::
@@ -589,7 +551,7 @@ class StandardAction:
             {"name": "std.play", "action": "play",
              "params": {"volume": 80}}
         """
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             "name": self._name,
             "action": self._action,
         }
@@ -599,9 +561,9 @@ class StandardAction:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence."""
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
             "action": self._action,
@@ -610,7 +572,7 @@ class StandardAction:
             node["params"] = dict(self._params)
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted state dict."""
         if "name" in state:
             self._name = state["name"]
@@ -668,26 +630,24 @@ class CustomAction:
 
     def __init__(
         self,
-        vdsd: "Vdsd",
+        vdsd: Vdsd,
         ds_index: int = 0,
         name: str = "",
         action: str = "",
         title: str = "",
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
     ) -> None:
         self._vdsd = vdsd
         self._ds_index = ds_index
         self._name = name
         self._action = action
         self._title = title
-        self._params: Optional[Dict[str, Any]] = (
-            dict(params) if params else None
-        )
+        self._params: dict[str, Any] | None = dict(params) if params else None
 
     # ---- read-only accessors -----------------------------------------
 
     @property
-    def vdsd(self) -> "Vdsd":
+    def vdsd(self) -> Vdsd:
         """The owning vdSD."""
         return self._vdsd
 
@@ -726,17 +686,17 @@ class CustomAction:
         self._title = value
 
     @property
-    def params(self) -> Optional[Dict[str, Any]]:
+    def params(self) -> dict[str, Any] | None:
         """Parameter name → value overrides (copy)."""
         return dict(self._params) if self._params is not None else None
 
     @params.setter
-    def params(self, value: Optional[Dict[str, Any]]) -> None:
+    def params(self, value: dict[str, Any] | None) -> None:
         self._params = dict(value) if value is not None else None
 
     # ---- property generation -----------------------------------------
 
-    def get_properties(self) -> Dict[str, Any]:
+    def get_properties(self) -> dict[str, Any]:
         """Return **customActions** properties (§4.5.3).
 
         Format::
@@ -744,7 +704,7 @@ class CustomAction:
             {"name": "custom.play-loud", "action": "play",
              "title": "Play Loud", "params": {"volume": 100}}
         """
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             "name": self._name,
             "action": self._action,
             "title": self._title,
@@ -755,7 +715,7 @@ class CustomAction:
 
     # ---- writable via setProperty ------------------------------------
 
-    def apply_settings(self, settings: Dict[str, Any]) -> None:
+    def apply_settings(self, settings: dict[str, Any]) -> None:
         """Apply writable settings from a ``setProperty`` request.
 
         Writable fields: ``action``, ``title``, ``params``.
@@ -772,9 +732,9 @@ class CustomAction:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence."""
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
             "action": self._action,
@@ -784,7 +744,7 @@ class CustomAction:
             node["params"] = dict(self._params)
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted state dict."""
         if "name" in state:
             self._name = state["name"]
@@ -840,7 +800,7 @@ class DynamicAction:
 
     def __init__(
         self,
-        vdsd: "Vdsd",
+        vdsd: Vdsd,
         ds_index: int = 0,
         name: str = "",
         title: str = "",
@@ -853,7 +813,7 @@ class DynamicAction:
     # ---- read-only accessors -----------------------------------------
 
     @property
-    def vdsd(self) -> "Vdsd":
+    def vdsd(self) -> Vdsd:
         """The owning vdSD."""
         return self._vdsd
 
@@ -884,7 +844,7 @@ class DynamicAction:
 
     # ---- property generation -----------------------------------------
 
-    def get_properties(self) -> Dict[str, Any]:
+    def get_properties(self) -> dict[str, Any]:
         """Return **dynamicDeviceActions** properties (§4.5.3).
 
         Format::
@@ -910,7 +870,7 @@ class DynamicAction:
 # ---------------------------------------------------------------------------
 
 
-def _parse_option_key(key: Any) -> Union[int, str]:
+def _parse_option_key(key: Any) -> int | str:
     """Convert a persisted option key back to int when possible."""
     if isinstance(key, int):
         return key

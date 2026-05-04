@@ -1,8 +1,5 @@
 """Tests for the PropertyStore persistence layer."""
 
-import os
-from pathlib import Path
-
 import pytest
 import yaml
 
@@ -37,8 +34,8 @@ def sample_tree():
 # Basic save / load
 # ---------------------------------------------------------------------------
 
-class TestSaveLoad:
 
+class TestSaveLoad:
     def test_save_creates_file(self, store, sample_tree):
         store.save(sample_tree)
         assert store.path.is_file()
@@ -80,16 +77,14 @@ class TestSaveLoad:
 # Backup mechanism
 # ---------------------------------------------------------------------------
 
-class TestBackup:
 
+class TestBackup:
     def test_backup_created_on_second_save(self, store, sample_tree):
         store.save(sample_tree)
         assert not store.backup_path.is_file()
 
         # Second save should back up the first version.
-        modified = {
-            "vdcHost": {**sample_tree["vdcHost"], "name": "Updated Host"}
-        }
+        modified = {"vdcHost": {**sample_tree["vdcHost"], "name": "Updated Host"}}
         store.save(modified)
         assert store.backup_path.is_file()
 
@@ -100,12 +95,8 @@ class TestBackup:
 
     def test_backup_contains_previous_version(self, store, sample_tree):
         store.save(sample_tree)
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "V2"}}
-        )
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "V3"}}
-        )
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "V2"}})
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "V3"}})
         # Backup should be V2 (the version before the latest save)
         with open(store.backup_path, encoding="utf-8") as fh:
             backup_data = yaml.safe_load(fh)
@@ -116,14 +107,12 @@ class TestBackup:
 # Recovery from corrupt primary
 # ---------------------------------------------------------------------------
 
-class TestRecovery:
 
+class TestRecovery:
     def test_corrupt_primary_falls_back_to_backup(self, store, sample_tree):
         # Save twice to create a backup.
         store.save(sample_tree)
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}}
-        )
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}})
 
         # Corrupt the primary file.
         store.path.write_text("{{{{not: valid: yaml::::", encoding="utf-8")
@@ -135,9 +124,7 @@ class TestRecovery:
 
     def test_missing_primary_falls_back_to_backup(self, store, sample_tree):
         store.save(sample_tree)
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}}
-        )
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}})
         # Delete primary.
         store.path.unlink()
 
@@ -147,9 +134,7 @@ class TestRecovery:
 
     def test_both_corrupt_returns_none(self, store, sample_tree):
         store.save(sample_tree)
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}}
-        )
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}})
         store.path.write_text("corrupt!", encoding="utf-8")
         store.backup_path.write_text("also corrupt!", encoding="utf-8")
 
@@ -158,9 +143,7 @@ class TestRecovery:
     def test_primary_restored_from_backup(self, store, sample_tree):
         """When loading from backup, the primary should be restored."""
         store.save(sample_tree)
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}}
-        )
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}})
         store.path.unlink()
 
         store.load()  # should restore primary from backup
@@ -173,9 +156,7 @@ class TestRecovery:
     def test_non_dict_primary_falls_back(self, store, sample_tree):
         """A YAML file that parses to a non-dict should be rejected."""
         store.save(sample_tree)
-        store.save(
-            {"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}}
-        )
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "Latest"}})
         store.path.write_text("- just\n- a\n- list\n", encoding="utf-8")
 
         loaded = store.load()
@@ -187,8 +168,8 @@ class TestRecovery:
 # Atomic write safety
 # ---------------------------------------------------------------------------
 
-class TestAtomicWrite:
 
+class TestAtomicWrite:
     def test_no_tmp_file_remains(self, store, sample_tree):
         store.save(sample_tree)
         tmp = store.path.with_suffix(store.path.suffix + ".tmp")
@@ -199,8 +180,8 @@ class TestAtomicWrite:
 # Directory creation
 # ---------------------------------------------------------------------------
 
-class TestDirectoryCreation:
 
+class TestDirectoryCreation:
     def test_creates_parent_dirs(self, tmp_path, sample_tree):
         deep_path = tmp_path / "a" / "b" / "c" / "state.yaml"
         s = PropertyStore(deep_path)
@@ -212,8 +193,8 @@ class TestDirectoryCreation:
 # delete()
 # ---------------------------------------------------------------------------
 
-class TestDelete:
 
+class TestDelete:
     def test_delete_removes_files(self, store, sample_tree):
         store.save(sample_tree)
         store.save(sample_tree)  # creates backup
@@ -229,8 +210,8 @@ class TestDelete:
 # repr
 # ---------------------------------------------------------------------------
 
-class TestRepr:
 
+class TestRepr:
     def test_repr(self, store):
         r = repr(store)
         assert "PropertyStore" in r

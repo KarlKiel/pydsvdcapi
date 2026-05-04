@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,7 +15,6 @@ from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,7 +44,7 @@ def _base_dsuid() -> DsUid:
     return DsUid.from_name_in_space("cv-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -116,9 +114,7 @@ class TestVdsdControlValues:
     async def test_set_control_value_with_group_and_zone(self):
         """Optional group and zone_id are stored."""
         _, _, _, vdsd = _make_stack()
-        await vdsd.set_control_value(
-            "heatingLevel", -50.0, group=8, zone_id=42
-        )
+        await vdsd.set_control_value("heatingLevel", -50.0, group=8, zone_id=42)
         entry = vdsd.get_control_value("heatingLevel")
         assert entry is not None
         assert entry["value"] == -50.0

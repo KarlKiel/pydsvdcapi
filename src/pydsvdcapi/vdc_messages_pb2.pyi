@@ -1,9 +1,10 @@
+from collections.abc import Mapping as _Mapping
+from typing import ClassVar as _ClassVar
+
 import vdcapi_pb2 as _vdcapi_pb2
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
-from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -57,6 +58,7 @@ class ErrorType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ERROR_TYPE_OVERLOADED: _ClassVar[ErrorType]
     ERROR_TYPE_DISCONNECTED: _ClassVar[ErrorType]
     ERROR_TYPE_UNIMPLEMENTED: _ClassVar[ErrorType]
+
 GENERIC_RESPONSE: Type
 VDSM_REQUEST_HELLO: Type
 VDC_RESPONSE_HELLO: Type
@@ -101,7 +103,35 @@ ERROR_TYPE_DISCONNECTED: ErrorType
 ERROR_TYPE_UNIMPLEMENTED: ErrorType
 
 class Message(_message.Message):
-    __slots__ = ("type", "message_id", "generic_response", "vdsm_request_hello", "vdc_response_hello", "vdsm_request_get_property", "vdc_response_get_property", "vdsm_request_set_property", "vdsm_request_generic_request", "vdsm_send_ping", "vdc_send_pong", "vdc_send_announce_device", "vdc_send_vanish", "vdc_send_push_notification", "vdsm_send_remove", "vdsm_send_bye", "vdc_send_announce_vdc", "vdsm_send_call_scene", "vdsm_send_save_scene", "vdsm_send_undo_scene", "vdsm_send_set_local_prio", "vdsm_send_call_min_scene", "vdsm_send_identify", "vdsm_send_set_control_value", "vdsm_send_dim_channel", "vdsm_send_output_channel_value", "vdc_send_identify")
+    __slots__ = (
+        "type",
+        "message_id",
+        "generic_response",
+        "vdsm_request_hello",
+        "vdc_response_hello",
+        "vdsm_request_get_property",
+        "vdc_response_get_property",
+        "vdsm_request_set_property",
+        "vdsm_request_generic_request",
+        "vdsm_send_ping",
+        "vdc_send_pong",
+        "vdc_send_announce_device",
+        "vdc_send_vanish",
+        "vdc_send_push_notification",
+        "vdsm_send_remove",
+        "vdsm_send_bye",
+        "vdc_send_announce_vdc",
+        "vdsm_send_call_scene",
+        "vdsm_send_save_scene",
+        "vdsm_send_undo_scene",
+        "vdsm_send_set_local_prio",
+        "vdsm_send_call_min_scene",
+        "vdsm_send_identify",
+        "vdsm_send_set_control_value",
+        "vdsm_send_dim_channel",
+        "vdsm_send_output_channel_value",
+        "vdc_send_identify",
+    )
     TYPE_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     GENERIC_RESPONSE_FIELD_NUMBER: _ClassVar[int]
@@ -156,7 +186,66 @@ class Message(_message.Message):
     vdsm_send_dim_channel: _vdcapi_pb2.vdsm_NotificationDimChannel
     vdsm_send_output_channel_value: _vdcapi_pb2.vdsm_NotificationSetOutputChannelValue
     vdc_send_identify: _vdcapi_pb2.vdc_SendIdentify
-    def __init__(self, type: _Optional[_Union[Type, str]] = ..., message_id: _Optional[int] = ..., generic_response: _Optional[_Union[GenericResponse, _Mapping]] = ..., vdsm_request_hello: _Optional[_Union[_vdcapi_pb2.vdsm_RequestHello, _Mapping]] = ..., vdc_response_hello: _Optional[_Union[_vdcapi_pb2.vdc_ResponseHello, _Mapping]] = ..., vdsm_request_get_property: _Optional[_Union[_vdcapi_pb2.vdsm_RequestGetProperty, _Mapping]] = ..., vdc_response_get_property: _Optional[_Union[_vdcapi_pb2.vdc_ResponseGetProperty, _Mapping]] = ..., vdsm_request_set_property: _Optional[_Union[_vdcapi_pb2.vdsm_RequestSetProperty, _Mapping]] = ..., vdsm_request_generic_request: _Optional[_Union[_vdcapi_pb2.vdsm_RequestGenericRequest, _Mapping]] = ..., vdsm_send_ping: _Optional[_Union[_vdcapi_pb2.vdsm_SendPing, _Mapping]] = ..., vdc_send_pong: _Optional[_Union[_vdcapi_pb2.vdc_SendPong, _Mapping]] = ..., vdc_send_announce_device: _Optional[_Union[_vdcapi_pb2.vdc_SendAnnounceDevice, _Mapping]] = ..., vdc_send_vanish: _Optional[_Union[_vdcapi_pb2.vdc_SendVanish, _Mapping]] = ..., vdc_send_push_notification: _Optional[_Union[_vdcapi_pb2.vdc_SendPushNotification, _Mapping]] = ..., vdsm_send_remove: _Optional[_Union[_vdcapi_pb2.vdsm_SendRemove, _Mapping]] = ..., vdsm_send_bye: _Optional[_Union[_vdcapi_pb2.vdsm_SendBye, _Mapping]] = ..., vdc_send_announce_vdc: _Optional[_Union[_vdcapi_pb2.vdc_SendAnnounceVdc, _Mapping]] = ..., vdsm_send_call_scene: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationCallScene, _Mapping]] = ..., vdsm_send_save_scene: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationSaveScene, _Mapping]] = ..., vdsm_send_undo_scene: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationUndoScene, _Mapping]] = ..., vdsm_send_set_local_prio: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationSetLocalPrio, _Mapping]] = ..., vdsm_send_call_min_scene: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationCallMinScene, _Mapping]] = ..., vdsm_send_identify: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationIdentify, _Mapping]] = ..., vdsm_send_set_control_value: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationSetControlValue, _Mapping]] = ..., vdsm_send_dim_channel: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationDimChannel, _Mapping]] = ..., vdsm_send_output_channel_value: _Optional[_Union[_vdcapi_pb2.vdsm_NotificationSetOutputChannelValue, _Mapping]] = ..., vdc_send_identify: _Optional[_Union[_vdcapi_pb2.vdc_SendIdentify, _Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        type: Type | str | None = ...,
+        message_id: int | None = ...,
+        generic_response: GenericResponse | _Mapping | None = ...,
+        vdsm_request_hello: _vdcapi_pb2.vdsm_RequestHello | _Mapping | None = ...,
+        vdc_response_hello: _vdcapi_pb2.vdc_ResponseHello | _Mapping | None = ...,
+        vdsm_request_get_property: _vdcapi_pb2.vdsm_RequestGetProperty
+        | _Mapping
+        | None = ...,
+        vdc_response_get_property: _vdcapi_pb2.vdc_ResponseGetProperty
+        | _Mapping
+        | None = ...,
+        vdsm_request_set_property: _vdcapi_pb2.vdsm_RequestSetProperty
+        | _Mapping
+        | None = ...,
+        vdsm_request_generic_request: _vdcapi_pb2.vdsm_RequestGenericRequest
+        | _Mapping
+        | None = ...,
+        vdsm_send_ping: _vdcapi_pb2.vdsm_SendPing | _Mapping | None = ...,
+        vdc_send_pong: _vdcapi_pb2.vdc_SendPong | _Mapping | None = ...,
+        vdc_send_announce_device: _vdcapi_pb2.vdc_SendAnnounceDevice
+        | _Mapping
+        | None = ...,
+        vdc_send_vanish: _vdcapi_pb2.vdc_SendVanish | _Mapping | None = ...,
+        vdc_send_push_notification: _vdcapi_pb2.vdc_SendPushNotification
+        | _Mapping
+        | None = ...,
+        vdsm_send_remove: _vdcapi_pb2.vdsm_SendRemove | _Mapping | None = ...,
+        vdsm_send_bye: _vdcapi_pb2.vdsm_SendBye | _Mapping | None = ...,
+        vdc_send_announce_vdc: _vdcapi_pb2.vdc_SendAnnounceVdc | _Mapping | None = ...,
+        vdsm_send_call_scene: _vdcapi_pb2.vdsm_NotificationCallScene
+        | _Mapping
+        | None = ...,
+        vdsm_send_save_scene: _vdcapi_pb2.vdsm_NotificationSaveScene
+        | _Mapping
+        | None = ...,
+        vdsm_send_undo_scene: _vdcapi_pb2.vdsm_NotificationUndoScene
+        | _Mapping
+        | None = ...,
+        vdsm_send_set_local_prio: _vdcapi_pb2.vdsm_NotificationSetLocalPrio
+        | _Mapping
+        | None = ...,
+        vdsm_send_call_min_scene: _vdcapi_pb2.vdsm_NotificationCallMinScene
+        | _Mapping
+        | None = ...,
+        vdsm_send_identify: _vdcapi_pb2.vdsm_NotificationIdentify
+        | _Mapping
+        | None = ...,
+        vdsm_send_set_control_value: _vdcapi_pb2.vdsm_NotificationSetControlValue
+        | _Mapping
+        | None = ...,
+        vdsm_send_dim_channel: _vdcapi_pb2.vdsm_NotificationDimChannel
+        | _Mapping
+        | None = ...,
+        vdsm_send_output_channel_value: _vdcapi_pb2.vdsm_NotificationSetOutputChannelValue
+        | _Mapping
+        | None = ...,
+        vdc_send_identify: _vdcapi_pb2.vdc_SendIdentify | _Mapping | None = ...,
+    ) -> None: ...
 
 class GenericResponse(_message.Message):
     __slots__ = ("code", "description", "errorType", "userMessageToBeTranslated")
@@ -168,4 +257,10 @@ class GenericResponse(_message.Message):
     description: str
     errorType: ErrorType
     userMessageToBeTranslated: str
-    def __init__(self, code: _Optional[_Union[ResultCode, str]] = ..., description: _Optional[str] = ..., errorType: _Optional[_Union[ErrorType, str]] = ..., userMessageToBeTranslated: _Optional[str] = ...) -> None: ...
+    def __init__(
+        self,
+        code: ResultCode | str | None = ...,
+        description: str | None = ...,
+        errorType: ErrorType | str | None = ...,
+        userMessageToBeTranslated: str | None = ...,
+    ) -> None: ...

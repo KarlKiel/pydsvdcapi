@@ -11,12 +11,10 @@ from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import (
     DEFAULT_VDC_PORT,
-    ENTITY_TYPE_VDC_HOST,
     VDC_SERVICE_TYPE,
     VdcHost,
 )
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # A fixed MAC for deterministic tests
@@ -28,8 +26,8 @@ TEST_MAC = "AA:BB:CC:DD:EE:FF"
 # Construction & defaults
 # ---------------------------------------------------------------------------
 
-class TestConstruction:
 
+class TestConstruction:
     def test_default_port(self):
         host = VdcHost(mac=TEST_MAC)
         assert host.port == DEFAULT_VDC_PORT
@@ -68,8 +66,8 @@ class TestConstruction:
 # dSUID derivation
 # ---------------------------------------------------------------------------
 
-class TestDsuidDerivation:
 
+class TestDsuidDerivation:
     def test_dsuid_derived_from_mac(self):
         host = VdcHost(mac=TEST_MAC)
         expected = DsUid.from_vdc_mac(TEST_MAC)
@@ -99,8 +97,8 @@ class TestDsuidDerivation:
 # Auto-derived properties
 # ---------------------------------------------------------------------------
 
-class TestDerivedProperties:
 
+class TestDerivedProperties:
     def test_hardware_guid_from_mac(self):
         host = VdcHost(mac=TEST_MAC)
         assert host.hardware_guid == f"macaddress:{TEST_MAC}"
@@ -132,8 +130,8 @@ class TestDerivedProperties:
 # Optional properties
 # ---------------------------------------------------------------------------
 
-class TestOptionalProperties:
 
+class TestOptionalProperties:
     def test_optional_fields_default_none(self):
         host = VdcHost(mac=TEST_MAC)
         assert host.model_version is None
@@ -165,8 +163,8 @@ class TestOptionalProperties:
 # Active state
 # ---------------------------------------------------------------------------
 
-class TestActiveState:
 
+class TestActiveState:
     def test_default_active(self):
         host = VdcHost(mac=TEST_MAC)
         assert host.active is True
@@ -181,8 +179,8 @@ class TestActiveState:
 # get_properties()
 # ---------------------------------------------------------------------------
 
-class TestGetProperties:
 
+class TestGetProperties:
     def test_returns_dict(self):
         host = VdcHost(mac=TEST_MAC, name="Test")
         props = host.get_properties()
@@ -192,7 +190,12 @@ class TestGetProperties:
         host = VdcHost(mac=TEST_MAC)
         props = host.get_properties()
         required = {
-            "dSUID", "displayId", "type", "model", "name", "active",
+            "dSUID",
+            "displayId",
+            "type",
+            "model",
+            "name",
+            "active",
         }
         assert required.issubset(props.keys())
 
@@ -214,8 +217,8 @@ class TestGetProperties:
 # Auto-detection of MAC (no MAC given)
 # ---------------------------------------------------------------------------
 
-class TestAutoMac:
 
+class TestAutoMac:
     def test_auto_mac_produces_valid_dsuid(self):
         """When no MAC is given, the host should still produce a valid
         dSUID from the auto-detected MAC."""
@@ -228,8 +231,8 @@ class TestAutoMac:
 # DNS-SD announcement (mocked zeroconf)
 # ---------------------------------------------------------------------------
 
-class TestAnnouncement:
 
+class TestAnnouncement:
     @pytest.mark.asyncio
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_announce_registers_service(self, MockAsyncZC):
@@ -351,8 +354,8 @@ class TestAnnouncement:
 # repr
 # ---------------------------------------------------------------------------
 
-class TestRepr:
 
+class TestRepr:
     def test_repr_contains_key_info(self):
         host = VdcHost(mac=TEST_MAC, name="TestHost")
         r = repr(host)
@@ -364,6 +367,7 @@ class TestRepr:
 # ---------------------------------------------------------------------------
 # remove handler (§6.3)
 # ---------------------------------------------------------------------------
+
 
 def _make_host_with_device():
     """Create a host → vdc → device → vdsd stack for remove tests."""
@@ -378,7 +382,9 @@ def _make_host_with_device():
     base = DsUid.from_name_in_space("remove-test", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=base)
     vdsd = Vdsd(
-        device=device, primary_group=ColorGroup.YELLOW, name="RemoveDev",
+        device=device,
+        primary_group=ColorGroup.YELLOW,
+        name="RemoveDev",
         model="Test vdSD",
     )
     device.add_vdsd(vdsd)
@@ -524,7 +530,8 @@ def _make_identify_notif_msg(
 
 
 def _make_identify_generic_msg(
-    dsuid_str: str, msg_id: int = 99,
+    dsuid_str: str,
+    msg_id: int = 99,
 ) -> "pb.Message":
     """Build a GenericRequest 'identify' protobuf message."""
     msg = pb.Message()
@@ -605,13 +612,17 @@ class TestHandleIdentifyNotification:
 
         base1 = DsUid.from_name_in_space("id-test-1", DsUidNamespace.VDC)
         dev1 = Device(vdc=vdc, dsuid=base1)
-        vdsd1 = Vdsd(device=dev1, primary_group=ColorGroup.YELLOW, name="Dev1", model="Test vdSD")
+        vdsd1 = Vdsd(
+            device=dev1, primary_group=ColorGroup.YELLOW, name="Dev1", model="Test vdSD"
+        )
         dev1.add_vdsd(vdsd1)
         vdc.add_device(dev1)
 
         base2 = DsUid.from_name_in_space("id-test-2", DsUidNamespace.VDC)
         dev2 = Device(vdc=vdc, dsuid=base2)
-        vdsd2 = Vdsd(device=dev2, primary_group=ColorGroup.YELLOW, name="Dev2", model="Test vdSD")
+        vdsd2 = Vdsd(
+            device=dev2, primary_group=ColorGroup.YELLOW, name="Dev2", model="Test vdSD"
+        )
         dev2.add_vdsd(vdsd2)
         vdc.add_device(dev2)
 

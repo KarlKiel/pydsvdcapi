@@ -36,10 +36,11 @@ Python → protobuf type mapping:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.vdcapi_pb2 import PropertyElement as _PropertyElement, PropertyValue as _PropertyValue
+from pydsvdcapi.vdcapi_pb2 import PropertyElement as _PropertyElement
+from pydsvdcapi.vdcapi_pb2 import PropertyValue as _PropertyValue
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel: name-only PropertyElement (no value field on the wire)
 # ---------------------------------------------------------------------------
+
 
 class _NoValue:
     """Sentinel indicating a PropertyElement should carry **only** a name.
@@ -57,9 +59,10 @@ class _NoValue:
     ``PropertyValue``).  This matches the p44-vdc behaviour for
     enumeration value-list entries in state/property descriptions.
     """
-    _instance: Optional["_NoValue"] = None
 
-    def __new__(cls) -> "_NoValue":
+    _instance: _NoValue | None = None
+
+    def __new__(cls) -> _NoValue:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -67,7 +70,7 @@ class _NoValue:
     def __repr__(self) -> str:  # pragma: no cover
         return "NO_VALUE"
 
-    def __bool__(self) -> bool:          # noqa: D105
+    def __bool__(self) -> bool:  # noqa: D105
         return False
 
 
@@ -80,7 +83,8 @@ NO_VALUE: _NoValue = _NoValue()
 # Python value → PropertyValue
 # ---------------------------------------------------------------------------
 
-def _to_property_value(value: Any) -> Optional[_PropertyValue]:
+
+def _to_property_value(value: Any) -> _PropertyValue | None:
     """Convert a Python value to a :class:`PropertyValue` protobuf.
 
     Returns ``None`` when *value* is :data:`NO_VALUE`, a ``dict``
@@ -121,14 +125,15 @@ def _to_property_value(value: Any) -> Optional[_PropertyValue]:
 # dict → PropertyElement list (full expansion)
 # ---------------------------------------------------------------------------
 
+
 def dict_to_elements(
-    properties: Dict[str, Any],
-) -> List[_PropertyElement]:
+    properties: dict[str, Any],
+) -> list[_PropertyElement]:
     """Convert a Python dict to a list of ``PropertyElement`` messages.
 
     Nested dicts become sub-elements; scalars become values.
     """
-    elements: List[_PropertyElement] = []
+    elements: list[_PropertyElement] = []
     for key, val in properties.items():
         elem = _PropertyElement()
         elem.name = str(key)
@@ -150,10 +155,11 @@ def dict_to_elements(
 # Query matching
 # ---------------------------------------------------------------------------
 
+
 def match_query(
-    properties: Dict[str, Any],
+    properties: dict[str, Any],
     query: Any,
-) -> List[_PropertyElement]:
+) -> list[_PropertyElement]:
     """Match an incoming property *query* against *properties*.
 
     Parameters
@@ -173,7 +179,7 @@ def match_query(
         silently dropped.  Wildcard queries (empty ``name``) expand
         to all available properties on that level.
     """
-    result: List[_PropertyElement] = []
+    result: list[_PropertyElement] = []
 
     for q_elem in query:
         name = q_elem.name
@@ -225,9 +231,10 @@ def match_query(
 # Building a complete GetProperty response message
 # ---------------------------------------------------------------------------
 
+
 def build_get_property_response(
     request: pb.Message,
-    properties: Dict[str, Any],
+    properties: dict[str, Any],
 ) -> pb.Message:
     """Build a ``VDC_RESPONSE_GET_PROPERTY`` from a request and dict.
 
@@ -269,6 +276,7 @@ def build_get_property_response(
 # setProperty helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_value(pv: _PropertyValue) -> Any:
     """Extract a Python value from a ``PropertyValue`` message.
 
@@ -291,7 +299,7 @@ def _extract_value(pv: _PropertyValue) -> Any:
 
 def elements_to_dict(
     elements: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Convert a sequence of ``PropertyElement`` messages to a Python dict.
 
     Nested elements are converted recursively.  This is the inverse of
@@ -302,7 +310,7 @@ def elements_to_dict(
     empty-name elements exist at the same level only the last one
     is kept.
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     for elem in elements:
         name = elem.name  # May be "" for wildcard.
         if len(elem.elements) > 0:
@@ -315,9 +323,9 @@ def elements_to_dict(
 
 
 def expand_setproperty_wildcards(
-    container: Dict[str, Any],
+    container: dict[str, Any],
     all_keys: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Expand wildcard (empty-name) entries for ``setProperty`` semantics.
 
     Per vDC API §7.1.2: *"If the name is specified empty, this is a
@@ -346,9 +354,7 @@ def expand_setproperty_wildcards(
         itself is removed from the result.
     """
     wildcard = container.get("")
-    result: Dict[str, Any] = {
-        k: v for k, v in container.items() if k != ""
-    }
+    result: dict[str, Any] = {k: v for k, v in container.items() if k != ""}
     if wildcard is not None:
         for key in all_keys:
             key_str = str(key)

@@ -24,21 +24,18 @@ Reference: plan44/p44vdc dsuid.cpp/hpp (GPL-3.0-or-later).
 from __future__ import annotations
 
 import hashlib
-import os
 import uuid
 from enum import IntEnum, unique
-from typing import Union
-
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 DSUID_BYTES = 17  # Total bytes in a dSUID
-UUID_BYTES = 16   # Bytes occupied by the UUID/EPC96 part
+UUID_BYTES = 16  # Bytes occupied by the UUID/EPC96 part
 
 SGTIN96_HEADER = 0x30  # 8-bit header for SGTIN-96 encoded dSUIDs
-GID96_HEADER = 0x35    # 8-bit header for GID-96 (legacy) encoded dSUIDs
+GID96_HEADER = 0x35  # 8-bit header for GID-96 (legacy) encoded dSUIDs
 
 # GCP bit-length lookup indexed by partition value (0-6).
 # Partition value + 1 = number of decimal digits for item reference
@@ -49,6 +46,7 @@ _GCP_BIT_LENGTH = (40, 37, 34, 30, 27, 24, 20)
 # ---------------------------------------------------------------------------
 # Well-known namespace UUIDs  (from p44vdc/dsuid.hpp)
 # ---------------------------------------------------------------------------
+
 
 class DsUidNamespace:
     """Pre-defined namespace UUIDs for UUIDv5-based dSUID generation."""
@@ -70,19 +68,22 @@ class DsUidNamespace:
 # dSUID type enumeration
 # ---------------------------------------------------------------------------
 
+
 @unique
 class DsUidType(IntEnum):
     """Type of the identifier encoded in a dSUID."""
+
     UNDEFINED = 0
-    GID = 1       # Legacy GID-96 encoded within dSUID
-    SGTIN = 2     # SGTIN-96 encoded within dSUID
-    UUID = 3      # UUID (v1/v4/v5) encoded within dSUID
-    OTHER = 4     # Not yet identified sub-type
+    GID = 1  # Legacy GID-96 encoded within dSUID
+    SGTIN = 2  # SGTIN-96 encoded within dSUID
+    UUID = 3  # UUID (v1/v4/v5) encoded within dSUID
+    OTHER = 4  # Not yet identified sub-type
 
 
 # ---------------------------------------------------------------------------
 # Main class
 # ---------------------------------------------------------------------------
+
 
 class DsUid:
     """A 17-byte digitalSTROM Unique Identifier.
@@ -105,8 +106,12 @@ class DsUid:
 
     def _detect_subtype(self) -> None:
         """Detect whether the raw bytes represent SGTIN-96, GID-96 or UUID."""
-        if (self._raw[6] == 0 and self._raw[7] == 0
-                and self._raw[8] == 0 and self._raw[9] == 0):
+        if (
+            self._raw[6] == 0
+            and self._raw[7] == 0
+            and self._raw[8] == 0
+            and self._raw[9] == 0
+        ):
             # EPC96 — bytes 6-9 are zero
             if self._raw[0] == SGTIN96_HEADER:
                 self._id_type = DsUidType.SGTIN
@@ -139,7 +144,6 @@ class DsUid:
         """
         obj = cls()
         cleaned = value.replace("-", "")
-        has_dashes = "-" in value
 
         if len(cleaned) not in (32, 34):
             raise ValueError(
@@ -165,7 +169,7 @@ class DsUid:
         return obj
 
     @classmethod
-    def from_bytes(cls, data: Union[bytes, bytearray]) -> DsUid:
+    def from_bytes(cls, data: bytes | bytearray) -> DsUid:
         """Create a :class:`DsUid` from a 17-byte binary representation.
 
         Parameters
@@ -179,9 +183,7 @@ class DsUid:
             If *data* is not exactly 17 bytes long.
         """
         if len(data) != DSUID_BYTES:
-            raise ValueError(
-                f"Expected {DSUID_BYTES} bytes, got {len(data)}"
-            )
+            raise ValueError(f"Expected {DSUID_BYTES} bytes, got {len(data)}")
         obj = cls()
         obj._raw[:] = data
         obj._detect_subtype()
@@ -275,9 +277,7 @@ class DsUid:
             Sub-device enumeration byte (0-255).
         """
         sgtin128 = f"(01){gtin}(21){serial}"
-        return cls.from_name_in_space(
-            sgtin128, DsUidNamespace.GS1_128, subdevice_index
-        )
+        return cls.from_name_in_space(sgtin128, DsUidNamespace.GS1_128, subdevice_index)
 
     @classmethod
     def from_sgtin96(
@@ -318,8 +318,7 @@ class DsUid:
             raise ValueError(f"Partition must be 0-6, got {partition}")
         if serial < 0 or serial.bit_length() > 38:
             raise ValueError(
-                f"Serial must be a positive integer fitting in 38 bits, "
-                f"got {serial}"
+                f"Serial must be a positive integer fitting in 38 bits, got {serial}"
             )
 
         obj = cls()
@@ -331,8 +330,8 @@ class DsUid:
 
         # Byte 1: filter (3 bits, fixed=1) | partition (3 bits) |
         #          top 2 bits of binary_gtin
-        obj._raw[1] = (0x01 << 5) | ((partition & 0x07) << 2) | (
-            (binary_gtin >> 42) & 0x03
+        obj._raw[1] = (
+            (0x01 << 5) | ((partition & 0x07) << 2) | ((binary_gtin >> 42) & 0x03)
         )
         # Bytes 2-5: next 32 bits of binary_gtin
         obj._raw[2] = (binary_gtin >> 34) & 0xFF
@@ -344,9 +343,7 @@ class DsUid:
 
         # Bytes 10-11: bottom 10 bits of GTIN + top 6 bits of serial
         obj._raw[10] = (binary_gtin >> 2) & 0xFF
-        obj._raw[11] = (
-            ((binary_gtin & 0x03) << 6) | ((serial >> 32) & 0x3F)
-        )
+        obj._raw[11] = ((binary_gtin & 0x03) << 6) | ((serial >> 32) & 0x3F)
 
         # Bytes 12-15: lower 32 bits of serial
         obj._raw[12] = (serial >> 24) & 0xFF
@@ -405,7 +402,7 @@ class DsUid:
         # manager (28 bits) -> bits 8..35
         epc[1] = (manager >> 20) & 0xFF
         epc[2] = (manager >> 12) & 0xFF
-        epc[3] = ((manager >> 4) & 0xFF)
+        epc[3] = (manager >> 4) & 0xFF
         # bottom 4 bits of manager + top 4 bits of object_class
         epc[4] = ((manager & 0x0F) << 4) | ((object_class >> 20) & 0x0F)
         epc[5] = (object_class >> 12) & 0xFF
@@ -489,7 +486,7 @@ class DsUid:
     @classmethod
     def from_enocean(
         cls,
-        address: Union[str, int],
+        address: str | int,
         subdevice_index: int = 0,
     ) -> DsUid:
         """Create a dSUID for an EnOcean device.
@@ -504,13 +501,8 @@ class DsUid:
         subdevice_index:
             Sub-device enumeration byte (0-255).
         """
-        if isinstance(address, int):
-            addr_str = f"{address:08X}"
-        else:
-            addr_str = address.upper()
-        return cls.from_name_in_space(
-            addr_str, DsUidNamespace.ENOCEAN, subdevice_index
-        )
+        addr_str = f"{address:08X}" if isinstance(address, int) else address.upper()
+        return cls.from_name_in_space(addr_str, DsUidNamespace.ENOCEAN, subdevice_index)
 
     @classmethod
     def random(cls, subdevice_index: int = 0) -> DsUid:
@@ -604,9 +596,7 @@ class DsUid:
             If the dSUID is not UUID-based.
         """
         if self._id_type not in (DsUidType.UUID, DsUidType.OTHER):
-            raise ValueError(
-                "Cannot interpret an EPC96-based dSUID as UUID"
-            )
+            raise ValueError("Cannot interpret an EPC96-based dSUID as UUID")
         return uuid.UUID(bytes=self.base_bytes)
 
     @property
@@ -665,6 +655,7 @@ class DsUid:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_mac(mac: str) -> bytes:
     """Parse a MAC address string into 6 bytes.

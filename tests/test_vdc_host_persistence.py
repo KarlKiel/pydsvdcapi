@@ -1,13 +1,8 @@
 """Integration tests for VdcHost ↔ PropertyStore persistence."""
 
-from pathlib import Path
-
-import pytest
 import yaml
 
-from pydsvdcapi.dsuid import DsUid
 from pydsvdcapi.vdc_host import VdcHost
-
 
 TEST_MAC = "AA:BB:CC:DD:EE:FF"
 
@@ -16,8 +11,8 @@ TEST_MAC = "AA:BB:CC:DD:EE:FF"
 # Save & restore round-trip
 # ---------------------------------------------------------------------------
 
-class TestVdcHostPersistence:
 
+class TestVdcHostPersistence:
     def test_save_creates_yaml(self, tmp_path):
         path = tmp_path / "host.yaml"
         host = VdcHost(mac=TEST_MAC, state_path=path, name="SaveTest")
@@ -64,9 +59,7 @@ class TestVdcHostPersistence:
     def test_explicit_params_override_persisted(self, tmp_path):
         path = tmp_path / "host.yaml"
 
-        VdcHost(
-            mac=TEST_MAC, state_path=path, name="Saved"
-        ).save()
+        VdcHost(mac=TEST_MAC, state_path=path, name="Saved").save()
 
         # Explicit name should override persisted name.
         host = VdcHost(state_path=path, name="Override")
@@ -95,8 +88,8 @@ class TestVdcHostPersistence:
 # Backup recovery through VdcHost
 # ---------------------------------------------------------------------------
 
-class TestVdcHostBackupRecovery:
 
+class TestVdcHostBackupRecovery:
     def test_corrupt_primary_recovers_from_backup(self, tmp_path):
         path = tmp_path / "host.yaml"
 
@@ -124,8 +117,8 @@ class TestVdcHostBackupRecovery:
 # Property tree structure
 # ---------------------------------------------------------------------------
 
-class TestPropertyTree:
 
+class TestPropertyTree:
     def test_tree_is_nested_dict(self, tmp_path):
         host = VdcHost(mac=TEST_MAC, state_path=tmp_path / "h.yaml")
         tree = host.get_property_tree()
@@ -144,10 +137,22 @@ class TestPropertyTree:
         )
         tree = host.get_property_tree()["vdcHost"]
         expected_keys = {
-            "dSUID", "mac", "port", "name", "model", "modelVersion",
-            "modelUID", "hardwareVersion", "hardwareGuid",
-            "hardwareModelGuid", "vendorName", "vendorGuid",
-            "oemGuid", "oemModelGuid", "configURL", "deviceIconName",
+            "dSUID",
+            "mac",
+            "port",
+            "name",
+            "model",
+            "modelVersion",
+            "modelUID",
+            "hardwareVersion",
+            "hardwareGuid",
+            "hardwareModelGuid",
+            "vendorName",
+            "vendorGuid",
+            "oemGuid",
+            "oemModelGuid",
+            "configURL",
+            "deviceIconName",
         }
         assert expected_keys.issubset(tree.keys())
 
@@ -162,8 +167,8 @@ class TestPropertyTree:
 # Reload (load method on existing instance)
 # ---------------------------------------------------------------------------
 
-class TestReload:
 
+class TestReload:
     def test_load_updates_existing_host(self, tmp_path):
         path = tmp_path / "host.yaml"
 

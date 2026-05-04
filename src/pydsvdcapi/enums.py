@@ -10,8 +10,6 @@ vDC API protocol, derived from the official documentation:
 """
 
 from enum import IntEnum, unique
-from typing import Dict, FrozenSet, Union
-
 
 # ---------------------------------------------------------------------------
 #  Protocol-level enums (from genericVDC.proto)
@@ -135,15 +133,15 @@ class ColorGroup(IntEnum):
     Both outdoor and indoor shades use ``GREY = 2``.
     """
 
-    YELLOW = 1   # gelb/Licht — Lights / Dimmers
-    GREY = 2     # grau/Schatten — Shades (outdoor and indoor)
-    BLUE = 3     # blau/Klima — All climate: heating, cooling, ventilation, windows, FCU
-    CYAN = 4     # cyan/Audio — Audio
+    YELLOW = 1  # gelb/Licht — Lights / Dimmers
+    GREY = 2  # grau/Schatten — Shades (outdoor and indoor)
+    BLUE = 3  # blau/Klima — All climate: heating, cooling, ventilation, windows, FCU
+    CYAN = 4  # cyan/Audio — Audio
     MAGENTA = 5  # magenta/Video — Video
-    RED = 6      # rot/Sicherheit — Security (deprecated)
-    GREEN = 7    # grün/Zugang — Access control (deprecated)
-    BLACK = 8    # schwarz/variabel — Joker / configurable
-    WHITE = 9    # weiß/Einzelgerät — Single device / appliance
+    RED = 6  # rot/Sicherheit — Security (deprecated)
+    GREEN = 7  # grün/Zugang — Access control (deprecated)
+    BLACK = 8  # schwarz/variabel — Joker / configurable
+    WHITE = 9  # weiß/Einzelgerät — Single device / appliance
 
 
 @unique
@@ -188,23 +186,26 @@ class ColorClass(IntEnum):
     +---------------+---------+------------------------------+--------------+
     """
 
-    NONE = 0                       # No specific application (WHITE single devices)
-    LIGHTS = 1                     # Room lights → primary channel: brightness
-    BLINDS = 2                     # Shades, curtains, blinds, awnings → shade position
-    HEATING = 3                    # Heating → primary channel: heatingPower
-    AUDIO = 4                      # Audio / music → primary channel: audioVolume
-    VIDEO = 5                      # Video / TV → primary channel: audioVolume
-    SECURITY = 6                   # Security / alarms [deprecated ColorGroup RED]
-    ACCESS = 7                     # Access control / door bells [deprecated ColorGroup GREEN]
-    JOKER = 8                      # Joker / configurable (BLACK)
-    COOLING = 9                    # Cooling → primary channel: coolingCapacity
-    VENTILATION = 10               # Room ventilation → primary channel: airFlowIntensity
-    WINDOW = 11                    # Window openers
-    RECIRCULATION = 12             # Recirculation / fan-coil units → airFlowIntensity
-    TEMPERATURE_CONTROL = 48       # Single-room temperature control (valid in groups)
-    APARTMENT_VENTILATION = 64     # Apartment-wide ventilation system (NOT valid in groups)
-    AWNINGS = 65                   # Awnings global app group (NOT valid in groups)
-    APARTMENT_RECIRCULATION = 69   # Apartment-wide recirculation (NOT valid in groups)
+    NONE = 0  # No specific application (WHITE single devices)
+    LIGHTS = 1  # Room lights → primary channel: brightness
+    BLINDS = 2  # Shades, curtains, blinds, awnings → shade position
+    HEATING = 3  # Heating → primary channel: heatingPower
+    AUDIO = 4  # Audio / music → primary channel: audioVolume
+    VIDEO = 5  # Video / TV → primary channel: audioVolume
+    SECURITY = 6  # Security / alarms [deprecated ColorGroup RED]
+    ACCESS = 7  # Access control / door bells [deprecated ColorGroup GREEN]
+    JOKER = 8  # Joker / configurable (BLACK)
+    COOLING = 9  # Cooling → primary channel: coolingCapacity
+    VENTILATION = 10  # Room ventilation → primary channel: airFlowIntensity
+    WINDOW = 11  # Window openers
+    RECIRCULATION = 12  # Recirculation / fan-coil units → airFlowIntensity
+    TEMPERATURE_CONTROL = 48  # Single-room temperature control (valid in groups)
+    APARTMENT_VENTILATION = (
+        64  # Apartment-wide ventilation system (NOT valid in groups)
+    )
+    AWNINGS = 65  # Awnings global app group (NOT valid in groups)
+    APARTMENT_RECIRCULATION = 69  # Apartment-wide recirculation (NOT valid in groups)
+
 
 # ---------------------------------------------------------------------------
 #  Scene numbers  (ds-basics Appendix B)
@@ -233,8 +234,8 @@ class SceneNumber(IntEnum):
     """
 
     # --- Presets 0–4 ---
-    PRESET_0 = 0           # Off
-    PRESET_1 = 5           # On
+    PRESET_0 = 0  # Off
+    PRESET_1 = 5  # On
     PRESET_2 = 17
     PRESET_3 = 18
     PRESET_4 = 19
@@ -387,25 +388,25 @@ class ApartmentScene(IntEnum):
     """
 
     # --- Access ---
-    PRESENT = 71             # residents came home (resets ABSENT)
-    ABSENT = 72              # residents left home
+    PRESENT = 71  # residents came home (resets ABSENT)
+    ABSENT = 72  # residents left home
 
     # --- Security ---
-    PANIC = 65               # undo via undo-scene
-    ALARM_1 = 74             # undo via undo-scene
-    FIRE = 76                # undo via undo-scene
-    ALARM_2 = 83             # undo via undo-scene
-    ALARM_3 = 84             # undo via undo-scene
-    ALARM_4 = 85             # undo via undo-scene
-    POLLUTION = 92           # undo via undo-scene
-    BURGLARY = 93            # undo via undo-scene
+    PANIC = 65  # undo via undo-scene
+    ALARM_1 = 74  # undo via undo-scene
+    FIRE = 76  # undo via undo-scene
+    ALARM_2 = 83  # undo via undo-scene
+    ALARM_3 = 84  # undo via undo-scene
+    ALARM_4 = 85  # undo via undo-scene
+    POLLUTION = 92  # undo via undo-scene
+    BURGLARY = 93  # undo via undo-scene
 
     # --- Weather ---
-    WIND = 86                # reset by NO_WIND
+    WIND = 86  # reset by NO_WIND
     NO_WIND = 87
-    RAIN = 88                # reset by NO_RAIN
+    RAIN = 88  # reset by NO_RAIN
     NO_RAIN = 89
-    HAIL = 90                # reset by NO_HAIL (must be called with force flag)
+    HAIL = 90  # reset by NO_HAIL (must be called with force flag)
     NO_HAIL = 91
 
 
@@ -427,15 +428,15 @@ class ZoneScene(IntEnum):
     implemented via binary-input events rather than scene commands.
     """
 
-    AUTO_STANDBY = 64        # zone auto-inactive
-    STANDBY = 67             # zone inactive, user may return soon
-    DEEP_OFF = 68            # zone inactive for longer time
+    AUTO_STANDBY = 64  # zone auto-inactive
+    STANDBY = 67  # zone inactive, user may return soon
+    DEEP_OFF = 68  # zone inactive for longer time
     SLEEPING = 69
     WAKEUP = 70
-    PRESENT = 71             # zone presence detected
-    ABSENT = 72              # zone presence cleared
-    DOOR_BELL = 73           # signal only, no state change
-    ZONE_ACTIVE = 75         # zone will become active shortly
+    PRESENT = 71  # zone presence detected
+    ABSENT = 72  # zone presence cleared
+    DOOR_BELL = 73  # signal only, no state change
+    ZONE_ACTIVE = 75  # zone will become active shortly
 
 
 # ---------------------------------------------------------------------------
@@ -524,11 +525,11 @@ class DeviceScene(IntEnum):
     MINIMUM = 13
     MAXIMUM = 14
     STOP = 15
-    AUTO_OFF = 40             # slowly fade down to off
-    IMPULSE = 41              # short impulse on output
-    DEVICE_OFF = 50           # local pushbutton off
-    DEVICE_ON = 51            # local pushbutton on
-    SUN_PROTECTION = 56       # shade protection
+    AUTO_OFF = 40  # slowly fade down to off
+    IMPULSE = 41  # short impulse on output
+    DEVICE_OFF = 50  # local pushbutton off
+    DEVICE_ON = 51  # local pushbutton on
+    SUN_PROTECTION = 56  # shade protection
 
 
 @unique
@@ -574,10 +575,10 @@ class ApartmentTemperatureMode(IntEnum):
     scene IDs control the global temperature operating mode.
     """
 
-    OFF = 0                   # temperature control off
-    HEATING = 1               # global heating mode
-    COOLING = 10              # global cooling mode
-    AUTOMATIC = 42            # automatic heating/cooling
+    OFF = 0  # temperature control off
+    HEATING = 1  # global heating mode
+    COOLING = 10  # global cooling mode
+    AUTOMATIC = 42  # automatic heating/cooling
 
 
 @unique
@@ -613,10 +614,10 @@ class ZoneTemperatureMode(IntEnum):
     ``TemperatureControlScene.HEATING_OFF`` which is scene 0.
     """
 
-    OFF = 30                  # power off climate device
-    HEATING = 1               # heating comfort
-    COOLING = 10              # cooling comfort
-    AUTOMATIC = 42            # automatic mode
+    OFF = 30  # power off climate device
+    HEATING = 1  # heating comfort
+    COOLING = 10  # cooling comfort
+    AUTOMATIC = 42  # automatic mode
 
 
 # ---------------------------------------------------------------------------
@@ -638,17 +639,17 @@ class OutputChannelType(IntEnum):
     IDs 192–239 are available for device-specific (proprietary) channels.
     """
 
-    DEFAULT = 0       # none / catch-all
+    DEFAULT = 0  # none / catch-all
     BRIGHTNESS = 1
     HUE = 2
     SATURATION = 3
-    COLOR_TEMPERATURE = 4   # mired (100–1000)
+    COLOR_TEMPERATURE = 4  # mired (100–1000)
     CIE_X = 5
     CIE_Y = 6
 
     # Shade / blind channels (ids 7–11)
-    SHADE_POSITION_OUTSIDE = 7    # roller blinds / external blinds, 0–100 %
-    SHADE_POSITION_INDOOR = 8     # curtains / indoor blinds, 0–100 %
+    SHADE_POSITION_OUTSIDE = 7  # roller blinds / external blinds, 0–100 %
+    SHADE_POSITION_INDOOR = 8  # curtains / indoor blinds, 0–100 %
     SHADE_OPENING_ANGLE_OUTSIDE = 9
     SHADE_OPENING_ANGLE_INDOOR = 10
     TRANSPARENCY = 11
@@ -839,42 +840,51 @@ class SensorUsage(IntEnum):
 #  Sensor type/usage validation  (ds-basics Table 23)
 # ---------------------------------------------------------------------------
 
-_DEVICE: FrozenSet[SensorUsage] = frozenset({
-    SensorUsage.DEVICE_LEVEL, SensorUsage.DEVICE_LAST_RUN, SensorUsage.DEVICE_AVERAGE,
-})
-_ROOM_OUTDOOR_DEVICE: FrozenSet[SensorUsage] = frozenset({
-    SensorUsage.ROOM, SensorUsage.OUTDOOR,
-    SensorUsage.DEVICE_LEVEL, SensorUsage.DEVICE_LAST_RUN, SensorUsage.DEVICE_AVERAGE,
-})
+_DEVICE: frozenset[SensorUsage] = frozenset(
+    {
+        SensorUsage.DEVICE_LEVEL,
+        SensorUsage.DEVICE_LAST_RUN,
+        SensorUsage.DEVICE_AVERAGE,
+    }
+)
+_ROOM_OUTDOOR_DEVICE: frozenset[SensorUsage] = frozenset(
+    {
+        SensorUsage.ROOM,
+        SensorUsage.OUTDOOR,
+        SensorUsage.DEVICE_LEVEL,
+        SensorUsage.DEVICE_LAST_RUN,
+        SensorUsage.DEVICE_AVERAGE,
+    }
+)
 
-SENSOR_TYPE_VALID_USAGES: Dict[SensorType, FrozenSet[SensorUsage]] = {
+SENSOR_TYPE_VALID_USAGES: dict[SensorType, frozenset[SensorUsage]] = {
     # Room + outdoor + device-level (ds-basics Table 23: rows for type 1/2/3)
-    SensorType.TEMPERATURE:  _ROOM_OUTDOOR_DEVICE,
-    SensorType.HUMIDITY:     _ROOM_OUTDOOR_DEVICE,
+    SensorType.TEMPERATURE: _ROOM_OUTDOOR_DEVICE,
+    SensorType.HUMIDITY: _ROOM_OUTDOOR_DEVICE,
     SensorType.ILLUMINATION: _ROOM_OUTDOOR_DEVICE,
     # Room only
-    SensorType.CO_CONCENTRATION:  frozenset({SensorUsage.ROOM}),
+    SensorType.CO_CONCENTRATION: frozenset({SensorUsage.ROOM}),
     SensorType.CO2_CONCENTRATION: frozenset({SensorUsage.ROOM}),
     # Outdoor only
-    SensorType.AIR_PRESSURE:       frozenset({SensorUsage.OUTDOOR}),
-    SensorType.WIND_SPEED:          frozenset({SensorUsage.OUTDOOR}),
-    SensorType.WIND_DIRECTION:      frozenset({SensorUsage.OUTDOOR}),
-    SensorType.WIND_GUST_SPEED:     frozenset({SensorUsage.OUTDOOR}),
+    SensorType.AIR_PRESSURE: frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_SPEED: frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_DIRECTION: frozenset({SensorUsage.OUTDOOR}),
+    SensorType.WIND_GUST_SPEED: frozenset({SensorUsage.OUTDOOR}),
     SensorType.WIND_GUST_DIRECTION: frozenset({SensorUsage.OUTDOOR}),
-    SensorType.PRECIPITATION:       frozenset({SensorUsage.OUTDOOR}),
+    SensorType.PRECIPITATION: frozenset({SensorUsage.OUTDOOR}),
     # Device-level only
-    SensorType.ACTIVE_POWER:           _DEVICE,
-    SensorType.ELECTRIC_CURRENT:       _DEVICE,
-    SensorType.ENERGY_METER:           _DEVICE,
-    SensorType.APPARENT_POWER:         _DEVICE,
-    SensorType.SOUND_PRESSURE_LEVEL:   _DEVICE,
+    SensorType.ACTIVE_POWER: _DEVICE,
+    SensorType.ELECTRIC_CURRENT: _DEVICE,
+    SensorType.ENERGY_METER: _DEVICE,
+    SensorType.APPARENT_POWER: _DEVICE,
+    SensorType.SOUND_PRESSURE_LEVEL: _DEVICE,
     SensorType.GENERATED_ACTIVE_POWER: _DEVICE,
-    SensorType.GENERATED_ENERGY:       _DEVICE,
-    SensorType.WATER_QUANTITY:         _DEVICE,
-    SensorType.WATER_FLOW_RATE:        _DEVICE,
-    SensorType.LENGTH:                 _DEVICE,
-    SensorType.MASS:                   _DEVICE,
-    SensorType.DURATION:               _DEVICE,
+    SensorType.GENERATED_ENERGY: _DEVICE,
+    SensorType.WATER_QUANTITY: _DEVICE,
+    SensorType.WATER_FLOW_RATE: _DEVICE,
+    SensorType.LENGTH: _DEVICE,
+    SensorType.MASS: _DEVICE,
+    SensorType.DURATION: _DEVICE,
 }
 
 
@@ -1045,16 +1055,16 @@ class ButtonFunction(IntEnum):
 class ButtonFunctionJoker(IntEnum):
     """Button function lower 4 bits when group=8 (Joker/Black) — ds-basics Table 55."""
 
-    ALARM     = 1   # alarm call
-    PANIC     = 2   # panic call
-    PRESENCE  = 3   # leave / come home (presence toggle)
-    DOOR_BELL = 5   # door bell call
-    APP       = 15  # freely assignable app button
+    ALARM = 1  # alarm call
+    PANIC = 2  # panic call
+    PRESENCE = 3  # leave / come home (presence toggle)
+    DOOR_BELL = 5  # door bell call
+    APP = 15  # freely assignable app button
 
 
 def button_function_for_group(
     group: int, value: int
-) -> Union[ButtonFunction, ButtonFunctionJoker, int]:
+) -> ButtonFunction | ButtonFunctionJoker | int:
     """Return the correct ButtonFunction enum for *group* and raw *value*.
 
     Group 8 (Joker/Black) uses Table 55; all other groups use Table 54.
@@ -1080,9 +1090,9 @@ class ButtonMode(IntEnum):
     static_cast<ButtonInputMode>(modeValue).
     """
 
-    STANDARD = 0          # 1-way push button
-    TURBO = 1             # 1-way turbo
-    SWITCHED = 2          # switched / toggle
+    STANDARD = 0  # 1-way push button
+    TURBO = 1  # 1-way turbo
+    SWITCHED = 2  # switched / toggle
 
     # 2-way paired inputs (down half + up half share one physical button)
     TWO_WAY_DOWN_PAIRED_1 = 5
@@ -1094,8 +1104,8 @@ class ButtonMode(IntEnum):
     TWO_WAY_UP_PAIRED_3 = 11
     TWO_WAY_UP_PAIRED_4 = 12
 
-    TWO_WAY = 13          # 2-way
-    ONE_WAY = 14          # 1-way (explicit)
+    TWO_WAY = 13  # 2-way
+    ONE_WAY = 14  # 1-way (explicit)
 
     # AKM (Aktor-Kontakt-Modul) modes
     AKM_STANDARD = 16
@@ -1107,8 +1117,8 @@ class ButtonMode(IntEnum):
     AKM_RISING_EDGE = 22
     AKM_FALLING_EDGE = 23
 
-    HEATING_PUSHBUTTON = 65   # 1-way heating push button
-    DEACTIVATED = 0xFF        # deactivated
+    HEATING_PUSHBUTTON = 65  # 1-way heating push button
+    DEACTIVATED = 0xFF  # deactivated
 
 
 @unique
@@ -1119,14 +1129,14 @@ class SensorGroup(IntEnum):
     Note: Joker/Black uses 0 in this field (not 8).
     """
 
-    JOKER = 0          # schwarz/Joker — generic / no group
-    LIGHT = 1          # gelb/Licht — lighting
-    SHADOW = 2         # grau/Schatten — shading / blinds
-    CLIMATE = 3        # blau/Klima — heating / climate
-    AUDIO = 4          # cyan/Audio — audio
-    VIDEO = 5          # magenta/Video — video
-    SECURITY = 6       # rot/Sicherheit — security
-    ACCESS = 7         # grün/Zugang — access control
+    JOKER = 0  # schwarz/Joker — generic / no group
+    LIGHT = 1  # gelb/Licht — lighting
+    SHADOW = 2  # grau/Schatten — shading / blinds
+    CLIMATE = 3  # blau/Klima — heating / climate
+    AUDIO = 4  # cyan/Audio — audio
+    VIDEO = 5  # magenta/Video — video
+    SECURITY = 6  # rot/Sicherheit — security
+    ACCESS = 7  # grün/Zugang — access control
 
 
 @unique
@@ -1137,14 +1147,14 @@ class BinaryInputGroup(IntEnum):
     Note: Joker/Black uses 8 in this field.
     """
 
-    LIGHT = 1          # gelb/Licht — lighting
-    SHADOW = 2         # grau/Schatten — shading / blinds
-    CLIMATE = 3        # blau/Klima — heating / climate
-    AUDIO = 4          # cyan/Audio — audio
-    VIDEO = 5          # magenta/Video — video
-    SECURITY = 6       # rot/Sicherheit — security
-    ACCESS = 7         # grün/Zugang — access control
-    JOKER = 8          # schwarz/Joker — generic / configurable
+    LIGHT = 1  # gelb/Licht — lighting
+    SHADOW = 2  # grau/Schatten — shading / blinds
+    CLIMATE = 3  # blau/Klima — heating / climate
+    AUDIO = 4  # cyan/Audio — audio
+    VIDEO = 5  # magenta/Video — video
+    SECURITY = 6  # rot/Sicherheit — security
+    ACCESS = 7  # grün/Zugang — access control
+    JOKER = 8  # schwarz/Joker — generic / configurable
 
 
 @unique
@@ -1154,18 +1164,18 @@ class ButtonGroup(IntEnum):
     Determines which colour group this button controls.
     """
 
-    LIGHT = 1          # gelb/hell — lighting
-    SHADOW = 2         # grau/Schatten — shading / blinds
-    CLIMATE = 3        # blau/Heizung — heating / climate
-    AUDIO = 4          # cyan/Audio — audio
-    VIDEO = 5          # magenta/Video — video
-    SECURITY = 6       # rot/Sicherheit — security
-    ACCESS = 7         # grün/Zugang — access control
-    JOKER = 8          # schwarz/variabel — joker / configurable
-    COOLING = 9        # blau/Kühlung — cooling
-    VENTILATION = 10   # blau/Lüftung — ventilation
-    WINDOW = 11        # blau/Fenster — window openers
-    TEMPERATURE = 48   # Raumtemperaturregelung — room temperature control
+    LIGHT = 1  # gelb/hell — lighting
+    SHADOW = 2  # grau/Schatten — shading / blinds
+    CLIMATE = 3  # blau/Heizung — heating / climate
+    AUDIO = 4  # cyan/Audio — audio
+    VIDEO = 5  # magenta/Video — video
+    SECURITY = 6  # rot/Sicherheit — security
+    ACCESS = 7  # grün/Zugang — access control
+    JOKER = 8  # schwarz/variabel — joker / configurable
+    COOLING = 9  # blau/Kühlung — cooling
+    VENTILATION = 10  # blau/Lüftung — ventilation
+    WINDOW = 11  # blau/Fenster — window openers
+    TEMPERATURE = 48  # Raumtemperaturregelung — room temperature control
 
 
 @unique
@@ -1208,7 +1218,7 @@ class OutputError(IntEnum):
     """Error status of an output."""
 
     OK = 0
-    LAMP_BROKEN = 1      # open circuit
+    LAMP_BROKEN = 1  # open circuit
     SHORT_CIRCUIT = 2
     OVERLOAD = 3
     BUS_CONNECTION = 4
@@ -1225,11 +1235,11 @@ class OutputError(IntEnum):
 class SceneEffect(IntEnum):
     """Transition effect when a scene is invoked."""
 
-    NONE = 0            # immediate
-    SMOOTH = 1          # normal transition
-    SLOW = 2            # slow transition
-    VERY_SLOW = 3       # very slow transition
-    ALERT = 4           # blink / alerting
+    NONE = 0  # immediate
+    SMOOTH = 1  # normal transition
+    SLOW = 2  # slow transition
+    VERY_SLOW = 3  # very slow transition
+    ALERT = 4  # blink / alerting
 
 
 # ---------------------------------------------------------------------------

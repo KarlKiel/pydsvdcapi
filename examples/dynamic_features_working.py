@@ -151,7 +151,7 @@ from pydsvdcapi import (
 from pydsvdcapi.actions import ActionParameter, DeviceActionDescription, StandardAction
 from pydsvdcapi.device_property import PROPERTY_TYPE_NUMERIC, DeviceProperty
 from pydsvdcapi.device_state import DeviceState
-from pydsvdcapi.enums import ColorClass, OutputUsage
+from pydsvdcapi.enums import ColorClass
 
 # ---------------------------------------------------------------------------
 # Configuration — EDIT THIS GTIN
@@ -160,7 +160,7 @@ from pydsvdcapi.enums import ColorClass, OutputUsage
 # Replace with a GTIN that exists in your dSS VdcDb device table.
 # The GTIN controls hasActions=True (Activities tab visibility).
 # Keep the gs1:(01) prefix; the firmware strips it internally.
-DEFAULT_GTIN = "gs1:(01)2345678901289"   # ← replace with your working GTIN
+DEFAULT_GTIN = "gs1:(01)2345678901289"  # ← replace with your working GTIN
 
 DEFAULT_PORT = 8444
 STATE_FILE = Path("/tmp/pydsvdcapi_dynamic_features_test.yaml")
@@ -169,21 +169,21 @@ STATE_FILE = Path("/tmp/pydsvdcapi_dynamic_features_test.yaml")
 # ANSI colour helpers
 # ---------------------------------------------------------------------------
 
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
-GREY   = "\033[90m"
-GREEN  = "\033[92m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+GREY = "\033[90m"
+GREEN = "\033[92m"
 YELLOW = "\033[93m"
-CYAN   = "\033[96m"
+CYAN = "\033[96m"
 MAGENTA = "\033[95m"
-RED    = "\033[91m"
+RED = "\033[91m"
 
 
 class ColourFormatter(logging.Formatter):
     LEVEL_COLOURS = {
-        logging.DEBUG:    GREY,
-        logging.WARNING:  YELLOW,
-        logging.ERROR:    RED,
+        logging.DEBUG: GREY,
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
         logging.CRITICAL: RED + BOLD,
     }
 
@@ -210,6 +210,7 @@ def info(msg: str) -> None:
 # Wait helper
 # ---------------------------------------------------------------------------
 
+
 async def wait_for_session(host: VdcHost, timeout: float = 120.0) -> None:
     deadline = time.monotonic() + timeout
     while host.session is None or not host.session.is_active:
@@ -223,11 +224,19 @@ async def wait_for_session(host: VdcHost, timeout: float = 120.0) -> None:
 # Device construction
 # ---------------------------------------------------------------------------
 
+
 def build_device(
     vdc: Vdc,
     gtin: str,
-) -> tuple[Device, Vdsd, DeviceState, DeviceState, DeviceEvent, DeviceProperty,
-           DeviceActionDescription]:
+) -> tuple[
+    Device,
+    Vdsd,
+    DeviceState,
+    DeviceState,
+    DeviceEvent,
+    DeviceProperty,
+    DeviceActionDescription,
+]:
     """Build a single VdSD with states, events, action, property."""
 
     dsuid = DsUid.from_name_in_space("dynamic-features-test-device", DsUidNamespace.VDC)
@@ -243,7 +252,7 @@ def build_device(
         vendor_guid="gs1:(01)0000000000000",
         hardware_guid="mac-address:DE:AD:BE:EF:CA:FE",
         hardware_model_guid="ean:(01)0000000000002",
-        primary_group=ColorClass.BLACK,   # Joker = BLACK
+        primary_group=ColorClass.BLACK,  # Joker = BLACK
         oem_model_guid=gtin,
         zone_id=0,
     )
@@ -353,10 +362,7 @@ def build_device(
     # ---- Action invocation callback ------------------------------------
     async def on_invoke(vdsd_ref: Vdsd, action_id: str, params: dict) -> None:
         mode = params.get("mode", "<none>")
-        info(
-            f"{MAGENTA}ACTION RECEIVED{RESET}  id='{action_id}'  "
-            f"mode='{mode}'"
-        )
+        info(f"{MAGENTA}ACTION RECEIVED{RESET}  id='{action_id}'  mode='{mode}'")
         # Reflect the action's mode into the operatingMode state.
         new_val = {"standby": 0, "running": 1}.get(mode, 2)
         await state_mode.update_value(new_val)
@@ -393,7 +399,9 @@ async def interactive_loop(
     loop = asyncio.get_running_loop()
 
     print(f"\n{BOLD}{CYAN}Interactive loop ready.{RESET}")
-    print(f"  {BOLD}Enter{RESET}  → cycle operatingMode + connectivity + update uptime property")
+    print(
+        f"  {BOLD}Enter{RESET}  → cycle operatingMode + connectivity + update uptime property"
+    )
     print(f"  {BOLD}e{RESET}      → raise testAlarm event")
     print(f"  {BOLD}q{RESET}      → quit\n")
 
@@ -407,8 +415,10 @@ async def interactive_loop(
 
         elif cmd == "e":
             await event.raise_event()
-            info(f"{YELLOW}EVENT raised{RESET}  'testAlarm'  "
-                 f"→ DeviceEventEvent fires in dSS")
+            info(
+                f"{YELLOW}EVENT raised{RESET}  'testAlarm'  "
+                f"→ DeviceEventEvent fires in dSS"
+            )
 
         else:
             # Cycle operatingMode
@@ -425,9 +435,7 @@ async def interactive_loop(
             _conn_idx = (_conn_idx + 1) % len(_CONN_SEQ)
             new_conn = _CONN_SEQ[_conn_idx]
             await state_conn.update_value(new_conn)
-            info(
-                f"{GREEN}STATE pushed{RESET}  connectivity   = '{new_conn}'"
-            )
+            info(f"{GREEN}STATE pushed{RESET}  connectivity   = '{new_conn}'")
 
             # Update uptime property
             uptime = round(time.monotonic() - _uptime_start, 0)
@@ -439,14 +447,23 @@ async def interactive_loop(
 # Main
 # ---------------------------------------------------------------------------
 
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
-                        help="TCP port to listen on (default: 8444)")
-    parser.add_argument("--gtin", default=DEFAULT_GTIN,
-                        help=f"GTIN for the VdSD (default: {DEFAULT_GTIN})")
-    parser.add_argument("--debug", action="store_true",
-                        help="Enable debug-level logging")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help="TCP port to listen on (default: 8444)",
+    )
+    parser.add_argument(
+        "--gtin",
+        default=DEFAULT_GTIN,
+        help=f"GTIN for the VdSD (default: {DEFAULT_GTIN})",
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable debug-level logging"
+    )
     args = parser.parse_args()
 
     setup_logging(debug=args.debug)
@@ -483,31 +500,35 @@ async def main() -> None:
     host.add_vdc(vdc)
 
     # ---- Build device --------------------------------------------------
-    device, vdsd, state_mode, state_conn, event, prop, action_desc = \
-        build_device(vdc, args.gtin)
+    device, vdsd, state_mode, state_conn, event, prop, action_desc = build_device(
+        vdc, args.gtin
+    )
 
     # ---- Print startup summary -----------------------------------------
     info("")
     info(f"{BOLD}Dynamic Features Test Device{RESET}")
     info(f"  GTIN            : {BOLD}{args.gtin}{RESET}")
-    info(f"  dynamicDefs     : {BOLD}True{RESET}  "
-         f"(descriptions from VDC, not VdcDb)")
+    info(f"  dynamicDefs     : {BOLD}True{RESET}  (descriptions from VDC, not VdcDb)")
     info(f"  Port            : {args.port}")
     info("")
     info(f"{BOLD}Device announces:{RESET}")
-    info(f"  States  : operatingMode (standby/running/error)")
-    info(f"            connectivity (offline/online/degraded)")
-    info(f"  Event   : testAlarm")
-    info(f"  Action  : setMode(mode=standby|running)")
-    info(f"  Property: uptimeSecs")
+    info("  States  : operatingMode (standby/running/error)")
+    info("            connectivity (offline/online/degraded)")
+    info("  Event   : testAlarm")
+    info("  Action  : setMode(mode=standby|running)")
+    info("  Property: uptimeSecs")
     info("")
     info(f"{BOLD}Expected dSS behavior:{RESET}")
-    info(f"  hasActions      : {'True (Activities tab visible)' if args.gtin else 'depends on GTIN'}")
-    info(f"  Descriptions    : from VDC (dynamicDefinitions=True)")
-    info(f"  State triggers  : DeviceStateEvent fires on push → event rules work")
-    info(f"  State conditions: only work if GTIN has matching state names in VdcDb")
-    info(f"  Events          : DeviceEventEvent fires → event rules work")
-    info(f"  Actions         : invokeDeviceAction dispatched to on_invoke_action callback")
+    info(
+        f"  hasActions      : {'True (Activities tab visible)' if args.gtin else 'depends on GTIN'}"
+    )
+    info("  Descriptions    : from VDC (dynamicDefinitions=True)")
+    info("  State triggers  : DeviceStateEvent fires on push → event rules work")
+    info("  State conditions: only work if GTIN has matching state names in VdcDb")
+    info("  Events          : DeviceEventEvent fires → event rules work")
+    info(
+        "  Actions         : invokeDeviceAction dispatched to on_invoke_action callback"
+    )
     info("")
 
     # ---- Start host ----------------------------------------------------

@@ -21,9 +21,9 @@ The ``TICK`` constant (seconds) controls the simulation resolution.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import random
-from typing import Optional
 
 from pydsvdcapi import (
     BinaryInput,
@@ -62,6 +62,7 @@ def _first_vdsd(device: Device) -> Vdsd:
 # Mock 1 — Simple pushbutton + on/off brightness
 # ===========================================================================
 
+
 class MockDevice1:
     """Simulates a simple on/off light with a single pushbutton.
 
@@ -76,7 +77,7 @@ class MockDevice1:
         self._vdsd = _first_vdsd(device)
         self._btn: ButtonInput = self._vdsd.button_inputs[0]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-1")
 
     def start(self) -> None:
@@ -85,10 +86,8 @@ class MockDevice1:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -102,7 +101,8 @@ class MockDevice1:
                     self._btn.release()
                     self._log.info(
                         "%s[1] Button%s click (press+release)",
-                        _CYN, _RST,
+                        _CYN,
+                        _RST,
                     )
                 cycle += 1
                 await asyncio.sleep(TICK)
@@ -113,6 +113,7 @@ class MockDevice1:
 # ===========================================================================
 # Mock 2 — 2-way button + dimmer (brightness + colour temperature)
 # ===========================================================================
+
 
 class MockDevice2:
     """Simulates a CT-dimmable light with a two-way rocker button.
@@ -129,7 +130,7 @@ class MockDevice2:
         self._btn_down: ButtonInput = self._vdsd.button_inputs[0]
         self._btn_up: ButtonInput = self._vdsd.button_inputs[1]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-2")
 
     def start(self) -> None:
@@ -138,10 +139,8 @@ class MockDevice2:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -156,7 +155,8 @@ class MockDevice2:
                     btn.release()
                     self._log.info(
                         "%s[2] Rocker%s %s click",
-                        _CYN, _RST,
+                        _CYN,
+                        _RST,
                         "UP" if btn is self._btn_up else "DOWN",
                     )
                 cycle += 1
@@ -168,6 +168,7 @@ class MockDevice2:
 # ===========================================================================
 # Mock 3 — Garage-door contact (binary) + blinds output
 # ===========================================================================
+
 
 class MockDevice3:
     """Simulates a garage-door contact and motorised blinds.
@@ -182,7 +183,7 @@ class MockDevice3:
         self._vdsd = _first_vdsd(device)
         self._bi: BinaryInput = self._vdsd.binary_inputs[0]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-3")
         self._door_open = False
         self._shade_pos = 0.0
@@ -194,10 +195,8 @@ class MockDevice3:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -210,19 +209,26 @@ class MockDevice3:
                     await self._bi.update_value(self._door_open)
                     self._log.info(
                         "%s[3] Garage door%s → %s",
-                        _CYN, _RST,
+                        _CYN,
+                        _RST,
                         "OPEN" if self._door_open else "closed",
                     )
 
                 # Drift shade position and blade angle.
-                self._shade_pos = max(0.0, min(
-                    100.0,
-                    self._shade_pos + random.uniform(-0.5, 0.5),
-                ))
-                self._blade_angle = max(0.0, min(
-                    100.0,
-                    self._blade_angle + random.uniform(-0.5, 0.5),
-                ))
+                self._shade_pos = max(
+                    0.0,
+                    min(
+                        100.0,
+                        self._shade_pos + random.uniform(-0.5, 0.5),
+                    ),
+                )
+                self._blade_angle = max(
+                    0.0,
+                    min(
+                        100.0,
+                        self._blade_angle + random.uniform(-0.5, 0.5),
+                    ),
+                )
                 ch_pos = self._output.get_channel_by_type(
                     OutputChannelType.SHADE_POSITION_OUTSIDE,
                 )
@@ -244,6 +250,7 @@ class MockDevice3:
 # Mock 4 — Illumination + Active-Power sensors + RGBW output
 # ===========================================================================
 
+
 class MockDevice4:
     """Simulates two sensors (illumination + active power) and RGBW output.
 
@@ -257,7 +264,7 @@ class MockDevice4:
         self._si_lux: SensorInput = self._vdsd.sensor_inputs[0]
         self._si_power: SensorInput = self._vdsd.sensor_inputs[1]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-4")
         # Simulated readings.
         self._lux = 350.0
@@ -276,10 +283,8 @@ class MockDevice4:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -288,31 +293,46 @@ class MockDevice4:
             while True:
                 # Push sensor readings every ~5 s.
                 if cycle % 10 == 0:
-                    self._lux = max(0.0, min(
-                        100_000.0,
-                        self._lux + random.uniform(-20.0, 20.0),
-                    ))
-                    self._watts = max(0.0, min(
-                        3680.0,
-                        self._watts + random.uniform(-2.0, 2.0),
-                    ))
+                    self._lux = max(
+                        0.0,
+                        min(
+                            100_000.0,
+                            self._lux + random.uniform(-20.0, 20.0),
+                        ),
+                    )
+                    self._watts = max(
+                        0.0,
+                        min(
+                            3680.0,
+                            self._watts + random.uniform(-2.0, 2.0),
+                        ),
+                    )
                     await self._si_lux.update_value(round(self._lux, 1))
                     await self._si_power.update_value(round(self._watts, 1))
                     self._log.info(
                         "%s[4] Sensors%s  lux=%.1f  power=%.1f W",
-                        _MAG, _RST, self._lux, self._watts,
+                        _MAG,
+                        _RST,
+                        self._lux,
+                        self._watts,
                     )
 
                 # Drift RGBW channels slowly.
-                self._brightness = max(0.0, min(
-                    100.0,
-                    self._brightness + random.uniform(-1.0, 1.0),
-                ))
+                self._brightness = max(
+                    0.0,
+                    min(
+                        100.0,
+                        self._brightness + random.uniform(-1.0, 1.0),
+                    ),
+                )
                 self._hue = (self._hue + random.uniform(-2.0, 2.0)) % 360.0
-                self._saturation = max(0.0, min(
-                    100.0,
-                    self._saturation + random.uniform(-1.0, 1.0),
-                ))
+                self._saturation = max(
+                    0.0,
+                    min(
+                        100.0,
+                        self._saturation + random.uniform(-1.0, 1.0),
+                    ),
+                )
 
                 ch_br = self._output.get_channel_by_type(OutputChannelType.BRIGHTNESS)
                 ch_hue = self._output.get_channel_by_type(OutputChannelType.HUE)
@@ -334,6 +354,7 @@ class MockDevice4:
 # Mock 5 — Custom property + event + action (SingleDevice / White)
 # ===========================================================================
 
+
 class MockDevice5:
     """Simulates a white (SingleDevice) with property, event, and action.
 
@@ -349,7 +370,7 @@ class MockDevice5:
         self._vdsd = _first_vdsd(device)
         self._prop: DeviceProperty = self._vdsd.device_properties[0]
         self._event: DeviceEvent = self._vdsd.device_events[0]
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-5")
         self._counter = 0.0
 
@@ -359,10 +380,8 @@ class MockDevice5:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -375,7 +394,9 @@ class MockDevice5:
                     await self._prop.update_value(self._counter)
                     self._log.info(
                         "%s[5] Property%s counter → %.0f",
-                        _MAG, _RST, self._counter,
+                        _MAG,
+                        _RST,
+                        self._counter,
                     )
                 cycle += 1
                 await asyncio.sleep(TICK)
@@ -387,5 +408,6 @@ class MockDevice5:
         await self._event.raise_event()
         self._log.info(
             "%s[5] Event%s 'customAlert' raised!",
-            _MAG, _RST,
+            _MAG,
+            _RST,
         )

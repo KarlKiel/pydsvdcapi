@@ -1,6 +1,6 @@
 # modelFeatures Reference
 
-> Source: `pyDSvDCAPI` library — `Vdsd.derive_model_features()` in
+> Source: `pydsvdcapi` library — `Vdsd.derive_model_features()` in
 > `src/pydsvdcapi/vdsd.py`.  
 > UI/firmware analysis: `dss-configurator-ui-composition.md`.
 

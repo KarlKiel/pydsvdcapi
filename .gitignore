@@ -208,3 +208,6 @@ __marimo__/
 
 # Documentation folder
 Documentation/
+
+# Examples pycache
+examples/__pycache__/

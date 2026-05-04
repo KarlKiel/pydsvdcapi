@@ -11,10 +11,10 @@ from pydsvdcapi.dsuid import (
     DsUidType,
 )
 
-
 # ---------------------------------------------------------------------------
 # Construction from string
 # ---------------------------------------------------------------------------
+
 
 class TestFromString:
     """Tests for DsUid.from_string()."""
@@ -56,8 +56,8 @@ class TestFromString:
 # Construction from bytes
 # ---------------------------------------------------------------------------
 
-class TestFromBytes:
 
+class TestFromBytes:
     def test_roundtrip(self):
         original = bytes(range(17))
         d = DsUid.from_bytes(original)
@@ -72,8 +72,8 @@ class TestFromBytes:
 # Construction from UUID
 # ---------------------------------------------------------------------------
 
-class TestFromUuid:
 
+class TestFromUuid:
     def test_from_uuid4(self):
         u = uuid.uuid4()
         d = DsUid.from_uuid(u)
@@ -97,8 +97,8 @@ class TestFromUuid:
 # Construction from name in namespace (UUIDv5)
 # ---------------------------------------------------------------------------
 
-class TestFromNameInSpace:
 
+class TestFromNameInSpace:
     def test_deterministic(self):
         d1 = DsUid.from_name_in_space("test", DsUidNamespace.ENOCEAN)
         d2 = DsUid.from_name_in_space("test", DsUidNamespace.ENOCEAN)
@@ -135,8 +135,8 @@ class TestFromNameInSpace:
 # Construction from GTIN + Serial (SGTIN-128 / method 2)
 # ---------------------------------------------------------------------------
 
-class TestFromGtinSerial:
 
+class TestFromGtinSerial:
     def test_deterministic(self):
         d1 = DsUid.from_gtin_serial("07640156791013", "12345")
         d2 = DsUid.from_gtin_serial("07640156791013", "12345")
@@ -166,8 +166,8 @@ class TestFromGtinSerial:
 # Construction from SGTIN-96 (method 1)
 # ---------------------------------------------------------------------------
 
-class TestFromSgtin96:
 
+class TestFromSgtin96:
     def test_header_byte(self):
         d = DsUid.from_sgtin96(gcp=123456, item_ref=1, partition=2, serial=1)
         assert d.raw[0] == 0x30
@@ -187,9 +187,7 @@ class TestFromSgtin96:
 
     def test_invalid_serial(self):
         with pytest.raises(ValueError, match="(?i)serial"):
-            DsUid.from_sgtin96(
-                gcp=1, item_ref=0, partition=0, serial=2**38
-            )
+            DsUid.from_sgtin96(gcp=1, item_ref=0, partition=0, serial=2**38)
 
     def test_subdevice(self):
         d = DsUid.from_sgtin96(
@@ -202,12 +200,10 @@ class TestFromSgtin96:
 # Construction from GID-96 (legacy)
 # ---------------------------------------------------------------------------
 
-class TestFromGid96:
 
+class TestFromGid96:
     def test_header_byte(self):
-        d = DsUid.from_gid96(
-            manager=0x04175FE, object_class=0, serial=0
-        )
+        d = DsUid.from_gid96(manager=0x04175FE, object_class=0, serial=0)
         assert d.raw[0] == 0x35
 
     def test_epc96_marker(self):
@@ -217,9 +213,7 @@ class TestFromGid96:
         assert d.raw[6:10] == b"\x00\x00\x00\x00"
 
     def test_id_type_is_gid(self):
-        d = DsUid.from_gid96(
-            manager=0x04175FE, object_class=0, serial=0
-        )
+        d = DsUid.from_gid96(manager=0x04175FE, object_class=0, serial=0)
         assert d.id_type == DsUidType.GID
 
     def test_mac_gid96_known_example(self):
@@ -243,8 +237,8 @@ class TestFromGid96:
 # vDC MAC-based dSUID
 # ---------------------------------------------------------------------------
 
-class TestFromVdcMac:
 
+class TestFromVdcMac:
     def test_is_uuid_type(self):
         d = DsUid.from_vdc_mac("AA:BB:CC:DD:EE:FF")
         assert d.id_type == DsUidType.UUID
@@ -266,8 +260,8 @@ class TestFromVdcMac:
 # EnOcean
 # ---------------------------------------------------------------------------
 
-class TestFromEnocean:
 
+class TestFromEnocean:
     def test_deterministic(self):
         d1 = DsUid.from_enocean("0512ABCD")
         d2 = DsUid.from_enocean(0x0512ABCD)
@@ -282,8 +276,8 @@ class TestFromEnocean:
 # Random (UUIDv4)
 # ---------------------------------------------------------------------------
 
-class TestRandom:
 
+class TestRandom:
     def test_unique(self):
         d1 = DsUid.random()
         d2 = DsUid.random()
@@ -306,8 +300,8 @@ class TestRandom:
 # Sub-device derivation
 # ---------------------------------------------------------------------------
 
-class TestDeriveSubdevice:
 
+class TestDeriveSubdevice:
     def test_same_base(self):
         parent = DsUid.random()
         child = parent.derive_subdevice(5)
@@ -324,6 +318,7 @@ class TestDeriveSubdevice:
 # ---------------------------------------------------------------------------
 # same_device / device_base
 # ---------------------------------------------------------------------------
+
 
 class TestSameDevice:
     """Tests for DsUid.same_device() — §5.2 multi-vdSD grouping."""
@@ -393,8 +388,8 @@ class TestDeviceBase:
 # Equality, hashing, ordering
 # ---------------------------------------------------------------------------
 
-class TestComparisons:
 
+class TestComparisons:
     def test_equal(self):
         s = "198C033E330755E78015F97AD093DD1C00"
         assert DsUid.from_string(s) == DsUid.from_string(s)
@@ -428,8 +423,8 @@ class TestComparisons:
 # repr / str
 # ---------------------------------------------------------------------------
 
-class TestRepr:
 
+class TestRepr:
     def test_str_length(self):
         d = DsUid.random()
         assert len(str(d)) == 34

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,13 +18,13 @@ from pydsvdcapi.button_input import (
 )
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import (
-    ColorGroup,
     ActionMode,
     ButtonClickType,
     ButtonElementID,
     ButtonFunction,
     ButtonMode,
     ButtonType,
+    ColorGroup,
     InputError,
 )
 from pydsvdcapi.property_handling import elements_to_dict
@@ -33,7 +32,6 @@ from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -63,7 +61,7 @@ def _base_dsuid() -> DsUid:
     return DsUid.from_name_in_space("btn-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -98,7 +96,7 @@ def _make_mock_session() -> MagicMock:
     return session
 
 
-def _scaffold() -> Tuple[VdcHost, Vdc, Device, Vdsd]:
+def _scaffold() -> tuple[VdcHost, Vdc, Device, Vdsd]:
     """Create the full host → vdc → device → vdsd chain."""
     host = _make_host()
     vdc = _make_vdc(host)
@@ -160,9 +158,7 @@ class TestButtonInputConstruction:
 
     def test_no_button_id(self):
         _, _, _, vdsd = _scaffold()
-        btn = ButtonInput(
-            vdsd=vdsd, ds_index=0, button_id=None, name="No ID"
-        )
+        btn = ButtonInput(vdsd=vdsd, ds_index=0, button_id=None, name="No ID")
         assert btn.button_id is None
 
     def test_click_detector_config(self):
@@ -318,9 +314,7 @@ class TestButtonInputDescriptionProperties:
 
     def test_description_without_button_id(self):
         _, _, _, vdsd = _scaffold()
-        btn = ButtonInput(
-            vdsd=vdsd, ds_index=0, button_id=None, name="No ID"
-        )
+        btn = ButtonInput(vdsd=vdsd, ds_index=0, button_id=None, name="No ID")
         desc = btn.get_description_properties()
         assert "buttonID" not in desc
 
@@ -555,9 +549,7 @@ class TestButtonInputPushNotifications:
 
         msg = session.send_notification.call_args[0][0]
         assert msg.type == pb.VDC_SEND_PUSH_NOTIFICATION
-        props = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
+        props = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
         assert "buttonInputStates" in props
         state = props["buttonInputStates"]["0"]
         assert state["value"] is False
@@ -576,9 +568,7 @@ class TestButtonInputPushNotifications:
         await btn.update_action(action_id=42, action_mode=ActionMode.FORCE)
 
         msg = session.send_notification.call_args[0][0]
-        props = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
+        props = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
         state = props["buttonInputStates"]["0"]
         assert state["actionId"] == 42
         assert state["actionMode"] == int(ActionMode.FORCE)
@@ -592,9 +582,7 @@ class TestButtonInputPushNotifications:
         session = _make_mock_session()
         vdsd._announced = True
         # Not stored session — pass explicitly.
-        await btn.update_click(
-            ButtonClickType.HOLD_START, value=True, session=session
-        )
+        await btn.update_click(ButtonClickType.HOLD_START, value=True, session=session)
         session.send_notification.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -603,9 +591,7 @@ class TestButtonInputPushNotifications:
         _, _, _, vdsd = _scaffold()
         btn = _make_button_input(vdsd)
         session = _make_mock_session()
-        session.send_notification = AsyncMock(
-            side_effect=ConnectionError("gone")
-        )
+        session.send_notification = AsyncMock(side_effect=ConnectionError("gone"))
         vdsd._announced = True
         btn._session = session
         # Should not raise.
@@ -695,9 +681,7 @@ class TestButtonInputPersistence:
 
     def test_property_tree_no_button_id(self):
         _, _, _, vdsd = _scaffold()
-        btn = ButtonInput(
-            vdsd=vdsd, ds_index=0, button_id=None, name="X"
-        )
+        btn = ButtonInput(vdsd=vdsd, ds_index=0, button_id=None, name="X")
         tree = btn.get_property_tree()
         assert "buttonID" not in tree
 
@@ -1014,7 +998,7 @@ class TestClickDetectorSingleClick:
     @pytest.mark.asyncio
     async def test_single_click_click_mode(self):
         """Short press → CLICK_1X after multi-click window."""
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1038,7 +1022,7 @@ class TestClickDetectorSingleClick:
     @pytest.mark.asyncio
     async def test_single_click_tip_mode(self):
         """Short press with use_tip_events → TIP_1X."""
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1061,7 +1045,7 @@ class TestClickDetectorDoubleClick:
 
     @pytest.mark.asyncio
     async def test_double_click(self):
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1087,7 +1071,7 @@ class TestClickDetectorDoubleClick:
 
     @pytest.mark.asyncio
     async def test_triple_click(self):
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1110,7 +1094,7 @@ class TestClickDetectorDoubleClick:
     @pytest.mark.asyncio
     async def test_quad_click_caps_at_3x(self):
         """4+ clicks in click mode cap at CLICK_3X."""
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1132,7 +1116,7 @@ class TestClickDetectorDoubleClick:
     @pytest.mark.asyncio
     async def test_quad_click_tip_mode(self):
         """4+ clicks in tip mode emit TIP_4X."""
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1158,7 +1142,7 @@ class TestClickDetectorHold:
 
     @pytest.mark.asyncio
     async def test_hold_start(self):
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1176,7 +1160,7 @@ class TestClickDetectorHold:
 
     @pytest.mark.asyncio
     async def test_hold_end(self):
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1195,7 +1179,7 @@ class TestClickDetectorHold:
 
     @pytest.mark.asyncio
     async def test_hold_repeat(self):
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1210,11 +1194,9 @@ class TestClickDetectorHold:
         cd.release()
         await asyncio.sleep(0)  # let ensure_future run
 
-        repeat_events = [
-            e for e in events if e[0] == ButtonClickType.HOLD_REPEAT
-        ]
+        repeat_events = [e for e in events if e[0] == ButtonClickType.HOLD_REPEAT]
         assert len(repeat_events) >= 1
-        for ct, val in repeat_events:
+        for _ct, val in repeat_events:
             assert val is True
 
         assert events[-1] == (ButtonClickType.HOLD_END, False)
@@ -1226,7 +1208,7 @@ class TestClickDetectorCombos:
     @pytest.mark.asyncio
     async def test_short_long(self):
         """One short press + hold → SHORT_LONG."""
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1247,9 +1229,7 @@ class TestClickDetectorCombos:
         await asyncio.sleep(0.1)  # past tip_timeout
         assert cd.state == "holding"
 
-        combo_events = [
-            e for e in events if e[0] == ButtonClickType.SHORT_LONG
-        ]
+        combo_events = [e for e in events if e[0] == ButtonClickType.SHORT_LONG]
         assert len(combo_events) == 1
         assert combo_events[0] == (ButtonClickType.SHORT_LONG, True)
 
@@ -1260,7 +1240,7 @@ class TestClickDetectorCombos:
     @pytest.mark.asyncio
     async def test_short_short_long(self):
         """Two short presses + hold → SHORT_SHORT_LONG."""
-        events: List[Tuple[ButtonClickType, bool]] = []
+        events: list[tuple[ButtonClickType, bool]] = []
 
         async def on_click(ct, val):
             events.append((ct, val))
@@ -1281,10 +1261,7 @@ class TestClickDetectorCombos:
         cd.press()
         await asyncio.sleep(0.1)
 
-        combo_events = [
-            e for e in events
-            if e[0] == ButtonClickType.SHORT_SHORT_LONG
-        ]
+        combo_events = [e for e in events if e[0] == ButtonClickType.SHORT_SHORT_LONG]
         assert len(combo_events) == 1
         assert combo_events[0] == (
             ButtonClickType.SHORT_SHORT_LONG,
@@ -1528,10 +1505,7 @@ class TestCreateButtonGroup:
         assert buttons[1].ds_index == 6
         assert buttons[1].button_element_id == ButtonElementID.UP
         assert all(b.button_id == 1 for b in buttons)
-        assert all(
-            b.button_type == ButtonType.TWO_WAY_PUSHBUTTON
-            for b in buttons
-        )
+        assert all(b.button_type == ButtonType.TWO_WAY_PUSHBUTTON for b in buttons)
 
     def test_settings_propagated(self):
         _, _, _, vdsd = _scaffold()
@@ -1582,9 +1556,7 @@ class TestCreateButtonGroup:
         )
         assert len(buttons) == 9
         element_ids = {b.button_element_id for b in buttons}
-        expected = set(
-            BUTTON_TYPE_ELEMENTS[ButtonType.EIGHT_WAY_WITH_CENTER]
-        )
+        expected = set(BUTTON_TYPE_ELEMENTS[ButtonType.EIGHT_WAY_WITH_CENTER])
         assert element_ids == expected
 
 

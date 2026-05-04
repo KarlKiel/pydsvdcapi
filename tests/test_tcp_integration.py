@@ -1,15 +1,12 @@
 """Tests for VdcHost TCP server integration."""
 
 import asyncio
-import struct
 
 import pytest
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
-from pydsvdcapi.session import SessionState
 from pydsvdcapi.vdc_host import VdcHost
-
 
 TEST_MAC = "AA:BB:CC:DD:EE:FF"
 VDSM_DSUID = "AABBCCDDEEFF00112233445566778899AA"
@@ -21,6 +18,7 @@ BIND = "127.0.0.1"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _connect_to_host(host: VdcHost):
     """Open a raw TCP connection to a running VdcHost and wrap it."""
@@ -55,8 +53,8 @@ def _bye_msg(msg_id=2):
 # Server lifecycle
 # ---------------------------------------------------------------------------
 
-class TestServerLifecycle:
 
+class TestServerLifecycle:
     @pytest.mark.asyncio
     async def test_start_and_stop(self):
         host = VdcHost(mac=TEST_MAC, port=0)
@@ -86,8 +84,8 @@ class TestServerLifecycle:
 # Hello handshake via real TCP
 # ---------------------------------------------------------------------------
 
-class TestTcpHello:
 
+class TestTcpHello:
     @pytest.mark.asyncio
     async def test_hello_over_tcp(self):
         host = VdcHost(mac=TEST_MAC, port=0)
@@ -132,8 +130,8 @@ class TestTcpHello:
 # Ping / Pong via real TCP
 # ---------------------------------------------------------------------------
 
-class TestTcpPingPong:
 
+class TestTcpPingPong:
     @pytest.mark.asyncio
     async def test_ping_pong_over_tcp(self):
         host = VdcHost(mac=TEST_MAC, port=0)
@@ -161,8 +159,8 @@ class TestTcpPingPong:
 # Bye via real TCP
 # ---------------------------------------------------------------------------
 
-class TestTcpBye:
 
+class TestTcpBye:
     @pytest.mark.asyncio
     async def test_bye_over_tcp(self):
         host = VdcHost(mac=TEST_MAC, port=0)
@@ -192,8 +190,8 @@ class TestTcpBye:
 # Message callback
 # ---------------------------------------------------------------------------
 
-class TestTcpCallback:
 
+class TestTcpCallback:
     @pytest.mark.asyncio
     async def test_on_message_callback(self):
         received = []
@@ -207,9 +205,7 @@ class TestTcpCallback:
             return resp
 
         host = VdcHost(mac=TEST_MAC, port=0)
-        await host.start(
-            announce=False, on_message=handler, bind_address=BIND
-        )
+        await host.start(announce=False, on_message=handler, bind_address=BIND)
 
         try:
             conn = await _connect_to_host(host)
@@ -242,8 +238,8 @@ class TestTcpCallback:
 # Connection replacement
 # ---------------------------------------------------------------------------
 
-class TestConnectionReplacement:
 
+class TestConnectionReplacement:
     @pytest.mark.asyncio
     async def test_new_connection_replaces_old(self):
         """A new TCP connection should close the old session."""

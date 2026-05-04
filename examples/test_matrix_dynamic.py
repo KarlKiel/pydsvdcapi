@@ -17,6 +17,7 @@ Usage::
 
     python examples/test_matrix_dynamic.py [--port PORT]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,6 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from pydsvdcapi import (
     ColorGroup,
@@ -49,6 +49,7 @@ from pydsvdcapi.output_channel import CHANNEL_SPECS, OutputChannel
 # Device configuration table
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DeviceConfig:
     name: str
@@ -63,14 +64,18 @@ class DeviceConfig:
     # Extra model features to add manually before derive_model_features()
     extra_features: list[str] = field(default_factory=list)
     # Optional GTIN
-    gtin: Optional[str] = None
+    gtin: str | None = None
     # Note for the summary
     note: str = ""
 
     @property
     def initial_channel_value(self) -> float:
         """Midpoint of the primary channel's range per CHANNEL_SPECS."""
-        ct = self.channel_types[0] if self.channel_types else OutputChannelType.BRIGHTNESS
+        ct = (
+            self.channel_types[0]
+            if self.channel_types
+            else OutputChannelType.BRIGHTNESS
+        )
         spec = CHANNEL_SPECS.get(ct)
         if spec is None:
             return 0.0
@@ -122,7 +127,7 @@ DEVICES: list[DeviceConfig] = [
         output_group=int(ColorGroup.MAGENTA),
         output_function=OutputFunction.POSITIONAL,
         channel_types=[
-            OutputChannelType.AUDIO_VOLUME,        # dsIndex=0: primary per ds-basics Table 7
+            OutputChannelType.AUDIO_VOLUME,  # dsIndex=0: primary per ds-basics Table 7
             OutputChannelType.POWER_STATE,
             OutputChannelType.VIDEO_INPUT_SOURCE,
             OutputChannelType.VIDEO_STATION,
@@ -179,21 +184,21 @@ STATE_FILE = Path("/tmp/pydsvdcapi_matrix_test.yaml")
 # Logging
 # ---------------------------------------------------------------------------
 
-RESET   = "\033[0m"
-BOLD    = "\033[1m"
-ANSI_GREY   = "\033[90m"
-GREEN   = "\033[92m"
-YELLOW  = "\033[93m"
-CYAN    = "\033[96m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+ANSI_GREY = "\033[90m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
 MAGENTA = "\033[95m"
-RED     = "\033[91m"
+RED = "\033[91m"
 
 
 class ColourFormatter(logging.Formatter):
     LEVEL_COLOURS = {
-        logging.DEBUG:    ANSI_GREY,
-        logging.WARNING:  YELLOW,
-        logging.ERROR:    RED,
+        logging.DEBUG: ANSI_GREY,
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
         logging.CRITICAL: RED + BOLD,
     }
 
@@ -220,6 +225,7 @@ def info(msg: str) -> None:
 # Wait helpers
 # ---------------------------------------------------------------------------
 
+
 async def wait_for_session(host: VdcHost, timeout: float = 120.0) -> None:
     deadline = time.monotonic() + timeout
     while host.session is None or not host.session.is_active:
@@ -233,18 +239,20 @@ async def wait_for_session(host: VdcHost, timeout: float = 120.0) -> None:
 # Per-device runtime state
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DeviceRuntime:
     cfg: DeviceConfig
     device: Device
     vdsd: Vdsd
     output: Output
-    channel: Optional[OutputChannel]
+    channel: OutputChannel | None
 
 
 # ---------------------------------------------------------------------------
 # Build one device
 # ---------------------------------------------------------------------------
+
 
 def build_device(vdc: Vdc, cfg: DeviceConfig) -> DeviceRuntime:
     dsuid = DsUid.from_name_in_space(cfg.name, DsUidNamespace.VDC)
@@ -295,13 +303,15 @@ def build_device(vdc: Vdc, cfg: DeviceConfig) -> DeviceRuntime:
         ch.confirm_applied()  # mark initial value as hardware-confirmed (age != null)
 
     # Bind the primary channel for later push.
-    channel: Optional[OutputChannel] = output.get_channel(0)
+    channel: OutputChannel | None = output.get_channel(0)
 
     # Log inbound value changes from the dSS.
     device_name = cfg.name  # close over for the callback
+
     async def on_applied(out: Output, updates: dict) -> None:
         for ch_type, val in updates.items():
             info(f"{YELLOW}SET{RESET}  {device_name}  {ch_type.name}={val:.2f}")
+
     output.on_channel_applied = on_applied
 
     # Manually add any extra features specified in the config
@@ -314,13 +324,15 @@ def build_device(vdc: Vdc, cfg: DeviceConfig) -> DeviceRuntime:
         vdsd.add_model_feature("highlevel")
     vdsd.derive_model_features()
 
-    return DeviceRuntime(cfg=cfg, device=device, vdsd=vdsd, output=output,
-                         channel=channel)
+    return DeviceRuntime(
+        cfg=cfg, device=device, vdsd=vdsd, output=output, channel=channel
+    )
 
 
 # ---------------------------------------------------------------------------
 # Interactive loop
 # ---------------------------------------------------------------------------
+
 
 async def interactive_loop(runtimes: list[DeviceRuntime]) -> None:
     loop = asyncio.get_running_loop()
@@ -340,6 +352,7 @@ async def interactive_loop(runtimes: list[DeviceRuntime]) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -385,19 +398,25 @@ async def main() -> None:
     info(f"{BOLD}Device matrix:{RESET}")
     hdr = f"  {'#':<2}  {'Name':<26}  {'ColorClass':<18}  {'Fn':>2}  {'Channel':<28}  {'GTIN'}"
     info(hdr)
-    info(f"  {'─'*2}  {'─'*26}  {'─'*18}  {'─'*2}  {'─'*28}  {'─'*24}")
+    info(f"  {'─' * 2}  {'─' * 26}  {'─' * 18}  {'─' * 2}  {'─' * 28}  {'─' * 24}")
     for i, rt in enumerate(runtimes, 1):
         c = rt.cfg
         fn = int(c.output_function)
-        ch = "+".join(ct.name for ct in c.channel_types) if c.channel_types else "(auto)"
+        ch = (
+            "+".join(ct.name for ct in c.channel_types) if c.channel_types else "(auto)"
+        )
         gtin = c.gtin or "(none)"
-        info(f"  {i:<2}  {c.name:<26}  {c.color_class.name:<18}  {fn:>2}  {ch:<28}  {gtin}")
+        info(
+            f"  {i:<2}  {c.name:<26}  {c.color_class.name:<18}  {fn:>2}  {ch:<28}  {gtin}"
+        )
     info("")
-    info(f"  Notes:")
+    info("  Notes:")
     for i, rt in enumerate(runtimes, 1):
         info(f"    {i}. {rt.cfg.note}")
     info("")
-    info(f"dynamicDefinitions=True · {len(runtimes)} devices covering fn=1,2,3,4,6 and multi-channel configs")
+    info(
+        f"dynamicDefinitions=True · {len(runtimes)} devices covering fn=1,2,3,4,6 and multi-channel configs"
+    )
     info("")
 
     # ---- Start host and wait for session ----------------------------

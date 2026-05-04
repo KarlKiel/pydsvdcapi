@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.device_state import DeviceState
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.enums import ColorGroup, OutputFunction, OutputUsage
-from pydsvdcapi.output import Output
+from pydsvdcapi.enums import ColorGroup
 from pydsvdcapi.property_handling import NO_VALUE, elements_to_dict
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -45,12 +42,10 @@ def _make_vdc(host: VdcHost, **kwargs: Any) -> Vdc:
 
 
 def _base_dsuid() -> DsUid:
-    return DsUid.from_name_in_space(
-        "state-test-device", DsUidNamespace.VDC
-    )
+    return DsUid.from_name_in_space("state-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -95,7 +90,9 @@ class TestDeviceStateConstruction:
     def test_default_construction(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="operatingState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="operatingState",
             options={0: "Off", 1: "Running"},
         )
 
@@ -109,7 +106,9 @@ class TestDeviceStateConstruction:
     def test_full_construction(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=2, name="errorState",
+            vdsd=vdsd,
+            ds_index=2,
+            name="errorState",
             options={0: "OK", 1: "Warning", 2: "Error"},
             description="Current error state",
         )
@@ -181,7 +180,9 @@ class TestDeviceStateDescriptionProperties:
     def test_minimal(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             options={0: "Off", 1: "On"},
         )
         desc = st.get_description_properties()
@@ -192,7 +193,9 @@ class TestDeviceStateDescriptionProperties:
     def test_with_description(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             options={0: "Off"},
             description="A test state",
         )
@@ -236,7 +239,9 @@ class TestDeviceStateProperties:
     def test_value_returns_label(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Running", 2: "Error"},
         )
         st.value = 1
@@ -247,7 +252,9 @@ class TestDeviceStateProperties:
     def test_value_returns_label_for_all_options(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Running", 2: "Error"},
         )
         for key, expected in {0: "Off", 1: "Running", 2: "Error"}.items():
@@ -277,7 +284,9 @@ class TestDeviceStatePersistence:
     def test_get_property_tree_full(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=1, name="opState",
+            vdsd=vdsd,
+            ds_index=1,
+            name="opState",
             options={0: "Off", 1: "Init", 2: "Running"},
             description="Operating state",
         )
@@ -299,7 +308,9 @@ class TestDeviceStatePersistence:
         """Persist → restore preserves description props."""
         _, _, _, vdsd = _make_stack()
         orig = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Running"},
             description="My state",
         )
@@ -318,7 +329,9 @@ class TestDeviceStatePersistence:
         """Only provided fields are updated."""
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="original",
+            vdsd=vdsd,
+            ds_index=0,
+            name="original",
             options={0: "A"},
         )
         st._apply_state({"name": "updated"})
@@ -337,7 +350,9 @@ class TestVdsdDeviceStateManagement:
     def test_add_and_get(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             options={0: "Off", 1: "On"},
         )
         vdsd.add_device_state(st)
@@ -392,10 +407,12 @@ class TestVdsdDeviceStateManagement:
 
     def test_multiple_states(self):
         _, _, _, vdsd = _make_stack()
-        st0 = DeviceState(vdsd=vdsd, ds_index=0, name="state0",
-                          options={0: "Off", 1: "On"})
-        st1 = DeviceState(vdsd=vdsd, ds_index=1, name="state1",
-                          options={0: "Low", 1: "High"})
+        st0 = DeviceState(
+            vdsd=vdsd, ds_index=0, name="state0", options={0: "Off", 1: "On"}
+        )
+        st1 = DeviceState(
+            vdsd=vdsd, ds_index=1, name="state1", options={0: "Low", 1: "High"}
+        )
         vdsd.add_device_state(st0)
         vdsd.add_device_state(st1)
 
@@ -421,7 +438,9 @@ class TestVdsdDeviceStateProperties:
     def test_with_states(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "On"},
             description="Operating state",
         )
@@ -445,7 +464,9 @@ class TestVdsdDeviceStateProperties:
     def test_with_value_set(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "On"},
         )
         st.value = 1
@@ -467,7 +488,9 @@ class TestVdsdDeviceStatePersistence:
     def test_property_tree_includes_states(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Running"},
             description="test",
         )
@@ -481,7 +504,9 @@ class TestVdsdDeviceStatePersistence:
     def test_apply_state_restores_states(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Running"},
         )
         vdsd.add_device_state(st)
@@ -506,12 +531,16 @@ class TestVdsdDeviceStatePersistence:
         """get_property_tree → new vdsd._apply_state roundtrip."""
         _, _, _, vdsd1 = _make_stack()
         st0 = DeviceState(
-            vdsd=vdsd1, ds_index=0, name="opState",
+            vdsd=vdsd1,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Init", 2: "Running"},
             description="Operating state",
         )
         st1 = DeviceState(
-            vdsd=vdsd1, ds_index=1, name="errorState",
+            vdsd=vdsd1,
+            ds_index=1,
+            name="errorState",
             options={0: "OK", 1: "Error"},
         )
         vdsd1.add_device_state(st0)
@@ -546,7 +575,9 @@ class TestDeviceStateUpdateValue:
     async def test_update_value_pushes(self):
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "On"},
         )
         vdsd.add_device_state(st)
@@ -566,9 +597,7 @@ class TestDeviceStateUpdateValue:
         assert msg.vdc_send_push_notification.dSUID == str(vdsd.dsuid)
 
         # Decode the pushed properties.
-        pushed = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
+        pushed = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
         assert "deviceStates" in pushed
         assert "0" in pushed["deviceStates"]
         assert pushed["deviceStates"]["0"]["name"] == "opState"
@@ -603,7 +632,9 @@ class TestDeviceStateUpdateValue:
         """A text label is resolved to the integer option key."""
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Init", 2: "Running"},
         )
         vdsd._announced = True
@@ -617,7 +648,9 @@ class TestDeviceStateUpdateValue:
         """An unknown text label raises ValueError."""
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "On"},
         )
         with pytest.raises(ValueError, match="unknown option label"):
@@ -650,9 +683,7 @@ class TestDeviceStateUpdateValue:
         _, _, _, vdsd = _make_stack()
         st = DeviceState(vdsd=vdsd, ds_index=0, name="test")
         session = _make_mock_session()
-        session.send_notification = AsyncMock(
-            side_effect=ConnectionError("lost")
-        )
+        session.send_notification = AsyncMock(side_effect=ConnectionError("lost"))
         vdsd._announced = True
         vdsd._session = session
 
@@ -686,8 +717,9 @@ class TestVdsdUpdateDeviceState:
     @pytest.mark.asyncio
     async def test_update_device_state(self):
         _, _, _, vdsd = _make_stack()
-        st = DeviceState(vdsd=vdsd, ds_index=0, name="test",
-                         options={0: "Off", 1: "On"})
+        st = DeviceState(
+            vdsd=vdsd, ds_index=0, name="test", options={0: "Off", 1: "On"}
+        )
         vdsd.add_device_state(st)
         vdsd._announced = True
         vdsd._session = _make_mock_session()
@@ -706,7 +738,9 @@ class TestVdsdUpdateDeviceState:
         """Setting value via property with a text label resolves to int."""
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="opState",
+            vdsd=vdsd,
+            ds_index=0,
+            name="opState",
             options={0: "Off", 1: "Init", 2: "Running"},
         )
         st.value = "Running"

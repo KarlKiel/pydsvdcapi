@@ -8,7 +8,6 @@ import pytest
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import MAX_MESSAGE_LENGTH, VdcConnection
 
-
 # ---------------------------------------------------------------------------
 # Helpers — in-memory streams for testing without real sockets
 # ---------------------------------------------------------------------------
@@ -63,8 +62,8 @@ def _make_pair():
 # Framing round-trip
 # ---------------------------------------------------------------------------
 
-class TestFramingRoundtrip:
 
+class TestFramingRoundtrip:
     @pytest.mark.asyncio
     async def test_send_receive_hello_request(self):
         client, server = _make_pair()
@@ -146,8 +145,8 @@ class TestFramingRoundtrip:
 # Edge cases
 # ---------------------------------------------------------------------------
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_close_marks_connection(self):
         client, server = _make_pair()
@@ -217,8 +216,8 @@ class TestEdgeCases:
 # repr / peername
 # ---------------------------------------------------------------------------
 
-class TestRepr:
 
+class TestRepr:
     @pytest.mark.asyncio
     async def test_repr_shows_state(self):
         client, _ = _make_pair()

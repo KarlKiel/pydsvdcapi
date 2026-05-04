@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from typing import Optional
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 
@@ -93,8 +92,7 @@ class VdcConnection:
         length = len(payload)
         if length > MAX_MESSAGE_LENGTH:
             raise ValueError(
-                f"Message too large: {length} bytes "
-                f"(max {MAX_MESSAGE_LENGTH})"
+                f"Message too large: {length} bytes (max {MAX_MESSAGE_LENGTH})"
             )
 
         header = struct.pack(_HEADER_FMT, length)
@@ -111,7 +109,7 @@ class VdcConnection:
 
     # ---- receive -----------------------------------------------------
 
-    async def receive(self) -> Optional[pb.Message]:
+    async def receive(self) -> pb.Message | None:
         """Read and deserialize the next message from the socket.
 
         Returns

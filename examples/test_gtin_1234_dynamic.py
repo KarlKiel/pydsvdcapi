@@ -24,6 +24,7 @@ Usage::
 
     python examples/test_gtin_1234_dynamic.py [--port PORT]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,7 +51,7 @@ from pydsvdcapi import (
 from pydsvdcapi.actions import ActionParameter, CustomAction, DeviceActionDescription
 from pydsvdcapi.device_property import PROPERTY_TYPE_NUMERIC, DeviceProperty
 from pydsvdcapi.device_state import DeviceState
-from pydsvdcapi.enums import ColorClass, OutputUsage
+from pydsvdcapi.enums import ColorClass
 
 # ---------------------------------------------------------------------------
 # Config
@@ -108,6 +109,7 @@ def info(msg: str) -> None:
 # Wait helpers
 # ---------------------------------------------------------------------------
 
+
 async def wait_for_session(host: VdcHost, timeout: float = 120.0) -> None:
     deadline = time.monotonic() + timeout
     while host.session is None or not host.session.is_active:
@@ -121,9 +123,18 @@ async def wait_for_session(host: VdcHost, timeout: float = 120.0) -> None:
 # Build device
 # ---------------------------------------------------------------------------
 
-def build_device(vdc: Vdc) -> tuple[Device, Vdsd, DeviceState, DeviceState,
-                                    DeviceEvent, DeviceProperty,
-                                    DeviceActionDescription]:
+
+def build_device(
+    vdc: Vdc,
+) -> tuple[
+    Device,
+    Vdsd,
+    DeviceState,
+    DeviceState,
+    DeviceEvent,
+    DeviceProperty,
+    DeviceActionDescription,
+]:
     """Create the test device with two states, action, event, property."""
 
     dsuid = DsUid.from_name_in_space("gtin-1234-test-device", DsUidNamespace.VDC)
@@ -307,6 +318,7 @@ async def interactive_loop(
 # Main
 # ---------------------------------------------------------------------------
 
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -337,7 +349,7 @@ async def main() -> None:
         capabilities=VdcCapabilities(
             metering=False,
             identification=True,
-            dynamic_definitions=True,        # ← key setting under test
+            dynamic_definitions=True,  # ← key setting under test
         ),
     )
     host.add_vdc(vdc)
@@ -349,23 +361,31 @@ async def main() -> None:
     info(f"dynamic_definitions : {BOLD}True{RESET}")
     info("")
     info("Device features defined by this VDC:")
-    info(f"  State   : pyVDC_State   (options: idle / running / error)")
-    info(f"  State   : pyVDC_Mode    (options: off / auto / manual)")
-    info(f"  Action  : pyVDC_Action  (param: level 0–100 %)")
-    info(f"  Event   : pyVDC_Event")
-    info(f"  Property: pyVDC_Property (0–1000 ppm)")
+    info("  State   : pyVDC_State   (options: idle / running / error)")
+    info("  State   : pyVDC_Mode    (options: off / auto / manual)")
+    info("  Action  : pyVDC_Action  (param: level 0–100 %)")
+    info("  Event   : pyVDC_Event")
+    info("  Property: pyVDC_Property (0–1000 ppm)")
     info("")
     info("DB-defined features for GTIN 1234567890123:")
-    info(f"  State   : dummyState    (options: d / mm / u / y)")
-    info(f"  Property: dummyProperty (string)")
-    info(f"  Actions : dummyAction1, dummyAction2, …")
-    info(f"  Events  : dummyEventOther, dummyEventUI2, Nochnevent")
+    info("  State   : dummyState    (options: d / mm / u / y)")
+    info("  Property: dummyProperty (string)")
+    info("  Actions : dummyAction1, dummyAction2, …")
+    info("  Events  : dummyEventOther, dummyEventUI2, Nochnevent")
     info("")
     info("Observed behaviour (dynamicDefinitions=True + GTIN with DB state row):")
-    info("  Condition/trigger picker: shows pyVDC_State / pyVDC_Mode (dynamicDefs overrides DB)")
-    info("  Hardware tab status    : shows pushed state values correctly (m_data->states path)")
-    info("  Automation evaluation  : FAILS — /usr/states/ only has dummyState, not pyVDC_*")
-    info("  DeviceStateEvent fires : yes (mechanism 3 works), but value check in rule fails")
+    info(
+        "  Condition/trigger picker: shows pyVDC_State / pyVDC_Mode (dynamicDefs overrides DB)"
+    )
+    info(
+        "  Hardware tab status    : shows pushed state values correctly (m_data->states path)"
+    )
+    info(
+        "  Automation evaluation  : FAILS — /usr/states/ only has dummyState, not pyVDC_*"
+    )
+    info(
+        "  DeviceStateEvent fires : yes (mechanism 3 works), but value check in rule fails"
+    )
     info("  Property UI            : shows pyVDC_Property (dynamicDefs)")
     info("")
 

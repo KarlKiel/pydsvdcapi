@@ -66,16 +66,10 @@ Usage::
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Coroutine,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Union,
 )
 
 import pydsvdcapi.vdc_messages_pb2 as pb
@@ -99,9 +93,9 @@ if TYPE_CHECKING:
 
 #: Type alias for the channel-applied callback.
 #: ``async def callback(output, channel_updates) -> None``
-#: where *channel_updates* is a dict ``{OutputChannelType: value}``.
+#: where *channel_updates* is a dict ``{OutputChannelType | int: value}``.
 ChannelAppliedCallback = Callable[
-    ["Output", Dict[OutputChannelType, float]],
+    ["Output", dict[OutputChannelType | int, float]],
     Coroutine[Any, Any, None],
 ]
 
@@ -121,7 +115,7 @@ DimChannelCallback = Callable[
 # ---------------------------------------------------------------------------
 
 #: Standard channel types auto-created for each output function.
-FUNCTION_CHANNELS: Dict[OutputFunction, List[OutputChannelType]] = {
+FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
     OutputFunction.ON_OFF: [
         OutputChannelType.BRIGHTNESS,
     ],
@@ -156,69 +150,75 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Scene numbers that represent an "off" action (primary channel → min).
-_OFF_SCENES: frozenset = frozenset({
-    SceneNumber.PRESET_0,
-    SceneNumber.AREA_1_OFF,
-    SceneNumber.AREA_2_OFF,
-    SceneNumber.AREA_3_OFF,
-    SceneNumber.AREA_4_OFF,
-    SceneNumber.PRESET_10,
-    SceneNumber.PRESET_20,
-    SceneNumber.PRESET_30,
-    SceneNumber.PRESET_40,
-    SceneNumber.AUTO_OFF,
-    SceneNumber.DEVICE_OFF,
-    SceneNumber.DEEP_OFF,
-    SceneNumber.AUTO_STANDBY,
-    SceneNumber.STANDBY,
-    SceneNumber.ABSENT,
-})
+_OFF_SCENES: frozenset = frozenset(
+    {
+        SceneNumber.PRESET_0,
+        SceneNumber.AREA_1_OFF,
+        SceneNumber.AREA_2_OFF,
+        SceneNumber.AREA_3_OFF,
+        SceneNumber.AREA_4_OFF,
+        SceneNumber.PRESET_10,
+        SceneNumber.PRESET_20,
+        SceneNumber.PRESET_30,
+        SceneNumber.PRESET_40,
+        SceneNumber.AUTO_OFF,
+        SceneNumber.DEVICE_OFF,
+        SceneNumber.DEEP_OFF,
+        SceneNumber.AUTO_STANDBY,
+        SceneNumber.STANDBY,
+        SceneNumber.ABSENT,
+    }
+)
 
 #: Scene numbers that represent an "on" action (primary channel → max).
-_ON_SCENES: frozenset = frozenset({
-    SceneNumber.PRESET_1,
-    SceneNumber.AREA_1_ON,
-    SceneNumber.AREA_2_ON,
-    SceneNumber.AREA_3_ON,
-    SceneNumber.AREA_4_ON,
-    SceneNumber.PRESET_11,
-    SceneNumber.PRESET_21,
-    SceneNumber.PRESET_31,
-    SceneNumber.PRESET_41,
-    SceneNumber.MAXIMUM,
-    SceneNumber.DEVICE_ON,
-    SceneNumber.PRESENT,
-    SceneNumber.WAKEUP,
-})
+_ON_SCENES: frozenset = frozenset(
+    {
+        SceneNumber.PRESET_1,
+        SceneNumber.AREA_1_ON,
+        SceneNumber.AREA_2_ON,
+        SceneNumber.AREA_3_ON,
+        SceneNumber.AREA_4_ON,
+        SceneNumber.PRESET_11,
+        SceneNumber.PRESET_21,
+        SceneNumber.PRESET_31,
+        SceneNumber.PRESET_41,
+        SceneNumber.MAXIMUM,
+        SceneNumber.DEVICE_ON,
+        SceneNumber.PRESENT,
+        SceneNumber.WAKEUP,
+    }
+)
 
 #: Scenes that are "action" commands and do **not** have stored values
 #: (stepping, stop, dimming, panic, alarm, …).  These are excluded
 #: from the default scene table.
-_NON_VALUE_SCENES: frozenset = frozenset({
-    SceneNumber.AREA_STEPPING_CONTINUE,
-    SceneNumber.DECREMENT,
-    SceneNumber.INCREMENT,
-    SceneNumber.STOP,
-    SceneNumber.AREA_1_DEC,
-    SceneNumber.AREA_1_INC,
-    SceneNumber.AREA_1_STOP,
-    SceneNumber.AREA_2_DEC,
-    SceneNumber.AREA_2_INC,
-    SceneNumber.AREA_2_STOP,
-    SceneNumber.AREA_3_DEC,
-    SceneNumber.AREA_3_INC,
-    SceneNumber.AREA_3_STOP,
-    SceneNumber.AREA_4_DEC,
-    SceneNumber.AREA_4_INC,
-    SceneNumber.AREA_4_STOP,
-    SceneNumber.IMPULSE,
-    SceneNumber.MINIMUM,
-})
+_NON_VALUE_SCENES: frozenset = frozenset(
+    {
+        SceneNumber.AREA_STEPPING_CONTINUE,
+        SceneNumber.DECREMENT,
+        SceneNumber.INCREMENT,
+        SceneNumber.STOP,
+        SceneNumber.AREA_1_DEC,
+        SceneNumber.AREA_1_INC,
+        SceneNumber.AREA_1_STOP,
+        SceneNumber.AREA_2_DEC,
+        SceneNumber.AREA_2_INC,
+        SceneNumber.AREA_2_STOP,
+        SceneNumber.AREA_3_DEC,
+        SceneNumber.AREA_3_INC,
+        SceneNumber.AREA_3_STOP,
+        SceneNumber.AREA_4_DEC,
+        SceneNumber.AREA_4_INC,
+        SceneNumber.AREA_4_STOP,
+        SceneNumber.IMPULSE,
+        SceneNumber.MINIMUM,
+    }
+)
 
 #: Medium preset scenes — scene number → fraction of (max − min) to add to min.
 #: Preset X2 = 75 %, Preset X3 = 50 %, Preset X4 = 25 % (ds-basics Table 3).
 #: Five groups × three presets = 15 entries (scenes 17–31).
-_MEDIUM_PRESET_FRACTIONS: Dict[int, float] = {
+_MEDIUM_PRESET_FRACTIONS: dict[int, float] = {
     17: 0.75,  # Preset 2
     18: 0.50,  # Preset 3
     19: 0.25,  # Preset 4
@@ -237,33 +237,39 @@ _MEDIUM_PRESET_FRACTIONS: Dict[int, float] = {
 }
 
 #: Scenes that override local priority (ds-basics §5.3).
-_IGNORE_LOCAL_PRIORITY_SCENES: frozenset = frozenset({
-    SceneNumber.PANIC,
-    SceneNumber.FIRE,
-    SceneNumber.ALARM_1,
-    SceneNumber.ALARM_2,
-    SceneNumber.ALARM_3,
-    SceneNumber.ALARM_4,
-    SceneNumber.ABSENT,   # spec §5.3 explicitly: "Absent shall have an effect … regardless"
-})
+_IGNORE_LOCAL_PRIORITY_SCENES: frozenset = frozenset(
+    {
+        SceneNumber.PANIC,
+        SceneNumber.FIRE,
+        SceneNumber.ALARM_1,
+        SceneNumber.ALARM_2,
+        SceneNumber.ALARM_3,
+        SceneNumber.ALARM_4,
+        SceneNumber.ABSENT,  # spec §5.3 explicitly: "Absent shall have an effect … regardless"
+    }
+)
 
 #: Stepping scenes that move the primary channel DOWN.
-_STEP_DOWN_SCENES: frozenset = frozenset({
-    SceneNumber.DECREMENT,
-    SceneNumber.AREA_1_DEC,
-    SceneNumber.AREA_2_DEC,
-    SceneNumber.AREA_3_DEC,
-    SceneNumber.AREA_4_DEC,
-})
+_STEP_DOWN_SCENES: frozenset = frozenset(
+    {
+        SceneNumber.DECREMENT,
+        SceneNumber.AREA_1_DEC,
+        SceneNumber.AREA_2_DEC,
+        SceneNumber.AREA_3_DEC,
+        SceneNumber.AREA_4_DEC,
+    }
+)
 
 #: Stepping scenes that move the primary channel UP.
-_STEP_UP_SCENES: frozenset = frozenset({
-    SceneNumber.INCREMENT,
-    SceneNumber.AREA_1_INC,
-    SceneNumber.AREA_2_INC,
-    SceneNumber.AREA_3_INC,
-    SceneNumber.AREA_4_INC,
-})
+_STEP_UP_SCENES: frozenset = frozenset(
+    {
+        SceneNumber.INCREMENT,
+        SceneNumber.AREA_1_INC,
+        SceneNumber.AREA_2_INC,
+        SceneNumber.AREA_3_INC,
+        SceneNumber.AREA_4_INC,
+    }
+)
 
 #: All stepping scene numbers (up, down, and continue).
 _ALL_STEP_SCENES: frozenset = (
@@ -273,18 +279,22 @@ _ALL_STEP_SCENES: frozenset = (
 )
 
 #: Stepping scene number → area restriction (0 for zone-wide commands).
-_STEP_SCENE_AREA: Dict[int, int] = {
-    int(SceneNumber.AREA_1_DEC): 1, int(SceneNumber.AREA_1_INC): 1,
-    int(SceneNumber.AREA_2_DEC): 2, int(SceneNumber.AREA_2_INC): 2,
-    int(SceneNumber.AREA_3_DEC): 3, int(SceneNumber.AREA_3_INC): 3,
-    int(SceneNumber.AREA_4_DEC): 4, int(SceneNumber.AREA_4_INC): 4,
+_STEP_SCENE_AREA: dict[int, int] = {
+    int(SceneNumber.AREA_1_DEC): 1,
+    int(SceneNumber.AREA_1_INC): 1,
+    int(SceneNumber.AREA_2_DEC): 2,
+    int(SceneNumber.AREA_2_INC): 2,
+    int(SceneNumber.AREA_3_DEC): 3,
+    int(SceneNumber.AREA_3_INC): 3,
+    int(SceneNumber.AREA_4_DEC): 4,
+    int(SceneNumber.AREA_4_INC): 4,
 }
 
 
 def _build_default_scene_entry(
     scene_nr: int,
-    channels: Dict[int, "OutputChannel"],
-) -> Dict[str, Any]:
+    channels: dict[int, OutputChannel],
+) -> dict[str, Any]:
     """Build the default scene entry for *scene_nr*.
 
     Returns a dict with the structure:
@@ -312,10 +322,10 @@ def _build_default_scene_entry(
     ignore_local_priority = scene_nr in _IGNORE_LOCAL_PRIORITY_SCENES
     effect = int(SceneEffect.SMOOTH) if has_default else int(SceneEffect.NONE)
 
-    ch_entries: Dict[int, Dict[str, Any]] = {}
+    ch_entries: dict[int, dict[str, Any]] = {}
     for idx, ch in channels.items():
         if is_off:
-            val: Optional[float] = ch.min_value
+            val: float | None = ch.min_value
         elif is_on:
             val = ch.max_value
         elif medium_fraction is not None:
@@ -424,32 +434,28 @@ class Output:
         self,
         *,
         vdsd: Vdsd,
-        function: Union[OutputFunction, int] = OutputFunction.ON_OFF,
-        output_usage: Union[OutputUsage, int] = OutputUsage.UNDEFINED,
+        function: OutputFunction | int = OutputFunction.ON_OFF,
+        output_usage: OutputUsage | int = OutputUsage.UNDEFINED,
         name: str,
         default_group: int,
         variable_ramp: bool = False,
-        max_power: Optional[float] = None,
-        active_cooling_mode: Optional[bool] = None,
+        max_power: float | None = None,
+        active_cooling_mode: bool | None = None,
         # Settings (writable, persisted)
-        mode: Optional[Union[OutputMode, int]] = None,
+        mode: OutputMode | int | None = None,
         active_group: int,
-        groups: Set[int],
+        groups: set[int],
         push_changes: bool = False,
-        on_threshold: Optional[float] = None,
-        min_brightness: Optional[float] = None,
-        dim_time_up: Optional[int] = None,
-        dim_time_down: Optional[int] = None,
-        dim_time_up_alt1: Optional[int] = None,
-        dim_time_down_alt1: Optional[int] = None,
-        dim_time_up_alt2: Optional[int] = None,
-        dim_time_down_alt2: Optional[int] = None,
-        heating_system_capability: Optional[
-            Union[HeatingSystemCapability, int]
-        ] = None,
-        heating_system_type: Optional[
-            Union[HeatingSystemType, int]
-        ] = None,
+        on_threshold: float | None = None,
+        min_brightness: float | None = None,
+        dim_time_up: int | None = None,
+        dim_time_down: int | None = None,
+        dim_time_up_alt1: int | None = None,
+        dim_time_down_alt1: int | None = None,
+        dim_time_up_alt2: int | None = None,
+        dim_time_down_alt2: int | None = None,
+        heating_system_capability: HeatingSystemCapability | int | None = None,
+        heating_system_type: HeatingSystemType | int | None = None,
     ) -> None:
         # ---- parent reference ----------------------------------------
         self._vdsd: Vdsd = vdsd
@@ -464,13 +470,16 @@ class Output:
         self._name: str = name
         self._default_group: int = default_group
         self._variable_ramp: bool = variable_ramp
-        self._max_power: Optional[float] = max_power
-        self._active_cooling_mode: Optional[bool] = active_cooling_mode
+        self._max_power: float | None = max_power
+        self._active_cooling_mode: bool | None = active_cooling_mode
 
         # ---- settings properties (read/write, persisted) -------------
         if mode is None:
             fn = int(self._function)
-            if fn in (int(OutputFunction.INTERNALLY_CONTROLLED), int(OutputFunction.CUSTOM)):
+            if fn in (
+                int(OutputFunction.INTERNALLY_CONTROLLED),
+                int(OutputFunction.CUSTOM),
+            ):
                 self._mode = OutputMode.DISABLED
             elif fn == int(OutputFunction.ON_OFF):
                 self._mode = OutputMode.BINARY
@@ -479,24 +488,22 @@ class Output:
         else:
             self._mode = OutputMode(int(mode))
         self._active_group: int = active_group
-        self._groups: Set[int] = set(groups)
+        self._groups: set[int] = set(groups)
         self._push_changes: bool = push_changes
-        self._on_threshold: Optional[float] = on_threshold
-        self._min_brightness: Optional[float] = min_brightness
-        self._dim_time_up: Optional[int] = dim_time_up
-        self._dim_time_down: Optional[int] = dim_time_down
-        self._dim_time_up_alt1: Optional[int] = dim_time_up_alt1
-        self._dim_time_down_alt1: Optional[int] = dim_time_down_alt1
-        self._dim_time_up_alt2: Optional[int] = dim_time_up_alt2
-        self._dim_time_down_alt2: Optional[int] = dim_time_down_alt2
-        self._heating_system_capability: Optional[
-            HeatingSystemCapability
-        ] = (
+        self._on_threshold: float | None = on_threshold
+        self._min_brightness: float | None = min_brightness
+        self._dim_time_up: int | None = dim_time_up
+        self._dim_time_down: int | None = dim_time_down
+        self._dim_time_up_alt1: int | None = dim_time_up_alt1
+        self._dim_time_down_alt1: int | None = dim_time_down_alt1
+        self._dim_time_up_alt2: int | None = dim_time_up_alt2
+        self._dim_time_down_alt2: int | None = dim_time_down_alt2
+        self._heating_system_capability: HeatingSystemCapability | None = (
             HeatingSystemCapability(int(heating_system_capability))
             if heating_system_capability is not None
             else None
         )
-        self._heating_system_type: Optional[HeatingSystemType] = (
+        self._heating_system_type: HeatingSystemType | None = (
             HeatingSystemType(int(heating_system_type))
             if heating_system_type is not None
             else None
@@ -507,18 +514,18 @@ class Output:
         self._error: OutputError = OutputError.OK
 
         # ---- session reference (set on announcement) -----------------
-        self._session: Optional[VdcSession] = None
+        self._session: VdcSession | None = None
 
         # ---- channels ------------------------------------------------
         #: Channels keyed by dsIndex.
-        self._channels: Dict[int, OutputChannel] = {}
+        self._channels: dict[int, OutputChannel] = {}
         #: Pending vdSM-side channel value changes (apply_now buffer).
         #: Maps dsIndex → buffered value.
-        self._pending_channel_updates: Dict[int, float] = {}
+        self._pending_channel_updates: dict[int, float] = {}
         #: Callback invoked when apply_now triggers hardware apply.
-        self._on_channel_applied: Optional[ChannelAppliedCallback] = None
+        self._on_channel_applied: ChannelAppliedCallback | None = None
         #: Callback invoked for dimChannel notifications (§7.3.5).
-        self._on_dim_channel: Optional[DimChannelCallback] = None
+        self._on_dim_channel: DimChannelCallback | None = None
         #: Last stepping direction for AREA_STEPPING_CONTINUE: -1 down, +1 up, 0 unknown.
         self._last_step_direction: int = 0
         #: Area of last directional step (for AREA_STEPPING_CONTINUE).
@@ -529,13 +536,13 @@ class Output:
 
         # ---- scene table ---------------------------------------------
         #: Scene table: maps scene number (int) → scene entry dict.
-        self._scenes: Dict[int, Dict[str, Any]] = {}
+        self._scenes: dict[int, dict[str, Any]] = {}
         #: Per-group last called scene number (for undo matching).
         #: Maps group (int) → last called scene number.
-        self._last_called_scenes: Dict[int, int] = {}
+        self._last_called_scenes: dict[int, int] = {}
         #: Per-group undo snapshots of channel values before call_scene.
         #: Maps group (int) → {dsIndex: value}.
-        self._undo_snapshots: Dict[int, Dict[int, float]] = {}
+        self._undo_snapshots: dict[int, dict[int, float]] = {}
         # Populate default scenes.
         self._init_default_scenes()
 
@@ -579,12 +586,12 @@ class Output:
         return self._variable_ramp
 
     @property
-    def max_power(self) -> Optional[float]:
+    def max_power(self) -> float | None:
         """Maximum output power in Watts (``None`` = undefined)."""
         return self._max_power
 
     @property
-    def active_cooling_mode(self) -> Optional[bool]:
+    def active_cooling_mode(self) -> bool | None:
         """Whether the device can actively cool."""
         return self._active_cooling_mode
 
@@ -598,7 +605,7 @@ class Output:
         return self._mode
 
     @mode.setter
-    def mode(self, value: Union[OutputMode, int]) -> None:
+    def mode(self, value: OutputMode | int) -> None:
         self._mode = OutputMode(int(value))
         self._schedule_auto_save()
 
@@ -613,12 +620,12 @@ class Output:
         self._schedule_auto_save()
 
     @property
-    def groups(self) -> Set[int]:
+    def groups(self) -> set[int]:
         """Application profile IDs this output belongs to (use ColorClass enum values)."""
         return set(self._groups)
 
     @groups.setter
-    def groups(self, value: Set[int]) -> None:
+    def groups(self, value: set[int]) -> None:
         self._groups = set(value)
         self._schedule_auto_save()
 
@@ -643,118 +650,114 @@ class Output:
         self._schedule_auto_save()
 
     @property
-    def on_threshold(self) -> Optional[float]:
+    def on_threshold(self) -> float | None:
         """Minimum brightness to switch on non-dimmable lamps."""
         return self._on_threshold
 
     @on_threshold.setter
-    def on_threshold(self, value: Optional[float]) -> None:
+    def on_threshold(self, value: float | None) -> None:
         self._on_threshold = value
         self._schedule_auto_save()
 
     @property
-    def min_brightness(self) -> Optional[float]:
+    def min_brightness(self) -> float | None:
         """Minimum brightness the hardware supports."""
         return self._min_brightness
 
     @min_brightness.setter
-    def min_brightness(self, value: Optional[float]) -> None:
+    def min_brightness(self, value: float | None) -> None:
         self._min_brightness = value
         self._schedule_auto_save()
 
     @property
-    def dim_time_up(self) -> Optional[int]:
+    def dim_time_up(self) -> int | None:
         """Dim-up time in dS 8-bit format."""
         return self._dim_time_up
 
     @dim_time_up.setter
-    def dim_time_up(self, value: Optional[int]) -> None:
+    def dim_time_up(self, value: int | None) -> None:
         self._dim_time_up = value
         self._schedule_auto_save()
 
     @property
-    def dim_time_down(self) -> Optional[int]:
+    def dim_time_down(self) -> int | None:
         """Dim-down time in dS 8-bit format."""
         return self._dim_time_down
 
     @dim_time_down.setter
-    def dim_time_down(self, value: Optional[int]) -> None:
+    def dim_time_down(self, value: int | None) -> None:
         self._dim_time_down = value
         self._schedule_auto_save()
 
     @property
-    def dim_time_up_alt1(self) -> Optional[int]:
+    def dim_time_up_alt1(self) -> int | None:
         """Alternate 1 dim-up time."""
         return self._dim_time_up_alt1
 
     @dim_time_up_alt1.setter
-    def dim_time_up_alt1(self, value: Optional[int]) -> None:
+    def dim_time_up_alt1(self, value: int | None) -> None:
         self._dim_time_up_alt1 = value
         self._schedule_auto_save()
 
     @property
-    def dim_time_down_alt1(self) -> Optional[int]:
+    def dim_time_down_alt1(self) -> int | None:
         """Alternate 1 dim-down time."""
         return self._dim_time_down_alt1
 
     @dim_time_down_alt1.setter
-    def dim_time_down_alt1(self, value: Optional[int]) -> None:
+    def dim_time_down_alt1(self, value: int | None) -> None:
         self._dim_time_down_alt1 = value
         self._schedule_auto_save()
 
     @property
-    def dim_time_up_alt2(self) -> Optional[int]:
+    def dim_time_up_alt2(self) -> int | None:
         """Alternate 2 dim-up time."""
         return self._dim_time_up_alt2
 
     @dim_time_up_alt2.setter
-    def dim_time_up_alt2(self, value: Optional[int]) -> None:
+    def dim_time_up_alt2(self, value: int | None) -> None:
         self._dim_time_up_alt2 = value
         self._schedule_auto_save()
 
     @property
-    def dim_time_down_alt2(self) -> Optional[int]:
+    def dim_time_down_alt2(self) -> int | None:
         """Alternate 2 dim-down time."""
         return self._dim_time_down_alt2
 
     @dim_time_down_alt2.setter
-    def dim_time_down_alt2(self, value: Optional[int]) -> None:
+    def dim_time_down_alt2(self, value: int | None) -> None:
         self._dim_time_down_alt2 = value
         self._schedule_auto_save()
 
     @property
     def heating_system_capability(
         self,
-    ) -> Optional[HeatingSystemCapability]:
+    ) -> HeatingSystemCapability | None:
         """How ``heatingLevel`` control value is applied."""
         return self._heating_system_capability
 
     @heating_system_capability.setter
     def heating_system_capability(
         self,
-        value: Optional[Union[HeatingSystemCapability, int]],
+        value: HeatingSystemCapability | int | None,
     ) -> None:
         self._heating_system_capability = (
-            HeatingSystemCapability(int(value))
-            if value is not None
-            else None
+            HeatingSystemCapability(int(value)) if value is not None else None
         )
         self._schedule_auto_save()
 
     @property
-    def heating_system_type(self) -> Optional[HeatingSystemType]:
+    def heating_system_type(self) -> HeatingSystemType | None:
         """Kind of valve / actuator attached."""
         return self._heating_system_type
 
     @heating_system_type.setter
     def heating_system_type(
         self,
-        value: Optional[Union[HeatingSystemType, int]],
+        value: HeatingSystemType | int | None,
     ) -> None:
         self._heating_system_type = (
-            HeatingSystemType(int(value))
-            if value is not None
-            else None
+            HeatingSystemType(int(value)) if value is not None else None
         )
         self._schedule_auto_save()
 
@@ -777,7 +780,7 @@ class Output:
         return self._error
 
     @error.setter
-    def error(self, value: Union[OutputError, int]) -> None:
+    def error(self, value: OutputError | int) -> None:
         self._error = OutputError(int(value))
 
     # ==================================================================
@@ -785,41 +788,37 @@ class Output:
     # ==================================================================
 
     @property
-    def channels(self) -> Dict[int, OutputChannel]:
+    def channels(self) -> dict[int, OutputChannel]:
         """All channels, keyed by ``dsIndex`` (read-only view)."""
         return dict(self._channels)
 
     @property
-    def on_channel_applied(self) -> Optional[ChannelAppliedCallback]:
+    def on_channel_applied(self) -> ChannelAppliedCallback | None:
         """Callback invoked when channel values should be applied."""
         return self._on_channel_applied
 
     @on_channel_applied.setter
-    def on_channel_applied(
-        self, callback: Optional[ChannelAppliedCallback]
-    ) -> None:
+    def on_channel_applied(self, callback: ChannelAppliedCallback | None) -> None:
         self._on_channel_applied = callback
 
     @property
-    def on_dim_channel(self) -> Optional[DimChannelCallback]:
+    def on_dim_channel(self) -> DimChannelCallback | None:
         """Callback invoked for dimChannel notifications (§7.3.5)."""
         return self._on_dim_channel
 
     @on_dim_channel.setter
-    def on_dim_channel(
-        self, callback: Optional[DimChannelCallback]
-    ) -> None:
+    def on_dim_channel(self, callback: DimChannelCallback | None) -> None:
         self._on_dim_channel = callback
 
     def add_channel(
         self,
-        channel_type: Union[OutputChannelType, int],
+        channel_type: OutputChannelType | int,
         *,
-        ds_index: Optional[int] = None,
-        name: Optional[str] = None,
-        min_value: Optional[float] = None,
-        max_value: Optional[float] = None,
-        resolution: Optional[float] = None,
+        ds_index: int | None = None,
+        name: str | None = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        resolution: float | None = None,
     ) -> OutputChannel:
         """Add a channel to this output.
 
@@ -862,12 +861,14 @@ class Output:
         self._ensure_scene_channel_entries()
         logger.debug(
             "Added channel %s (dsIndex=%d) to output '%s'",
-            channel.name, ds_index, self._name,
+            channel.name,
+            ds_index,
+            self._name,
         )
         self._schedule_auto_save()
         return channel
 
-    def remove_channel(self, ds_index: int) -> Optional[OutputChannel]:
+    def remove_channel(self, ds_index: int) -> OutputChannel | None:
         """Remove a channel by dsIndex.
 
         Returns the removed :class:`OutputChannel` or ``None``.
@@ -881,13 +882,13 @@ class Output:
             self._schedule_auto_save()
         return ch
 
-    def get_channel(self, ds_index: int) -> Optional[OutputChannel]:
+    def get_channel(self, ds_index: int) -> OutputChannel | None:
         """Look up a channel by ``dsIndex``."""
         return self._channels.get(ds_index)
 
     def get_channel_by_type(
-        self, channel_type: Union[OutputChannelType, int]
-    ) -> Optional[OutputChannel]:
+        self, channel_type: OutputChannelType | int
+    ) -> OutputChannel | None:
         """Look up the first channel with the given type."""
         ct = OutputChannelType(int(channel_type))
         for ch in self._channels.values():
@@ -929,9 +930,7 @@ class Output:
         for nr in range(128):
             if nr in _NON_VALUE_SCENES:
                 continue
-            self._scenes[nr] = _build_default_scene_entry(
-                nr, self._channels
-            )
+            self._scenes[nr] = _build_default_scene_entry(nr, self._channels)
 
     def _ensure_scene_channel_entries(self) -> None:
         """Ensure every scene contains entries for all current channels.
@@ -948,11 +947,13 @@ class Output:
             for idx, ch in self._channels.items():
                 if idx not in ch_entries:
                     if is_off:
-                        val: Optional[float] = ch.min_value
+                        val: float | None = ch.min_value
                     elif is_on:
                         val = ch.max_value
                     elif medium_fraction is not None:
-                        val = ch.min_value + medium_fraction * (ch.max_value - ch.min_value)
+                        val = ch.min_value + medium_fraction * (
+                            ch.max_value - ch.min_value
+                        )
                     else:
                         val = ch.min_value
                     ch_entries[idx] = {
@@ -962,7 +963,7 @@ class Output:
                     }
             entry["channels"] = ch_entries
 
-    def get_scene(self, scene_nr: int) -> Optional[Dict[str, Any]]:
+    def get_scene(self, scene_nr: int) -> dict[str, Any] | None:
         """Return the scene entry for *scene_nr*, or ``None``."""
         return self._scenes.get(scene_nr)
 
@@ -971,7 +972,7 @@ class Output:
         """Return all stored scene numbers (for wildcard expansion)."""
         return list(self._scenes.keys())
 
-    def get_scene_properties(self) -> Dict[str, Any]:
+    def get_scene_properties(self) -> dict[str, Any]:
         """Return scenes in the API property format.
 
         The vDC API §4.10 defines the scene property as a dict keyed
@@ -980,9 +981,9 @@ class Output:
         keyed by channel type ID (as string) with per-channel
         ``value``, ``dontCare``, and ``automatic``.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         for nr, entry in self._scenes.items():
-            ch_api: Dict[str, Any] = {}
+            ch_api: dict[str, Any] = {}
             for idx, ch_val in entry.get("channels", {}).items():
                 ch = self._channels.get(idx)
                 if ch is not None:
@@ -993,15 +994,13 @@ class Output:
                     }
             result[str(nr)] = {
                 "dontCare": entry.get("dontCare", True),
-                "ignoreLocalPriority": entry.get(
-                    "ignoreLocalPriority", False
-                ),
+                "ignoreLocalPriority": entry.get("ignoreLocalPriority", False),
                 "effect": entry.get("effect", int(SceneEffect.NONE)),
                 "channels": ch_api,
             }
         return result
 
-    def apply_scenes(self, scene_data: Dict[str, Any]) -> None:
+    def apply_scenes(self, scene_data: dict[str, Any]) -> None:
         """Apply scene settings from the vdSM (``setProperty`` for scenes).
 
         *scene_data* is a dict keyed by scene number (string),
@@ -1018,30 +1017,29 @@ class Output:
             if "dontCare" in api_entry:
                 entry["dontCare"] = bool(api_entry["dontCare"])
             if "ignoreLocalPriority" in api_entry:
-                entry["ignoreLocalPriority"] = bool(
-                    api_entry["ignoreLocalPriority"]
-                )
+                entry["ignoreLocalPriority"] = bool(api_entry["ignoreLocalPriority"])
             if "effect" in api_entry:
                 entry["effect"] = int(api_entry["effect"])
-            if "channels" in api_entry and isinstance(
-                api_entry["channels"], dict
-            ):
+            if "channels" in api_entry and isinstance(api_entry["channels"], dict):
                 ch_entries = entry.setdefault("channels", {})
                 for ct_str, ch_val in api_entry["channels"].items():
                     ct = int(ct_str)
                     # Find the dsIndex for this channel type.
-                    target_idx: Optional[int] = None
+                    target_idx: int | None = None
                     for idx, ch in self._channels.items():
                         if int(ch.channel_type) == ct:
                             target_idx = idx
                             break
                     if target_idx is None:
                         continue
-                    ch_entry = ch_entries.get(target_idx, {
-                        "value": None,
-                        "dontCare": True,
-                        "automatic": False,
-                    })
+                    ch_entry = ch_entries.get(
+                        target_idx,
+                        {
+                            "value": None,
+                            "dontCare": True,
+                            "automatic": False,
+                        },
+                    )
                     if isinstance(ch_val, dict):
                         if "value" in ch_val:
                             ch_entry["value"] = (
@@ -1050,18 +1048,18 @@ class Output:
                                 else None
                             )
                         if "dontCare" in ch_val:
-                            ch_entry["dontCare"] = bool(
-                                ch_val["dontCare"]
-                            )
+                            ch_entry["dontCare"] = bool(ch_val["dontCare"])
                         if "automatic" in ch_val:
-                            ch_entry["automatic"] = bool(
-                                ch_val["automatic"]
-                            )
+                            ch_entry["automatic"] = bool(ch_val["automatic"])
                     ch_entries[target_idx] = ch_entry
         self._schedule_auto_save()
 
     def call_scene(
-        self, scene_nr: int, *, force: bool = False, group: int = 0,
+        self,
+        scene_nr: int,
+        *,
+        force: bool = False,
+        group: int = 0,
     ) -> None:
         """Apply the stored scene values to the output channels.
 
@@ -1088,31 +1086,29 @@ class Output:
         """
         entry = self._scenes.get(scene_nr)
         if entry is None:
-            logger.debug(
-                "call_scene %d: no entry — ignoring", scene_nr
-            )
+            logger.debug("call_scene %d: no entry — ignoring", scene_nr)
             return
 
         # Scene-global dontCare → ignore entirely.
         if entry.get("dontCare", False):
-            logger.debug(
-                "call_scene %d: global dontCare — ignoring", scene_nr
-            )
+            logger.debug("call_scene %d: global dontCare — ignoring", scene_nr)
             return
 
         # Local priority check.
-        if self._local_priority and not force:
-            if not entry.get("ignoreLocalPriority", False):
-                logger.debug(
-                    "call_scene %d: blocked by local priority",
-                    scene_nr,
-                )
-                return
+        if (
+            self._local_priority
+            and not force
+            and not entry.get("ignoreLocalPriority", False)
+        ):
+            logger.debug(
+                "call_scene %d: blocked by local priority",
+                scene_nr,
+            )
+            return
 
         # Take undo snapshot keyed by group.
         self._undo_snapshots[group] = {
-            idx: ch.value for idx, ch in self._channels.items()
-            if ch.value is not None
+            idx: ch.value for idx, ch in self._channels.items() if ch.value is not None
         }
         self._last_called_scenes[group] = scene_nr
 
@@ -1130,7 +1126,8 @@ class Output:
 
         logger.debug(
             "call_scene %d: applied to output '%s'",
-            scene_nr, self._name,
+            scene_nr,
+            self._name,
         )
 
     def save_scene(self, scene_nr: int) -> None:
@@ -1146,11 +1143,14 @@ class Output:
 
         ch_entries = entry.setdefault("channels", {})
         for idx, ch in self._channels.items():
-            ch_entry = ch_entries.get(idx, {
-                "value": None,
-                "dontCare": False,
-                "automatic": False,
-            })
+            ch_entry = ch_entries.get(
+                idx,
+                {
+                    "value": None,
+                    "dontCare": False,
+                    "automatic": False,
+                },
+            )
             ch_entry["value"] = ch.value
             ch_entry["dontCare"] = False
             ch_entries[idx] = ch_entry
@@ -1161,7 +1161,8 @@ class Output:
         self._schedule_auto_save()
         logger.debug(
             "save_scene %d: saved current values for output '%s'",
-            scene_nr, self._name,
+            scene_nr,
+            self._name,
         )
 
     def undo_scene(self, scene_nr: int, *, group: int = 0) -> None:
@@ -1185,7 +1186,8 @@ class Output:
         if self._last_called_scenes.get(group) != scene_nr:
             logger.debug(
                 "undo_scene %d (group %d): last called was %s — ignoring",
-                scene_nr, group,
+                scene_nr,
+                group,
                 self._last_called_scenes.get(group),
             )
             return
@@ -1200,9 +1202,10 @@ class Output:
                 ch.confirm_applied()
 
         logger.debug(
-            "undo_scene %d (group %d): restored previous values "
-            "for output '%s'",
-            scene_nr, group, self._name,
+            "undo_scene %d (group %d): restored previous values for output '%s'",
+            scene_nr,
+            group,
+            self._name,
         )
         del self._undo_snapshots[group]
         del self._last_called_scenes[group]
@@ -1267,7 +1270,8 @@ class Output:
             if mode == 0:
                 logger.debug(
                     "step scene %d (AREA_STEPPING_CONTINUE): no prior "
-                    "direction — ignored", scene_nr,
+                    "direction — ignored",
+                    scene_nr,
                 )
                 return
         else:
@@ -1281,14 +1285,13 @@ class Output:
             return
 
         # Rule 6: ignore stepping when primary channel is at minimum.
-        if (
-            primary_ch.value is not None
-            and primary_ch.value <= primary_ch.min_value
-        ):
+        if primary_ch.value is not None and primary_ch.value <= primary_ch.min_value:
             logger.debug(
                 "step scene %d: Rule 6 — primary channel at minimum "
                 "(%.3f ≤ %.3f), ignored",
-                scene_nr, primary_ch.value, primary_ch.min_value,
+                scene_nr,
+                primary_ch.value,
+                primary_ch.min_value,
             )
             return
 
@@ -1349,9 +1352,7 @@ class Output:
         Hardware callback is NOT invoked yet.
         """
         channel.set_value_from_vdsm(value)
-        self._pending_channel_updates[channel.ds_index] = (
-            channel.value  # type: ignore[arg-type]
-        )
+        self._pending_channel_updates[channel.ds_index] = value
 
     async def apply_pending_channels(self) -> None:
         """Apply all buffered channel value changes to hardware.
@@ -1366,7 +1367,7 @@ class Output:
             return
 
         # Build the callback argument: {OutputChannelType: value}.
-        updates: Dict[OutputChannelType, float] = {}
+        updates: dict[OutputChannelType | int, float] = {}
         for ds_index, value in self._pending_channel_updates.items():
             ch = self._channels.get(ds_index)
             if ch is not None:
@@ -1378,8 +1379,8 @@ class Output:
                 await self._on_channel_applied(self, updates)
             except Exception:
                 logger.exception(
-                    "on_channel_applied callback raised for output "
-                    "'%s'", self._name,
+                    "on_channel_applied callback raised for output '%s'",
+                    self._name,
                 )
 
         # Confirm all pending channels.
@@ -1394,9 +1395,7 @@ class Output:
     # Push channel state to vdSM (device → dSS direction)
     # ==================================================================
 
-    async def _push_channel_state(
-        self, channel: OutputChannel
-    ) -> None:
+    async def _push_channel_state(self, channel: OutputChannel) -> None:
         """Push a single channel's state to the vdSM.
 
         Called by :meth:`OutputChannel.update_value` when
@@ -1407,14 +1406,14 @@ class Output:
         session = self._session
         if session is None:
             logger.debug(
-                "No active session — skipping push for channel "
-                "'%s' on output '%s'",
-                channel.name, self._name,
+                "No active session — skipping push for channel '%s' on output '%s'",
+                channel.name,
+                self._name,
             )
             return
 
         state_dict = channel.get_state_properties()
-        push_tree: Dict[str, Any] = {
+        push_tree: dict[str, Any] = {
             "channelStates": {
                 str(channel.ds_index): state_dict,
             }
@@ -1430,26 +1429,30 @@ class Output:
             await session.send_notification(msg)
             logger.debug(
                 "Pushed channelStates[%d] for vdSD %s: %s",
-                channel.ds_index, self._vdsd.dsuid, state_dict,
+                channel.ds_index,
+                self._vdsd.dsuid,
+                state_dict,
             )
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "Failed to push channelStates[%d] for vdSD %s: %s",
-                channel.ds_index, self._vdsd.dsuid, exc,
+                channel.ds_index,
+                self._vdsd.dsuid,
+                exc,
             )
 
     # ==================================================================
     # Channel property dicts (for getProperty responses)
     # ==================================================================
 
-    def get_channel_descriptions(self) -> Dict[str, Any]:
+    def get_channel_descriptions(self) -> dict[str, Any]:
         """Return the ``channelDescriptions`` indexed dict."""
         return {
             str(ch.ds_index): ch.get_description_properties()
             for ch in self._channels.values()
         }
 
-    def get_channel_settings(self) -> Dict[str, Any]:
+    def get_channel_settings(self) -> dict[str, Any]:
         """Return the ``channelSettings`` indexed dict.
 
         Currently empty per spec (§4.9.2).
@@ -1459,7 +1462,7 @@ class Output:
             for ch in self._channels.values()
         }
 
-    def get_channel_states(self) -> Dict[str, Any]:
+    def get_channel_states(self) -> dict[str, Any]:
         """Return the ``channelStates`` indexed dict."""
         return {
             str(ch.ds_index): ch.get_state_properties()
@@ -1470,12 +1473,12 @@ class Output:
     # Property dicts (for getProperty responses)
     # ==================================================================
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return the ``outputDescription`` property dict.
 
         Keys match the vDC API property names (§4.8.1).
         """
-        desc: Dict[str, Any] = {
+        desc: dict[str, Any] = {
             "function": int(self._function),
             "outputUsage": int(self._output_usage),
             "name": self._name,
@@ -1488,21 +1491,19 @@ class Output:
             desc["activeCoolingMode"] = self._active_cooling_mode
         return desc
 
-    def get_settings_properties(self) -> Dict[str, Any]:
+    def get_settings_properties(self) -> dict[str, Any]:
         """Return the ``outputSettings`` property dict.
 
         Keys match the vDC API property names (§4.8.2).
         """
-        settings: Dict[str, Any] = {
+        settings: dict[str, Any] = {
             "mode": int(self._mode),
             "activeGroup": self._active_group,
             "pushChanges": self._push_changes,
         }
 
         # Groups — always present; only "true" entries are included.
-        settings["groups"] = {
-            str(gid): True for gid in sorted(self._groups)
-        }
+        settings["groups"] = {str(gid): True for gid in sorted(self._groups)}
 
         # Optional light-output settings.
         if self._on_threshold is not None:
@@ -1524,17 +1525,13 @@ class Output:
 
         # Optional climate-control settings.
         if self._heating_system_capability is not None:
-            settings["heatingSystemCapability"] = int(
-                self._heating_system_capability
-            )
+            settings["heatingSystemCapability"] = int(self._heating_system_capability)
         if self._heating_system_type is not None:
-            settings["heatingSystemType"] = int(
-                self._heating_system_type
-            )
+            settings["heatingSystemType"] = int(self._heating_system_type)
 
         return settings
 
-    def get_state_properties(self) -> Dict[str, Any]:
+    def get_state_properties(self) -> dict[str, Any]:
         """Return the ``outputState`` property dict.
 
         Keys match the vDC API property names (§4.8.3).
@@ -1548,7 +1545,7 @@ class Output:
     # Settings mutation (from vdc_host setProperty)
     # ==================================================================
 
-    def apply_settings(self, settings: Dict[str, Any]) -> None:
+    def apply_settings(self, settings: dict[str, Any]) -> None:
         """Apply a dict of writable settings.
 
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
@@ -1575,9 +1572,7 @@ class Output:
             self._on_threshold = float(val) if val is not None else None
         if "minBrightness" in settings:
             val = settings["minBrightness"]
-            self._min_brightness = (
-                float(val) if val is not None else None
-            )
+            self._min_brightness = float(val) if val is not None else None
         if "dimTimeUp" in settings:
             val = settings["dimTimeUp"]
             self._dim_time_up = int(val) if val is not None else None
@@ -1586,42 +1581,30 @@ class Output:
             self._dim_time_down = int(val) if val is not None else None
         if "dimTimeUpAlt1" in settings:
             val = settings["dimTimeUpAlt1"]
-            self._dim_time_up_alt1 = (
-                int(val) if val is not None else None
-            )
+            self._dim_time_up_alt1 = int(val) if val is not None else None
         if "dimTimeDownAlt1" in settings:
             val = settings["dimTimeDownAlt1"]
-            self._dim_time_down_alt1 = (
-                int(val) if val is not None else None
-            )
+            self._dim_time_down_alt1 = int(val) if val is not None else None
         if "dimTimeUpAlt2" in settings:
             val = settings["dimTimeUpAlt2"]
-            self._dim_time_up_alt2 = (
-                int(val) if val is not None else None
-            )
+            self._dim_time_up_alt2 = int(val) if val is not None else None
         if "dimTimeDownAlt2" in settings:
             val = settings["dimTimeDownAlt2"]
-            self._dim_time_down_alt2 = (
-                int(val) if val is not None else None
-            )
+            self._dim_time_down_alt2 = int(val) if val is not None else None
         if "heatingSystemCapability" in settings:
             val = settings["heatingSystemCapability"]
             self._heating_system_capability = (
-                HeatingSystemCapability(int(val))
-                if val is not None
-                else None
+                HeatingSystemCapability(int(val)) if val is not None else None
             )
         if "heatingSystemType" in settings:
             val = settings["heatingSystemType"]
             self._heating_system_type = (
-                HeatingSystemType(int(val))
-                if val is not None
-                else None
+                HeatingSystemType(int(val)) if val is not None else None
             )
 
         self._schedule_auto_save()
 
-    def apply_state(self, state: Dict[str, Any]) -> None:
+    def apply_state(self, state: dict[str, Any]) -> None:
         """Apply a dict of writable state properties.
 
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
@@ -1634,13 +1617,13 @@ class Output:
     # Persistence (property tree)
     # ==================================================================
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a serialisable dict for YAML persistence.
 
         Includes description + settings + channel descriptions.
         State is volatile and excluded.
         """
-        tree: Dict[str, Any] = {
+        tree: dict[str, Any] = {
             # Description.
             "function": int(self._function),
             "outputUsage": int(self._output_usage),
@@ -1683,33 +1666,28 @@ class Output:
 
         # Optional climate settings.
         if self._heating_system_capability is not None:
-            tree["heatingSystemCapability"] = int(
-                self._heating_system_capability
-            )
+            tree["heatingSystemCapability"] = int(self._heating_system_capability)
         if self._heating_system_type is not None:
             tree["heatingSystemType"] = int(self._heating_system_type)
 
         # Channels (description metadata only, not values).
         if self._channels:
             tree["channels"] = [
-                ch.get_property_tree()
-                for ch in self._channels.values()
+                ch.get_property_tree() for ch in self._channels.values()
             ]
 
         # Scenes — persist as dict keyed by scene number (as string).
         # Only persist scenes that differ from the pure default
         # (i.e. all scenes, since they may be modified at runtime).
         if self._scenes:
-            scenes_tree: Dict[str, Any] = {}
+            scenes_tree: dict[str, Any] = {}
             for nr, entry in self._scenes.items():
-                s: Dict[str, Any] = {
+                s: dict[str, Any] = {
                     "dontCare": entry.get("dontCare", True),
-                    "ignoreLocalPriority": entry.get(
-                        "ignoreLocalPriority", False
-                    ),
+                    "ignoreLocalPriority": entry.get("ignoreLocalPriority", False),
                     "effect": entry.get("effect", 0),
                 }
-                ch_data: Dict[str, Any] = {}
+                ch_data: dict[str, Any] = {}
                 for idx, ch_val in entry.get("channels", {}).items():
                     ch_data[str(idx)] = {
                         "value": ch_val.get("value"),
@@ -1722,7 +1700,7 @@ class Output:
 
         return tree
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted property tree dict.
 
         Restores description + settings + channel descriptions.
@@ -1757,9 +1735,7 @@ class Output:
                 self._groups = set(grp)
             elif isinstance(grp, dict):
                 # Handle dict format.
-                self._groups = {
-                    int(k) for k, v in grp.items() if v
-                }
+                self._groups = {int(k) for k, v in grp.items() if v}
         if "onThreshold" in state:
             self._on_threshold = float(state["onThreshold"])
         if "minBrightness" in state:
@@ -1812,7 +1788,7 @@ class Output:
         if "scenes" in state:
             for nr_str, s in state["scenes"].items():
                 nr = int(nr_str)
-                ch_entries: Dict[int, Dict[str, Any]] = {}
+                ch_entries: dict[int, dict[str, Any]] = {}
                 for idx_str, ch_val in s.get("channels", {}).items():
                     idx = int(idx_str)
                     ch_entries[idx] = {
@@ -1821,21 +1797,13 @@ class Output:
                             if ch_val.get("value") is not None
                             else None
                         ),
-                        "dontCare": bool(
-                            ch_val.get("dontCare", False)
-                        ),
-                        "automatic": bool(
-                            ch_val.get("automatic", False)
-                        ),
+                        "dontCare": bool(ch_val.get("dontCare", False)),
+                        "automatic": bool(ch_val.get("automatic", False)),
                     }
                 self._scenes[nr] = {
                     "dontCare": bool(s.get("dontCare", True)),
-                    "ignoreLocalPriority": bool(
-                        s.get("ignoreLocalPriority", False)
-                    ),
-                    "effect": int(
-                        s.get("effect", int(SceneEffect.NONE))
-                    ),
+                    "ignoreLocalPriority": bool(s.get("ignoreLocalPriority", False)),
+                    "effect": int(s.get("effect", int(SceneEffect.NONE))),
                     "channels": ch_entries,
                 }
 

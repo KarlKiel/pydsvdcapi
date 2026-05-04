@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,14 +16,12 @@ from pydsvdcapi.device_property import (
     DeviceProperty,
 )
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.enums import ColorGroup, OutputFunction, OutputUsage
-from pydsvdcapi.output import Output
+from pydsvdcapi.enums import ColorGroup
 from pydsvdcapi.property_handling import NO_VALUE, elements_to_dict
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,12 +48,10 @@ def _make_vdc(host: VdcHost, **kwargs: Any) -> Vdc:
 
 
 def _base_dsuid() -> DsUid:
-    return DsUid.from_name_in_space(
-        "prop-test-device", DsUidNamespace.VDC
-    )
+    return DsUid.from_name_in_space("prop-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -101,7 +96,9 @@ class TestDevicePropertyConstruction:
     def test_default_construction(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="batteryLevel",
+            vdsd=vdsd,
+            ds_index=0,
+            name="batteryLevel",
             type=PROPERTY_TYPE_NUMERIC,
         )
 
@@ -121,10 +118,14 @@ class TestDevicePropertyConstruction:
     def test_full_numeric_construction(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="temperature",
+            vdsd=vdsd,
+            ds_index=0,
+            name="temperature",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=-40.0, max_value=80.0,
-            resolution=0.1, siunit="°C",
+            min_value=-40.0,
+            max_value=80.0,
+            resolution=0.1,
+            siunit="°C",
             default=20.0,
             description="Measured temperature",
         )
@@ -139,7 +140,9 @@ class TestDevicePropertyConstruction:
     def test_enumeration_construction(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="mode",
+            vdsd=vdsd,
+            ds_index=0,
+            name="mode",
             type=PROPERTY_TYPE_ENUMERATION,
             options={0: "Auto", 1: "Manual", 2: "Eco"},
             default="0",
@@ -152,7 +155,9 @@ class TestDevicePropertyConstruction:
     def test_string_construction(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="serialNumber",
+            vdsd=vdsd,
+            ds_index=0,
+            name="serialNumber",
             type=PROPERTY_TYPE_STRING,
             default="N/A",
         )
@@ -196,9 +201,7 @@ class TestDevicePropertyConstruction:
 
     def test_repr(self):
         _, _, _, vdsd = _make_stack()
-        prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test", type="numeric"
-        )
+        prop = DeviceProperty(vdsd=vdsd, ds_index=0, name="test", type="numeric")
         r = repr(prop)
         assert "DeviceProperty" in r
         assert "test" in r
@@ -209,7 +212,9 @@ class TestDevicePropertyConstruction:
         _, _, _, vdsd = _make_stack()
         opts = {0: "A", 1: "B"}
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_ENUMERATION,
             options=opts,
         )
@@ -244,7 +249,9 @@ class TestDevicePropertyDescriptionProperties:
     def test_numeric_minimal(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="value",
+            vdsd=vdsd,
+            ds_index=0,
+            name="value",
             type=PROPERTY_TYPE_NUMERIC,
         )
         desc = prop.get_description_properties()
@@ -261,10 +268,14 @@ class TestDevicePropertyDescriptionProperties:
     def test_numeric_full(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="temp",
+            vdsd=vdsd,
+            ds_index=0,
+            name="temp",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
-            resolution=0.1, siunit="%",
+            min_value=0.0,
+            max_value=100.0,
+            resolution=0.1,
+            siunit="%",
             default=50.0,
             description="Temperature",
         )
@@ -280,7 +291,9 @@ class TestDevicePropertyDescriptionProperties:
     def test_enumeration(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="mode",
+            vdsd=vdsd,
+            ds_index=0,
+            name="mode",
             type=PROPERTY_TYPE_ENUMERATION,
             options={0: "Auto", 1: "Manual"},
         )
@@ -294,7 +307,9 @@ class TestDevicePropertyDescriptionProperties:
     def test_string_type(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="serial",
+            vdsd=vdsd,
+            ds_index=0,
+            name="serial",
             type=PROPERTY_TYPE_STRING,
             default="unknown",
         )
@@ -306,7 +321,9 @@ class TestDevicePropertyDescriptionProperties:
     def test_enumeration_empty_options_not_included(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_ENUMERATION,
         )
         desc = prop.get_description_properties()
@@ -348,7 +365,9 @@ class TestDevicePropertyPersistence:
     def test_get_property_tree_minimal(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_STRING,
         )
         tree = prop.get_property_tree()
@@ -360,10 +379,14 @@ class TestDevicePropertyPersistence:
     def test_get_property_tree_numeric_full(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=1, name="battery",
+            vdsd=vdsd,
+            ds_index=1,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
-            resolution=1.0, siunit="%",
+            min_value=0.0,
+            max_value=100.0,
+            resolution=1.0,
+            siunit="%",
             default=100.0,
             description="Battery level",
         )
@@ -383,7 +406,9 @@ class TestDevicePropertyPersistence:
     def test_get_property_tree_enumeration(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="mode",
+            vdsd=vdsd,
+            ds_index=0,
+            name="mode",
             type=PROPERTY_TYPE_ENUMERATION,
             options={0: "Auto", 1: "Manual"},
         )
@@ -394,7 +419,9 @@ class TestDevicePropertyPersistence:
         """Unlike device states, property values ARE persisted."""
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_STRING,
         )
         prop.value = "hello"
@@ -405,10 +432,14 @@ class TestDevicePropertyPersistence:
         """Persist → restore preserves all fields including value."""
         _, _, _, vdsd = _make_stack()
         orig = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
-            resolution=1.0, siunit="%",
+            min_value=0.0,
+            max_value=100.0,
+            resolution=1.0,
+            siunit="%",
             default=100.0,
             description="Battery level",
         )
@@ -431,7 +462,9 @@ class TestDevicePropertyPersistence:
     def test_roundtrip_enumeration(self):
         _, _, _, vdsd = _make_stack()
         orig = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="mode",
+            vdsd=vdsd,
+            ds_index=0,
+            name="mode",
             type=PROPERTY_TYPE_ENUMERATION,
             options={0: "Auto", 1: "Manual"},
         )
@@ -447,7 +480,9 @@ class TestDevicePropertyPersistence:
     def test_apply_state_partial(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="original",
+            vdsd=vdsd,
+            ds_index=0,
+            name="original",
             type=PROPERTY_TYPE_STRING,
         )
         prop._apply_state({"name": "updated"})
@@ -466,7 +501,9 @@ class TestVdsdDevicePropertyManagement:
     def test_add_and_get(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_STRING,
         )
         vdsd.add_device_property(prop)
@@ -522,11 +559,15 @@ class TestVdsdDevicePropertyManagement:
     def test_multiple_properties(self):
         _, _, _, vdsd = _make_stack()
         p0 = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
         )
         p1 = DeviceProperty(
-            vdsd=vdsd, ds_index=1, name="serial",
+            vdsd=vdsd,
+            ds_index=1,
+            name="serial",
             type=PROPERTY_TYPE_STRING,
         )
         vdsd.add_device_property(p0)
@@ -554,10 +595,14 @@ class TestVdsdDevicePropertyProperties:
     def test_with_properties(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
-            resolution=1.0, siunit="%",
+            min_value=0.0,
+            max_value=100.0,
+            resolution=1.0,
+            siunit="%",
             description="Battery level",
         )
         vdsd.add_device_property(prop)
@@ -583,7 +628,9 @@ class TestVdsdDevicePropertyProperties:
     def test_with_value_set(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
         )
         prop.value = 85.0
@@ -604,9 +651,12 @@ class TestVdsdDevicePropertyPersistence:
     def test_property_tree_includes_properties(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
+            min_value=0.0,
+            max_value=100.0,
         )
         prop.value = 85.0
         vdsd.add_device_property(prop)
@@ -620,9 +670,12 @@ class TestVdsdDevicePropertyPersistence:
     def test_apply_state_restores_properties(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
+            min_value=0.0,
+            max_value=100.0,
         )
         prop.value = 73.5
         vdsd.add_device_property(prop)
@@ -650,16 +703,22 @@ class TestVdsdDevicePropertyPersistence:
         """get_property_tree → new vdsd._apply_state roundtrip."""
         _, _, _, vdsd1 = _make_stack()
         p0 = DeviceProperty(
-            vdsd=vdsd1, ds_index=0, name="battery",
+            vdsd=vdsd1,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
-            min_value=0.0, max_value=100.0,
-            resolution=1.0, siunit="%",
+            min_value=0.0,
+            max_value=100.0,
+            resolution=1.0,
+            siunit="%",
             default=100.0,
             description="Battery level",
         )
         p0.value = 85.0
         p1 = DeviceProperty(
-            vdsd=vdsd1, ds_index=1, name="mode",
+            vdsd=vdsd1,
+            ds_index=1,
+            name="mode",
             type=PROPERTY_TYPE_ENUMERATION,
             options={0: "Auto", 1: "Manual"},
         )
@@ -702,7 +761,9 @@ class TestDevicePropertyUpdateValue:
     async def test_update_numeric_value_pushes(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
         )
         vdsd.add_device_property(prop)
@@ -722,9 +783,7 @@ class TestDevicePropertyUpdateValue:
         assert msg.vdc_send_push_notification.dSUID == str(vdsd.dsuid)
 
         # Decode the pushed properties.
-        pushed = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
+        pushed = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
         assert "deviceProperties" in pushed
         assert "battery" in pushed["deviceProperties"]
         assert pushed["deviceProperties"]["battery"] == 85.0
@@ -733,7 +792,9 @@ class TestDevicePropertyUpdateValue:
     async def test_update_string_value(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="serial",
+            vdsd=vdsd,
+            ds_index=0,
+            name="serial",
             type=PROPERTY_TYPE_STRING,
         )
         vdsd._announced = True
@@ -746,7 +807,9 @@ class TestDevicePropertyUpdateValue:
     async def test_update_numeric_converts_to_float(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_NUMERIC,
         )
         vdsd._announced = True
@@ -760,7 +823,9 @@ class TestDevicePropertyUpdateValue:
     async def test_update_enumeration_stores_as_string(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="mode",
+            vdsd=vdsd,
+            ds_index=0,
+            name="mode",
             type=PROPERTY_TYPE_ENUMERATION,
         )
         vdsd._announced = True
@@ -775,7 +840,9 @@ class TestDevicePropertyUpdateValue:
         """Value is recorded but no push when no session."""
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_NUMERIC,
         )
 
@@ -786,7 +853,9 @@ class TestDevicePropertyUpdateValue:
     async def test_update_value_not_announced(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_NUMERIC,
         )
         vdsd._session = _make_mock_session()
@@ -801,13 +870,13 @@ class TestDevicePropertyUpdateValue:
         """Push failure is logged, not raised."""
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_NUMERIC,
         )
         session = _make_mock_session()
-        session.send_notification = AsyncMock(
-            side_effect=ConnectionError("lost")
-        )
+        session.send_notification = AsyncMock(side_effect=ConnectionError("lost"))
         vdsd._announced = True
         vdsd._session = session
 
@@ -818,7 +887,9 @@ class TestDevicePropertyUpdateValue:
     async def test_update_value_explicit_session(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="test",
+            vdsd=vdsd,
+            ds_index=0,
+            name="test",
             type=PROPERTY_TYPE_NUMERIC,
         )
 
@@ -844,7 +915,9 @@ class TestVdsdUpdateDeviceProperty:
     async def test_update_device_property(self):
         _, _, _, vdsd = _make_stack()
         prop = DeviceProperty(
-            vdsd=vdsd, ds_index=0, name="battery",
+            vdsd=vdsd,
+            ds_index=0,
+            name="battery",
             type=PROPERTY_TYPE_NUMERIC,
         )
         vdsd.add_device_property(prop)

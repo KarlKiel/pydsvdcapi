@@ -45,14 +45,15 @@ Usage example::
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 
 if TYPE_CHECKING:
+    from pydsvdcapi.device_template import DeviceTemplate
     from pydsvdcapi.session import VdcSession
     from pydsvdcapi.vdc_host import VdcHost
     from pydsvdcapi.vdsd import Device, Vdsd
@@ -71,6 +72,7 @@ ENTITY_TYPE_VDC: str = "vDC"
 # Capabilities helper
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class VdcCapabilities:
     """Boolean capability flags for a vDC.
@@ -88,7 +90,7 @@ class VdcCapabilities:
     identification: bool = False
     dynamic_definitions: bool = False
 
-    def to_dict(self) -> Dict[str, bool]:
+    def to_dict(self) -> dict[str, bool]:
         """Return the capabilities as a ``{name: bool}`` dictionary."""
         return {
             "metering": self.metering,
@@ -97,7 +99,7 @@ class VdcCapabilities:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> VdcCapabilities:
+    def from_dict(cls, data: dict[str, Any]) -> VdcCapabilities:
         """Create a :class:`VdcCapabilities` from a persisted dictionary."""
         return cls(
             metering=bool(data.get("metering", False)),
@@ -109,6 +111,7 @@ class VdcCapabilities:
 # ---------------------------------------------------------------------------
 # Vdc
 # ---------------------------------------------------------------------------
+
 
 class Vdc:
     """Represents a logical virtual Device Connector.
@@ -178,15 +181,29 @@ class Vdc:
 
     #: Attribute names whose mutation triggers a debounced auto-save
     #: on the parent :class:`VdcHost`.
-    _TRACKED_ATTRS: ClassVar[frozenset] = frozenset({
-        "name", "model", "model_version", "model_uid",
-        "hardware_version", "hardware_guid", "hardware_model_guid",
-        "vendor_name", "vendor_id", "vendor_guid",
-        "descriptions_group", "descriptions_class",
-        "oem_guid", "oem_model_guid",
-        "config_url", "device_icon_name", "device_class",
-        "device_class_version", "zone_id",
-    })
+    _TRACKED_ATTRS: ClassVar[frozenset] = frozenset(
+        {
+            "name",
+            "model",
+            "model_version",
+            "model_uid",
+            "hardware_version",
+            "hardware_guid",
+            "hardware_model_guid",
+            "vendor_name",
+            "vendor_id",
+            "vendor_guid",
+            "descriptions_group",
+            "descriptions_class",
+            "oem_guid",
+            "oem_model_guid",
+            "config_url",
+            "device_icon_name",
+            "device_class",
+            "device_class_version",
+            "zone_id",
+        }
+    )
 
     # ---- attribute change tracking -----------------------------------
 
@@ -198,10 +215,7 @@ class Vdc:
         (during ``__init__`` and state restoration).
         """
         super().__setattr__(name, value)
-        if (
-            name in self._TRACKED_ATTRS
-            and getattr(self, "_auto_save_enabled", False)
-        ):
+        if name in self._TRACKED_ATTRS and getattr(self, "_auto_save_enabled", False):
             host = getattr(self, "_host", None)
             if host is not None:
                 host._schedule_auto_save()
@@ -213,30 +227,32 @@ class Vdc:
         *,
         host: VdcHost,
         implementation_id: str,
-        dsuid: Optional[DsUid] = None,
+        dsuid: DsUid | None = None,
         name: str,
         model: str,
-        model_version: Optional[str] = None,
-        model_uid: Optional[str] = None,
-        hardware_version: Optional[str] = None,
-        hardware_guid: Optional[str] = None,
-        hardware_model_guid: Optional[str] = None,
-        vendor_name: Optional[str] = None,
-        vendor_id: Optional[str] = None,
-        vendor_guid: Optional[str] = None,
-        descriptions_group: Optional[str] = None,
-        descriptions_class: Optional[str] = None,
-        oem_guid: Optional[str] = None,
-        oem_model_guid: Optional[str] = None,
-        config_url: Optional[str] = None,
-        device_icon_16: Optional[bytes] = None,
-        device_icon_name: Optional[str] = None,
-        device_class: Optional[str] = None,
-        device_class_version: Optional[str] = None,
-        capabilities: VdcCapabilities = VdcCapabilities(),
+        model_version: str | None = None,
+        model_uid: str | None = None,
+        hardware_version: str | None = None,
+        hardware_guid: str | None = None,
+        hardware_model_guid: str | None = None,
+        vendor_name: str | None = None,
+        vendor_id: str | None = None,
+        vendor_guid: str | None = None,
+        descriptions_group: str | None = None,
+        descriptions_class: str | None = None,
+        oem_guid: str | None = None,
+        oem_model_guid: str | None = None,
+        config_url: str | None = None,
+        device_icon_16: bytes | None = None,
+        device_icon_name: str | None = None,
+        device_class: str | None = None,
+        device_class_version: str | None = None,
+        capabilities: VdcCapabilities | None = None,
         zone_id: int = 0,
-        template_path: Optional[Union[str, Path]] = None,
+        template_path: str | Path | None = None,
     ) -> None:
+        if capabilities is None:
+            capabilities = VdcCapabilities()
         # Auto-save must be disabled during construction.
         self._auto_save_enabled: bool = False
 
@@ -258,39 +274,37 @@ class Vdc:
             raise ValueError("Vdc.model must not be empty")
         self.name: str = name
         self.model: str = model
-        self.model_version: Optional[str] = model_version
-        self.model_uid: str = (
-            model_uid or self._derive_model_uid(self.model)
-        )
-        self.hardware_version: Optional[str] = hardware_version
-        self.hardware_guid: Optional[str] = hardware_guid
-        self.hardware_model_guid: Optional[str] = hardware_model_guid
-        self.vendor_name: Optional[str] = vendor_name
-        self.vendor_id: Optional[str] = vendor_id
-        self.vendor_guid: Optional[str] = vendor_guid
-        self.descriptions_group: Optional[str] = descriptions_group
-        self.descriptions_class: Optional[str] = descriptions_class
-        self.oem_guid: Optional[str] = oem_guid
-        self.oem_model_guid: Optional[str] = oem_model_guid
-        self.config_url: Optional[str] = config_url
-        self.device_icon_16: Optional[bytes] = device_icon_16
-        self.device_icon_name: Optional[str] = device_icon_name
-        self.device_class: Optional[str] = device_class
-        self.device_class_version: Optional[str] = device_class_version
+        self.model_version: str | None = model_version
+        self.model_uid: str = model_uid or self._derive_model_uid(self.model)
+        self.hardware_version: str | None = hardware_version
+        self.hardware_guid: str | None = hardware_guid
+        self.hardware_model_guid: str | None = hardware_model_guid
+        self.vendor_name: str | None = vendor_name
+        self.vendor_id: str | None = vendor_id
+        self.vendor_guid: str | None = vendor_guid
+        self.descriptions_group: str | None = descriptions_group
+        self.descriptions_class: str | None = descriptions_class
+        self.oem_guid: str | None = oem_guid
+        self.oem_model_guid: str | None = oem_model_guid
+        self.config_url: str | None = config_url
+        self.device_icon_16: bytes | None = device_icon_16
+        self.device_icon_name: str | None = device_icon_name
+        self.device_class: str | None = device_class
+        self.device_class_version: str | None = device_class_version
 
         # --- vDC-specific properties ----------------------------------
         self._capabilities: VdcCapabilities = capabilities
         self.zone_id: int = zone_id
 
         # --- device registry ------------------------------------------
-        self._devices: Dict[str, Device] = {}  # keyed by base dSUID str
+        self._devices: dict[str, Device] = {}  # keyed by base dSUID str
 
         # --- runtime state --------------------------------------------
         self._active: bool = True
         self._announced: bool = False
 
         # --- template path --------------------------------------------
-        self._template_path: Optional[Path] = (
+        self._template_path: Path | None = (
             Path(template_path) if template_path is not None else None
         )
 
@@ -306,9 +320,7 @@ class Vdc:
         Uses UUIDv5 hashing with the well-known VDC namespace so that
         the same implementation ID always produces the same dSUID.
         """
-        return DsUid.from_name_in_space(
-            implementation_id, DsUidNamespace.VDC
-        )
+        return DsUid.from_name_in_space(implementation_id, DsUidNamespace.VDC)
 
     @staticmethod
     def _derive_model_uid(model: str) -> str:
@@ -387,12 +399,14 @@ class Vdc:
         self._devices[key] = device
         logger.info(
             "Registered device %s with vDC '%s' (%d vdSD(s))",
-            key, self.name, len(device.vdsds),
+            key,
+            self.name,
+            len(device.vdsds),
         )
         if getattr(self, "_auto_save_enabled", False):
             self._host._schedule_auto_save()
 
-    def remove_device(self, dsuid: DsUid) -> Optional[Device]:
+    def remove_device(self, dsuid: DsUid) -> Device | None:
         """Remove a device by its base dSUID.
 
         Returns the removed :class:`Device` or ``None``.
@@ -400,18 +414,16 @@ class Vdc:
         key = str(dsuid.device_base())
         device = self._devices.pop(key, None)
         if device is not None:
-            logger.info(
-                "Removed device %s from vDC '%s'", key, self.name
-            )
+            logger.info("Removed device %s from vDC '%s'", key, self.name)
             if getattr(self, "_auto_save_enabled", False):
                 self._host._schedule_auto_save()
         return device
 
-    def get_device(self, dsuid: DsUid) -> Optional[Device]:
+    def get_device(self, dsuid: DsUid) -> Device | None:
         """Look up a device by its base dSUID."""
         return self._devices.get(str(dsuid.device_base()))
 
-    def get_vdsd_by_dsuid(self, dsuid: DsUid) -> Optional[Vdsd]:
+    def get_vdsd_by_dsuid(self, dsuid: DsUid) -> Vdsd | None:
         """Look up a vdSD across all devices by its full dSUID."""
         for device in self._devices.values():
             vdsd = device.get_vdsd_by_dsuid(dsuid)
@@ -420,7 +432,7 @@ class Vdc:
         return None
 
     @property
-    def devices(self) -> Dict[str, Device]:
+    def devices(self) -> dict[str, Device]:
         """A read-only view of all registered devices."""
         return dict(self._devices)
 
@@ -441,20 +453,21 @@ class Vdc:
 
         unannounced = [d for d in self._devices.values() if not d.is_announced]
 
-        async def _announce_one(device) -> int:
+        async def _announce_one(device: Any) -> int:
             try:
-                return await device.announce(session)
+                result = await device.announce(session)
+                return int(result)
             except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Failed to announce device %s", device.dsuid
-                )
+                logger.exception("Failed to announce device %s", device.dsuid)
                 return 0
 
         results = await _asyncio.gather(*[_announce_one(d) for d in unannounced])
         total = sum(results)
         logger.info(
             "vDC '%s': announced %d vdSD(s) across %d device(s)",
-            self.name, total, len(self._devices),
+            self.name,
+            total,
+            len(self._devices),
         )
         return total
 
@@ -466,12 +479,12 @@ class Vdc:
 
     def save_template(
         self,
-        device: "Device",
+        device: Device,
         *,
         template_type: str,
         integration: str,
         name: str,
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> Path:
         """Save a device template to disk.
 
@@ -509,15 +522,14 @@ class Vdc:
             )
 
         import yaml
+
         from pydsvdcapi.device_template import (
             DeviceTemplate,
             build_required_callbacks,
             build_required_fields,
         )
 
-        vdsd_trees = [
-            vdsd.get_property_tree() for vdsd in device.vdsds.values()
-        ]
+        vdsd_trees = [vdsd.get_property_tree() for vdsd in device.vdsds.values()]
         stripped_tree = device.get_template_tree()
 
         template = DeviceTemplate(
@@ -530,11 +542,7 @@ class Vdc:
             description=description,
         )
 
-        folder = (
-            self._template_path
-            / f"{template_type}_templates"
-            / integration
-        )
+        folder = self._template_path / f"{template_type}_templates" / integration
         folder.mkdir(parents=True, exist_ok=True)
         file_path = folder / f"{name}.yaml"
 
@@ -548,7 +556,10 @@ class Vdc:
 
         logger.info(
             "Saved %s template '%s/%s' to %s",
-            template_type, integration, name, file_path,
+            template_type,
+            integration,
+            name,
+            file_path,
         )
         return file_path
 
@@ -557,7 +568,7 @@ class Vdc:
         template_type: str,
         integration: str,
         name: str,
-    ) -> "DeviceTemplate":
+    ) -> DeviceTemplate:
         """Load a device template from disk.
 
         Parameters
@@ -589,6 +600,7 @@ class Vdc:
             )
 
         import yaml
+
         from pydsvdcapi.device_template import DeviceTemplate
 
         file_path = (
@@ -604,18 +616,21 @@ class Vdc:
         template = DeviceTemplate.from_dict(data)
         logger.info(
             "Loaded %s template '%s/%s' from %s",
-            template_type, integration, name, file_path,
+            template_type,
+            integration,
+            name,
+            file_path,
         )
         return template
 
     @property
-    def template_path(self) -> Optional[Path]:
+    def template_path(self) -> Path | None:
         """The base directory for device templates (read-only)."""
         return self._template_path
 
     # ---- common-property dict ----------------------------------------
 
-    def get_properties(self) -> Dict[str, Any]:
+    def get_properties(self) -> dict[str, Any]:
         """Return all properties as a flat dictionary.
 
         Keys match the property names from the vDC API specification.
@@ -652,7 +667,7 @@ class Vdc:
 
     # ---- property tree (for persistence) -----------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the vDC data suitable for inclusion in the host's
         YAML property tree.
 
@@ -669,7 +684,7 @@ class Vdc:
               dynamicDefinitions: false
             zoneID: 0
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dSUID": str(self._dsuid),
             "implementationId": self._implementation_id,
             "name": self.name,
@@ -695,14 +710,13 @@ class Vdc:
         }
         if self._devices:
             node["devices"] = [
-                dev.get_property_tree()
-                for dev in self._devices.values()
+                dev.get_property_tree() for dev in self._devices.values()
             ]
         return node
 
     # ---- state restoration -------------------------------------------
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Apply a persisted state dict to this vDC's properties.
 
         Auto-save is suppressed during restoration to avoid triggering
@@ -750,29 +764,22 @@ class Vdc:
             if "deviceClassVersion" in state:
                 self.device_class_version = state["deviceClassVersion"]
             if "capabilities" in state:
-                self._capabilities = VdcCapabilities.from_dict(
-                    state["capabilities"]
-                )
+                self._capabilities = VdcCapabilities.from_dict(state["capabilities"])
             if "zoneID" in state:
                 self.zone_id = state["zoneID"]
 
             # Restore devices from persisted state.
             if "devices" in state:
                 from pydsvdcapi.vdsd import Device
+
                 for dev_state in state["devices"]:
                     base_dsuid_str = dev_state.get("baseDsUID")
                     if base_dsuid_str:
                         base = DsUid.from_string(base_dsuid_str)
-                        device = self._devices.get(
-                            str(base.device_base())
-                        )
+                        device = self._devices.get(str(base.device_base()))
                         if device is None:
-                            device = Device(
-                                vdc=self, dsuid=base
-                            )
-                            self._devices[
-                                str(device.dsuid)
-                            ] = device
+                            device = Device(vdc=self, dsuid=base)
+                            self._devices[str(device.dsuid)] = device
                         device._apply_state(dev_state)
         finally:
             self._auto_save_enabled = prev
@@ -808,18 +815,14 @@ class Vdc:
         msg.type = pb.VDC_SEND_ANNOUNCE_VDC
         msg.vdc_send_announce_vdc.dSUID = str(self._dsuid)
 
-        logger.info(
-            "Announcing vDC '%s' (dSUID %s)", self.name, self._dsuid
-        )
+        logger.info("Announcing vDC '%s' (dSUID %s)", self.name, self._dsuid)
 
         response = await session.send_request(msg)
 
         code = response.generic_response.code
         if code == pb.ERR_OK:
             self._announced = True
-            logger.info(
-                "vDC '%s' announced successfully", self.name
-            )
+            logger.info("vDC '%s' announced successfully", self.name)
             return True
 
         description = response.generic_response.description

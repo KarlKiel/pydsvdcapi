@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.vdcapi_pb2 import PropertyElement, PropertyValue
 from pydsvdcapi.actions import (
     ActionParameter,
     CustomAction,
@@ -19,12 +17,11 @@ from pydsvdcapi.actions import (
 )
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import ColorGroup
-from pydsvdcapi.property_handling import elements_to_dict
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
-from pydsvdcapi.vdsd import Device, InvokeActionCallback, Vdsd
-
+from pydsvdcapi.vdcapi_pb2 import PropertyElement
+from pydsvdcapi.vdsd import Device, Vdsd
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,12 +48,10 @@ def _make_vdc(host: VdcHost, **kwargs: Any) -> Vdc:
 
 
 def _base_dsuid() -> DsUid:
-    return DsUid.from_name_in_space(
-        "action-test-device", DsUidNamespace.VDC
-    )
+    return DsUid.from_name_in_space("action-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -111,9 +106,13 @@ class TestActionParameter:
 
     def test_numeric_properties(self):
         p = ActionParameter(
-            name="level", type="numeric",
-            min_value=0.0, max_value=100.0,
-            resolution=0.5, siunit="%", default=50.0,
+            name="level",
+            type="numeric",
+            min_value=0.0,
+            max_value=100.0,
+            resolution=0.5,
+            siunit="%",
+            default=50.0,
         )
         props = p.get_properties()
         assert props == {
@@ -127,7 +126,8 @@ class TestActionParameter:
 
     def test_enumeration_properties(self):
         p = ActionParameter(
-            name="mode", type="enumeration",
+            name="mode",
+            type="enumeration",
             options={0: "Off", 1: "On", 2: "Auto"},
             default="Auto",
         )
@@ -146,9 +146,13 @@ class TestActionParameter:
 
     def test_property_tree_roundtrip(self):
         p = ActionParameter(
-            name="temp", type="numeric",
-            min_value=-10.0, max_value=40.0,
-            resolution=0.1, siunit="°C", default=20.0,
+            name="temp",
+            type="numeric",
+            min_value=-10.0,
+            max_value=40.0,
+            resolution=0.1,
+            siunit="°C",
+            default=20.0,
         )
         tree = p.get_property_tree()
         assert tree["name"] == "temp"
@@ -167,7 +171,8 @@ class TestActionParameter:
 
     def test_enumeration_tree_roundtrip(self):
         p = ActionParameter(
-            name="mode", type="enumeration",
+            name="mode",
+            type="enumeration",
             options={0: "Off", 1: "On"},
         )
         tree = p.get_property_tree()
@@ -210,7 +215,9 @@ class TestDeviceActionDescription:
     def test_default_construction(self):
         _, _, _, vdsd = _make_stack()
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="play",
         )
         assert desc.vdsd is vdsd
         assert desc.ds_index == 0
@@ -223,7 +230,9 @@ class TestDeviceActionDescription:
         p1 = ActionParameter(name="volume", type="numeric", min_value=0, max_value=100)
         p2 = ActionParameter(name="source", type="string")
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="play",
             params=[p1, p2],
             description="Play media",
         )
@@ -238,7 +247,9 @@ class TestDeviceActionDescription:
     def test_no_params_omitted(self):
         _, _, _, vdsd = _make_stack()
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="stop",
+            vdsd=vdsd,
+            ds_index=0,
+            name="stop",
         )
         props = desc.get_description_properties()
         assert "params" not in props
@@ -248,8 +259,11 @@ class TestDeviceActionDescription:
         _, _, _, vdsd = _make_stack()
         p = ActionParameter(name="vol", type="numeric", default=50.0)
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=2, name="play",
-            params=[p], description="Play media",
+            vdsd=vdsd,
+            ds_index=2,
+            name="play",
+            params=[p],
+            description="Play media",
         )
         tree = desc.get_property_tree()
         assert tree["dsIndex"] == 2
@@ -296,7 +310,9 @@ class TestStandardAction:
     def test_default_construction(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.play",
             action="play",
         )
         assert std.vdsd is vdsd
@@ -308,8 +324,11 @@ class TestStandardAction:
     def test_with_params(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.play",
-            action="play", params={"volume": 80},
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.play",
+            action="play",
+            params={"volume": 80},
         )
         props = std.get_properties()
         assert props["name"] == "std.play"
@@ -319,7 +338,9 @@ class TestStandardAction:
     def test_no_params_omitted(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.stop",
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.stop",
             action="stop",
         )
         props = std.get_properties()
@@ -328,8 +349,11 @@ class TestStandardAction:
     def test_property_tree_roundtrip(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=1, name="std.play",
-            action="play", params={"volume": 80},
+            vdsd=vdsd,
+            ds_index=1,
+            name="std.play",
+            action="play",
+            params={"volume": 80},
         )
         tree = std.get_property_tree()
         assert tree["dsIndex"] == 1
@@ -368,8 +392,11 @@ class TestCustomAction:
     def test_default_construction(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.loud",
-            action="play", title="Play Loud",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.loud",
+            action="play",
+            title="Play Loud",
         )
         assert cust.vdsd is vdsd
         assert cust.ds_index == 0
@@ -381,8 +408,11 @@ class TestCustomAction:
     def test_with_params(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.loud",
-            action="play", title="Play Loud",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.loud",
+            action="play",
+            title="Play Loud",
             params={"volume": 100},
         )
         props = cust.get_properties()
@@ -394,14 +424,19 @@ class TestCustomAction:
     def test_apply_settings(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.a",
-            action="play", title="Old Title",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.a",
+            action="play",
+            title="Old Title",
         )
-        cust.apply_settings({
-            "action": "stop",
-            "title": "New Title",
-            "params": {"key": "value"},
-        })
+        cust.apply_settings(
+            {
+                "action": "stop",
+                "title": "New Title",
+                "params": {"key": "value"},
+            }
+        )
         assert cust.action == "stop"
         assert cust.title == "New Title"
         assert cust.params == {"key": "value"}
@@ -409,8 +444,11 @@ class TestCustomAction:
     def test_apply_settings_partial(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.a",
-            action="play", title="Title",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.a",
+            action="play",
+            title="Title",
         )
         cust.apply_settings({"title": "Updated"})
         assert cust.title == "Updated"
@@ -419,8 +457,11 @@ class TestCustomAction:
     def test_property_tree_roundtrip(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=3, name="custom.loud",
-            action="play", title="Loud Play",
+            vdsd=vdsd,
+            ds_index=3,
+            name="custom.loud",
+            action="play",
+            title="Loud Play",
             params={"volume": 100},
         )
         tree = cust.get_property_tree()
@@ -448,9 +489,7 @@ class TestCustomAction:
 
     def test_repr(self):
         _, _, _, vdsd = _make_stack()
-        cust = CustomAction(
-            vdsd=vdsd, name="custom.a", action="play", title="Title"
-        )
+        cust = CustomAction(vdsd=vdsd, name="custom.a", action="play", title="Title")
         r = repr(cust)
         assert "custom.a" in r
         assert "play" in r
@@ -468,7 +507,9 @@ class TestDynamicAction:
     def test_default_construction(self):
         _, _, _, vdsd = _make_stack()
         dyn = DynamicAction(
-            vdsd=vdsd, ds_index=0, name="dynamic.special",
+            vdsd=vdsd,
+            ds_index=0,
+            name="dynamic.special",
             title="Special Mode",
         )
         assert dyn.vdsd is vdsd
@@ -479,7 +520,9 @@ class TestDynamicAction:
     def test_properties(self):
         _, _, _, vdsd = _make_stack()
         dyn = DynamicAction(
-            vdsd=vdsd, ds_index=0, name="dynamic.x",
+            vdsd=vdsd,
+            ds_index=0,
+            name="dynamic.x",
             title="X Mode",
         )
         props = dyn.get_properties()
@@ -513,7 +556,9 @@ class TestVdsdActionRegistration:
     def test_add_action_description(self):
         _, _, _, vdsd = _make_stack()
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="play",
         )
         vdsd.add_device_action_description(desc)
         assert vdsd.action_descriptions == {0: desc}
@@ -523,7 +568,9 @@ class TestVdsdActionRegistration:
         _, _, _, vdsd1 = _make_stack()
         host2, vdc2, dev2, vdsd2 = _make_stack()
         desc = DeviceActionDescription(
-            vdsd=vdsd2, ds_index=0, name="play",
+            vdsd=vdsd2,
+            ds_index=0,
+            name="play",
         )
         with pytest.raises(ValueError, match="different vdSD"):
             vdsd1.add_device_action_description(desc)
@@ -539,7 +586,10 @@ class TestVdsdActionRegistration:
     def test_add_standard_action(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.play", action="play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.play",
+            action="play",
         )
         vdsd.add_standard_action(std)
         assert vdsd.standard_actions == {0: std}
@@ -562,8 +612,11 @@ class TestVdsdActionRegistration:
     def test_add_custom_action(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.a",
-            action="play", title="A",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.a",
+            action="play",
+            title="A",
         )
         vdsd.add_custom_action(cust)
         assert vdsd.custom_actions == {0: cust}
@@ -579,8 +632,11 @@ class TestVdsdActionRegistration:
     def test_remove_custom_action(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.a",
-            action="play", title="A",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.a",
+            action="play",
+            title="A",
         )
         vdsd.add_custom_action(cust)
         assert vdsd.remove_custom_action(0) is cust
@@ -589,7 +645,10 @@ class TestVdsdActionRegistration:
     def test_add_dynamic_action(self):
         _, _, _, vdsd = _make_stack()
         dyn = DynamicAction(
-            vdsd=vdsd, ds_index=0, name="dynamic.x", title="X",
+            vdsd=vdsd,
+            ds_index=0,
+            name="dynamic.x",
+            title="X",
         )
         vdsd.add_dynamic_action(dyn)
         assert vdsd.dynamic_actions == {0: dyn}
@@ -640,8 +699,11 @@ class TestGetPropertiesActions:
         _, _, _, vdsd = _make_stack()
         p = ActionParameter(name="vol", type="numeric", min_value=0, max_value=100)
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="play",
-            params=[p], description="Play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="play",
+            params=[p],
+            description="Play",
         )
         vdsd.add_device_action_description(desc)
         props = vdsd.get_properties()
@@ -656,8 +718,11 @@ class TestGetPropertiesActions:
         desc = DeviceActionDescription(vdsd=vdsd, ds_index=0, name="play")
         vdsd.add_device_action_description(desc)
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.play",
-            action="play", params={"volume": 80},
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.play",
+            action="play",
+            params={"volume": 80},
         )
         vdsd.add_standard_action(std)
         props = vdsd.get_properties()
@@ -672,8 +737,12 @@ class TestGetPropertiesActions:
         desc = DeviceActionDescription(vdsd=vdsd, ds_index=0, name="play")
         vdsd.add_device_action_description(desc)
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.loud",
-            action="play", title="Loud", params={"volume": 100},
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.loud",
+            action="play",
+            title="Loud",
+            params={"volume": 100},
         )
         vdsd.add_custom_action(cust)
         props = vdsd.get_properties()
@@ -687,7 +756,10 @@ class TestGetPropertiesActions:
         desc = DeviceActionDescription(vdsd=vdsd, ds_index=0, name="play")
         vdsd.add_device_action_description(desc)
         dyn = DynamicAction(
-            vdsd=vdsd, ds_index=0, name="dynamic.x", title="X",
+            vdsd=vdsd,
+            ds_index=0,
+            name="dynamic.x",
+            title="X",
         )
         vdsd.add_dynamic_action(dyn)
         props = vdsd.get_properties()
@@ -702,7 +774,9 @@ class TestGetPropertiesActions:
 
         _, _, _, vdsd = _make_stack()
         st = DeviceState(
-            vdsd=vdsd, ds_index=0, name="state",
+            vdsd=vdsd,
+            ds_index=0,
+            name="state",
             options={0: "Off"},
         )
         vdsd.add_device_state(st)
@@ -734,8 +808,11 @@ class TestActionPersistence:
         _, _, _, vdsd = _make_stack()
         p = ActionParameter(name="vol", type="numeric", default=50.0)
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="play",
-            params=[p], description="Play media",
+            vdsd=vdsd,
+            ds_index=0,
+            name="play",
+            params=[p],
+            description="Play media",
         )
         vdsd.add_device_action_description(desc)
         tree = vdsd.get_property_tree()
@@ -746,8 +823,11 @@ class TestActionPersistence:
     def test_persist_standard_actions(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.play",
-            action="play", params={"vol": 80},
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.play",
+            action="play",
+            params={"vol": 80},
         )
         vdsd.add_standard_action(std)
         tree = vdsd.get_property_tree()
@@ -757,8 +837,11 @@ class TestActionPersistence:
     def test_persist_custom_actions(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.loud",
-            action="play", title="Loud",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.loud",
+            action="play",
+            title="Loud",
         )
         vdsd.add_custom_action(cust)
         tree = vdsd.get_property_tree()
@@ -768,7 +851,10 @@ class TestActionPersistence:
     def test_dynamic_actions_not_persisted(self):
         _, _, _, vdsd = _make_stack()
         dyn = DynamicAction(
-            vdsd=vdsd, ds_index=0, name="dynamic.x", title="X",
+            vdsd=vdsd,
+            ds_index=0,
+            name="dynamic.x",
+            title="X",
         )
         vdsd.add_dynamic_action(dyn)
         tree = vdsd.get_property_tree()
@@ -779,8 +865,11 @@ class TestActionPersistence:
         _, _, _, vdsd = _make_stack()
         p = ActionParameter(name="vol", type="numeric", default=50.0)
         desc = DeviceActionDescription(
-            vdsd=vdsd, ds_index=0, name="play",
-            params=[p], description="Play",
+            vdsd=vdsd,
+            ds_index=0,
+            name="play",
+            params=[p],
+            description="Play",
         )
         vdsd.add_device_action_description(desc)
         tree = vdsd.get_property_tree()
@@ -799,8 +888,11 @@ class TestActionPersistence:
     def test_restore_standard_actions(self):
         _, _, _, vdsd = _make_stack()
         std = StandardAction(
-            vdsd=vdsd, ds_index=0, name="std.play",
-            action="play", params={"vol": 80},
+            vdsd=vdsd,
+            ds_index=0,
+            name="std.play",
+            action="play",
+            params={"vol": 80},
         )
         vdsd.add_standard_action(std)
         tree = vdsd.get_property_tree()
@@ -816,8 +908,11 @@ class TestActionPersistence:
     def test_restore_custom_actions(self):
         _, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.loud",
-            action="play", title="Loud",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.loud",
+            action="play",
+            title="Loud",
             params={"vol": 100},
         )
         vdsd.add_custom_action(cust)
@@ -910,7 +1005,7 @@ class TestVdcHostGenericRequest:
         self,
         dsuid: str,
         action_id: str,
-        params: Optional[dict] = None,
+        params: dict | None = None,
     ) -> pb.Message:
         """Build a VDSM_REQUEST_GENERIC_REQUEST for invokeDeviceAction."""
         msg = pb.Message()
@@ -954,7 +1049,9 @@ class TestVdcHostGenericRequest:
 
         session = _make_mock_session()
         msg = self._make_invoke_msg(
-            str(vdsd.dsuid), "std.play", {"volume": 80},
+            str(vdsd.dsuid),
+            "std.play",
+            {"volume": 80},
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_OK
@@ -1034,9 +1131,7 @@ class TestVdcHostGenericRequest:
 # ===========================================================================
 
 
-def _make_config_gr_msg(
-    dsuid: str, method: str, **params: Any
-) -> pb.Message:
+def _make_config_gr_msg(dsuid: str, method: str, **params: Any) -> pb.Message:
     """Build a ``VDSM_REQUEST_GENERIC_REQUEST`` with simple scalar params."""
     msg = pb.Message()
     msg.type = pb.VDSM_REQUEST_GENERIC_REQUEST
@@ -1073,8 +1168,10 @@ class TestGenericRequestPair:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "pair",
-            establish=True, timeout=30,
+            str(host.dsuid),
+            "pair",
+            establish=True,
+            timeout=30,
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_OK
@@ -1123,8 +1220,10 @@ class TestGenericRequestAuthenticate:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "authenticate",
-            authData='{"token":"abc"}', authScope="user1",
+            str(host.dsuid),
+            "authenticate",
+            authData='{"token":"abc"}',
+            authScope="user1",
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_OK
@@ -1138,7 +1237,9 @@ class TestGenericRequestAuthenticate:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "authenticate", authData="x",
+            str(host.dsuid),
+            "authenticate",
+            authData="x",
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
@@ -1159,13 +1260,15 @@ class TestGenericRequestFirmwareUpgrade:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "firmwareUpgrade",
-            checkonly=True, clearsettings=False,
+            str(host.dsuid),
+            "firmwareUpgrade",
+            checkonly=True,
+            clearsettings=False,
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_OK
         assert len(received) == 1
-        assert received[0][1] is True   # check_only
+        assert received[0][1] is True  # check_only
         assert received[0][2] is False  # clear_settings
 
     @pytest.mark.asyncio
@@ -1174,7 +1277,9 @@ class TestGenericRequestFirmwareUpgrade:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "firmwareUpgrade", checkonly=False,
+            str(host.dsuid),
+            "firmwareUpgrade",
+            checkonly=False,
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
@@ -1190,7 +1295,9 @@ class TestGenericRequestFirmwareUpgrade:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "firmwareUpgrade", checkonly=False,
+            str(host.dsuid),
+            "firmwareUpgrade",
+            checkonly=False,
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
@@ -1212,7 +1319,9 @@ class TestGenericRequestSetConfiguration:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "setConfiguration", id="profile_2",
+            str(host.dsuid),
+            "setConfiguration",
+            id="profile_2",
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_OK
@@ -1226,7 +1335,9 @@ class TestGenericRequestSetConfiguration:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "setConfiguration", id="x",
+            str(host.dsuid),
+            "setConfiguration",
+            id="x",
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
@@ -1242,7 +1353,9 @@ class TestGenericRequestSetConfiguration:
         session = _make_mock_session()
 
         msg = _make_config_gr_msg(
-            str(host.dsuid), "setConfiguration", id="x",
+            str(host.dsuid),
+            "setConfiguration",
+            id="x",
         )
         resp = await host._handle_generic_request(session, msg)
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
@@ -1260,8 +1373,11 @@ class TestSetPropertyCustomActions:
     def test_apply_custom_action_settings(self):
         host, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.a",
-            action="play", title="Old",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.a",
+            action="play",
+            title="Old",
         )
         vdsd.add_custom_action(cust)
 
@@ -1277,8 +1393,11 @@ class TestSetPropertyCustomActions:
     def test_apply_custom_action_nonexistent_index_ignored(self):
         host, _, _, vdsd = _make_stack()
         cust = CustomAction(
-            vdsd=vdsd, ds_index=0, name="custom.a",
-            action="play", title="Title",
+            vdsd=vdsd,
+            ds_index=0,
+            name="custom.a",
+            action="play",
+            title="Title",
         )
         vdsd.add_custom_action(cust)
 

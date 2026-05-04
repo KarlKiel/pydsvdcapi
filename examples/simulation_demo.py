@@ -67,9 +67,7 @@ import logging
 import random
 import shutil
 import sys
-import time
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Make the package importable when running from the repository root.
@@ -78,7 +76,10 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+import contextlib  # noqa: E402
+
 from pydsvdcapi import (  # noqa: E402
+    PROPERTY_TYPE_NUMERIC,
     BinaryInput,
     BinaryInputType,
     BinaryInputUsage,
@@ -97,7 +98,6 @@ from pydsvdcapi import (  # noqa: E402
     OutputChannelType,
     OutputFunction,
     OutputMode,
-    PROPERTY_TYPE_NUMERIC,
     SensorInput,
     SensorType,
     SensorUsage,
@@ -106,9 +106,9 @@ from pydsvdcapi import (  # noqa: E402
     VdcHost,
     Vdsd,
 )
+from pydsvdcapi import genericVDC_pb2 as pb  # noqa: E402
 from pydsvdcapi.actions import ActionParameter  # noqa: E402
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace  # noqa: E402
-from pydsvdcapi import genericVDC_pb2 as pb  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -151,6 +151,7 @@ BLUE = "\033[94m"
 # Logging
 # ---------------------------------------------------------------------------
 
+
 class ColourFormatter(logging.Formatter):
     LEVEL_COLOURS = {
         logging.DEBUG: GREY,
@@ -174,15 +175,21 @@ def setup_logging() -> None:
     root.addHandler(handler)
     root.setLevel(logging.DEBUG)
     # Silence noisy per-tick internal loggers; keep WARNING+ visible.
-    for _noisy in ("zeroconf", "pydsvdcapi.output_channel", "pydsvdcapi.session",
-                   "pydsvdcapi.output", "pydsvdcapi.binary_input",
-                   "pydsvdcapi.sensor_input"):
+    for _noisy in (
+        "zeroconf",
+        "pydsvdcapi.output_channel",
+        "pydsvdcapi.session",
+        "pydsvdcapi.output",
+        "pydsvdcapi.binary_input",
+        "pydsvdcapi.sensor_input",
+    ):
         logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 
 # ---------------------------------------------------------------------------
 # Console helpers
 # ---------------------------------------------------------------------------
+
 
 def banner(text: str) -> None:
     width = 64
@@ -205,17 +212,14 @@ def warn(text: str) -> None:
     print(f"{YELLOW}[warn]{RESET} {text}")
 
 
-async def wait_for_session(host: "VdcHost", timeout: float = CONNECT_TIMEOUT) -> None:
+async def wait_for_session(host: VdcHost, timeout: float = CONNECT_TIMEOUT) -> None:
     """Block until the vdSM completes the Hello handshake."""
     info(f"Waiting up to {int(timeout)}s for vdSM to connect on port {host.port}…")
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         s = host.session
         if s is not None and s.is_active:
-            info(
-                f"Session established — vdSM {s.vdsm_dsuid}  "
-                f"(API v{s.api_version})"
-            )
+            info(f"Session established — vdSM {s.vdsm_dsuid}  (API v{s.api_version})")
             return
         await asyncio.sleep(0.25)
     raise TimeoutError(
@@ -228,9 +232,11 @@ async def wait_for_user(prompt: str) -> None:
     loop = asyncio.get_running_loop()
     print()
     print(f"{BOLD}{YELLOW}{prompt}{RESET}")
+
     def _read():
         line = sys.stdin.readline()
         return line  # empty string on EOF — caller doesn't use return value
+
     await loop.run_in_executor(None, _read)
 
 
@@ -243,9 +249,15 @@ async def show_menu() -> str:
         print(f"{BOLD}{CYAN}╔══════════════════════════════════════════╗{RESET}")
         print(f"{BOLD}{CYAN}║         Simulation Demo — Main Menu      ║{RESET}")
         print(f"{BOLD}{CYAN}╠══════════════════════════════════════════╣{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[1]{RESET} Simulate VDC breakdown + auto-restore   {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[2]{RESET} Save Device A as template → Device D     {CYAN}║{RESET}")
-        print(f"{BOLD}{CYAN}║{RESET}  {YELLOW}[3]{RESET} End simulation (vanish, cleanup)         {CYAN}║{RESET}")
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[1]{RESET} Simulate VDC breakdown + auto-restore   {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[2]{RESET} Save Device A as template → Device D     {CYAN}║{RESET}"
+        )
+        print(
+            f"{BOLD}{CYAN}║{RESET}  {YELLOW}[3]{RESET} End simulation (vanish, cleanup)         {CYAN}║{RESET}"
+        )
         print(f"{BOLD}{CYAN}╚══════════════════════════════════════════╝{RESET}")
         print(f"{BOLD}Choice:{RESET} ", end="", flush=True)
         line = sys.stdin.readline()
@@ -260,12 +272,17 @@ async def show_menu() -> str:
 # Protobuf callback
 # ---------------------------------------------------------------------------
 
-async def on_message(session, msg: pb.Message) -> Optional[pb.Message]:
+
+async def on_message(session, msg: pb.Message) -> pb.Message | None:
     """Handle messages not already consumed by the session layer."""
     type_name = pb.Type.Name(msg.type)
     logging.getLogger("pb").debug(
         "%sRX%s  type=%-35s  msg_id=%d  from=%s",
-        CYAN, RESET, type_name, msg.message_id, session.vdsm_dsuid,
+        CYAN,
+        RESET,
+        type_name,
+        msg.message_id,
+        session.vdsm_dsuid,
     )
     if msg.message_id > 0:
         resp = pb.Message()
@@ -280,7 +297,8 @@ async def on_message(session, msg: pb.Message) -> Optional[pb.Message]:
 # Device-A — Motion Sensor + Dimmer + Action
 # ===========================================================================
 
-def build_device_a(vdc: "Vdc") -> "Device":
+
+def build_device_a(vdc: Vdc) -> Device:
     """Build Device A: motion binary-input + dimmer + toggle action."""
     dsuid = DsUid.from_name_in_space("sim-demo-device-a", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=dsuid)
@@ -358,11 +376,11 @@ def build_device_a(vdc: "Vdc") -> "Device":
 class MockDeviceA:
     """Background simulator for Device A (motion + dimmer)."""
 
-    def __init__(self, device: "Device") -> None:
-        self._vdsd: "Vdsd" = list(device.vdsds.values())[0]
-        self._bi: "BinaryInput" = self._vdsd.binary_inputs[0]
-        self._output: "Output" = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+    def __init__(self, device: Device) -> None:
+        self._vdsd: Vdsd = list(device.vdsds.values())[0]
+        self._bi: BinaryInput = self._vdsd.binary_inputs[0]
+        self._output: Output = self._vdsd.output
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-A")
         self._motion = False
         self._brightness = 0.0
@@ -375,7 +393,10 @@ class MockDeviceA:
         self._brightness = brightness if self._brightness == 0.0 else 0.0
         self._log.info(
             "%s[Action A]%s invoke '%s'  brightness → %.0f%%",
-            MAGENTA, RESET, action_id, self._brightness,
+            MAGENTA,
+            RESET,
+            action_id,
+            self._brightness,
         )
         # Action output has no regular output channel; state is tracked internally.
 
@@ -386,10 +407,8 @@ class MockDeviceA:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         info("Mock Device A stopped")
 
@@ -403,7 +422,8 @@ class MockDeviceA:
                     await self._bi.update_value(self._motion)
                     self._log.info(
                         "%s[A] Motion%s → %s",
-                        CYAN, RESET,
+                        CYAN,
+                        RESET,
                         "DETECTED" if self._motion else "cleared",
                     )
 
@@ -417,7 +437,8 @@ class MockDeviceA:
 # Device-B — Rocker Switch + CT Dimmer + DeviceProperty
 # ===========================================================================
 
-def build_device_b(vdc: "Vdc") -> "Device":
+
+def build_device_b(vdc: Vdc) -> Device:
     """Build Device B: rocker-button + brightness+CT dimmer + property."""
     dsuid = DsUid.from_name_in_space("sim-demo-device-b", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=dsuid)
@@ -502,18 +523,19 @@ def _make_on_channel_applied(label: str):
             name = ch_type.name if hasattr(ch_type, "name") else str(ch_type)
             parts.append(f"{name}={val:.1f}")
         info(f"{MAGENTA}[{label}] on_channel_applied{RESET}  {', '.join(parts)}")
+
     return on_channel_applied
 
 
 class MockDeviceB:
     """Background simulator for Device B (single button + CT dimmer + temp sensor)."""
 
-    def __init__(self, device: "Device") -> None:
-        self._vdsd: "Vdsd" = list(device.vdsds.values())[0]
-        self._output: "Output" = self._vdsd.output
-        self._prop: "DeviceProperty" = self._vdsd.device_properties[0]
-        self._sensor: "SensorInput" = self._vdsd.sensor_inputs[0]
-        self._task: Optional[asyncio.Task] = None
+    def __init__(self, device: Device) -> None:
+        self._vdsd: Vdsd = list(device.vdsds.values())[0]
+        self._output: Output = self._vdsd.output
+        self._prop: DeviceProperty = self._vdsd.device_properties[0]
+        self._sensor: SensorInput = self._vdsd.sensor_inputs[0]
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-B")
         self._brightness = 50.0
         # CT is in mired (100–1000).  333 mired ≈ 3000 K (warm white).
@@ -532,10 +554,8 @@ class MockDeviceB:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         info("Mock Device B stopped")
 
@@ -552,7 +572,9 @@ class MockDeviceB:
                     154.0, min(1000.0, self._ct + random.uniform(-10.0, 10.0))
                 )
                 ch_br = self._output.get_channel_by_type(OutputChannelType.BRIGHTNESS)
-                ch_ct = self._output.get_channel_by_type(OutputChannelType.COLOR_TEMPERATURE)
+                ch_ct = self._output.get_channel_by_type(
+                    OutputChannelType.COLOR_TEMPERATURE
+                )
                 if ch_br is not None:
                     await ch_br.update_value(self._brightness)
                 if ch_ct is not None:
@@ -570,7 +592,9 @@ class MockDeviceB:
                     await self._sensor.update_value(round(self._temperature, 1))
                     self._log.info(
                         "%s[B] temperature%s → %.1f °C",
-                        MAGENTA, RESET, self._temperature,
+                        MAGENTA,
+                        RESET,
+                        self._temperature,
                     )
 
                 # Log + push property every ~30 s (60 cycles)
@@ -578,7 +602,9 @@ class MockDeviceB:
                     await self._prop.update_value(round(self._op_hours, 4))
                     self._log.info(
                         "%s[B] operatingHours%s → %.4f h",
-                        MAGENTA, RESET, self._op_hours,
+                        MAGENTA,
+                        RESET,
+                        self._op_hours,
                     )
 
                 cycle += 1
@@ -591,7 +617,8 @@ class MockDeviceB:
 # Device-C — Window Sensor + Relay + DeviceEvent
 # ===========================================================================
 
-def build_device_c(vdc: "Vdc") -> "Device":
+
+def build_device_c(vdc: Vdc) -> Device:
     """Build Device C: window contact binary-input + relay output + event."""
     dsuid = DsUid.from_name_in_space("sim-demo-device-c", DsUidNamespace.VDC)
     device = Device(vdc=vdc, dsuid=dsuid)
@@ -651,12 +678,12 @@ def build_device_c(vdc: "Vdc") -> "Device":
 class MockDeviceC:
     """Background simulator for Device C (window contact + relay + event)."""
 
-    def __init__(self, device: "Device") -> None:
-        self._vdsd: "Vdsd" = list(device.vdsds.values())[0]
-        self._bi: "BinaryInput" = self._vdsd.binary_inputs[0]
-        self._output: "Output" = self._vdsd.output
-        self._event: "DeviceEvent" = self._vdsd.device_events[0]
-        self._task: Optional[asyncio.Task] = None
+    def __init__(self, device: Device) -> None:
+        self._vdsd: Vdsd = list(device.vdsds.values())[0]
+        self._bi: BinaryInput = self._vdsd.binary_inputs[0]
+        self._output: Output = self._vdsd.output
+        self._event: DeviceEvent = self._vdsd.device_events[0]
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-C")
         self._window_open = False
         self._relay_on = False
@@ -668,10 +695,8 @@ class MockDeviceC:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         info("Mock Device C stopped")
 
@@ -689,14 +714,16 @@ class MockDeviceC:
                         await self._bi.update_value(self._window_open)
                         self._log.info(
                             "%s[C] Window%s → %s",
-                            CYAN, RESET,
+                            CYAN,
+                            RESET,
                             "OPEN" if self._window_open else "closed",
                         )
                         # Raise event on every transition
                         await self._event.raise_event()
                         self._log.info(
                             "%s[C] Event%s 'windowAlert' raised!",
-                            MAGENTA, RESET,
+                            MAGENTA,
+                            RESET,
                         )
 
                 # Relay mirrors window state (open → relay off / ventilation etc.)
@@ -709,7 +736,8 @@ class MockDeviceC:
                         await ch.update_value(100.0 if self._relay_on else 0.0)
                     self._log.info(
                         "%s[C] Relay%s → %s",
-                        CYAN, RESET,
+                        CYAN,
+                        RESET,
                         "ON" if self._relay_on else "OFF",
                     )
 
@@ -723,7 +751,8 @@ class MockDeviceC:
 # Factory helpers
 # ===========================================================================
 
-def build_all_devices(vdc: "Vdc") -> dict:
+
+def build_all_devices(vdc: Vdc) -> dict:
     """Build and return the active devices (currently Device A only)."""
     return {
         "A": build_device_a(vdc),
@@ -731,8 +760,8 @@ def build_all_devices(vdc: "Vdc") -> dict:
 
 
 async def announce_devices(
-    host: "VdcHost",
-    vdc: "Vdc",
+    host: VdcHost,
+    vdc: Vdc,
     devices: dict,
 ) -> None:
     """Announce all devices in *devices* to the vdSM."""
@@ -748,7 +777,7 @@ async def announce_devices(
     # pre-registered devices the dSM discovers all of them at once and
     # will not confirm any single announce until all are in flight —
     # sequential announcing would deadlock.
-    async def _announce_one(label: str, device: "Device") -> None:
+    async def _announce_one(label: str, device: Device) -> None:
         for vdsd in device.vdsds.values():
             ok = await vdsd.announce(session)
             info(
@@ -762,7 +791,7 @@ async def announce_devices(
     )
 
 
-async def vanish_devices(host: "VdcHost", devices: dict) -> None:
+async def vanish_devices(host: VdcHost, devices: dict) -> None:
     """Send vanish for all devices in *devices*."""
     session = host.session
     for label, device in devices.items():
@@ -791,13 +820,14 @@ async def stop_mocks(mocks: dict) -> None:
 # Menu action implementations
 # ===========================================================================
 
+
 async def action_breakdown_restore(
-    host: "VdcHost",
-    vdc: "Vdc",
+    host: VdcHost,
+    vdc: Vdc,
     devices: dict,
     mocks: dict,
     port: int,
-) -> tuple["VdcHost", "Vdc", dict, dict]:
+) -> tuple[VdcHost, Vdc, dict, dict]:
     """Stop everything, wipe state, rebuild from YAML, re-announce.
 
     Returns the new (host, vdc, devices, mocks) tuple.
@@ -871,7 +901,7 @@ async def action_breakdown_restore(
     if not new_vdc.is_announced:
         warn("vDC re-announcement failed.")
     else:
-        info(f"vDC and all devices re-announced")
+        info("vDC and all devices re-announced")
 
     section("Restarting mock simulators…")
     new_mocks = build_mocks(new_devices)
@@ -882,10 +912,10 @@ async def action_breakdown_restore(
 
 
 async def action_save_template_create_d(
-    host: "VdcHost",
-    vdc: "Vdc",
+    host: VdcHost,
+    vdc: Vdc,
     devices: dict,
-) -> Optional["Device"]:
+) -> Device | None:
     """Save Device A as template, load and instantiate Device D."""
     banner("Menu [2] — Save Device A as template → Device D")
 
@@ -935,8 +965,7 @@ async def action_save_template_create_d(
     vdc.add_device(device_d)
     ok = await vdsd_d.announce(session)
     info(
-        f"{GREEN}[D]{RESET} '{vdsd_d.name}' announced  "
-        f"(dSUID={vdsd_d.dsuid}  ok={ok})"
+        f"{GREEN}[D]{RESET} '{vdsd_d.name}' announced  (dSUID={vdsd_d.dsuid}  ok={ok})"
     )
     return device_d
 
@@ -946,10 +975,10 @@ async def _device_d_invoke_action(action_id: str, params: dict) -> None:
 
 
 async def action_end(
-    host: "VdcHost",
+    host: VdcHost,
     devices: dict,
     mocks: dict,
-    device_d: Optional["Device"],
+    device_d: Device | None,
 ) -> None:
     """Vanish all devices, stop host, clean up all temporary files."""
     banner("Menu [3] — End simulation")
@@ -987,6 +1016,7 @@ async def action_end(
 # Main coroutine
 # ===========================================================================
 
+
 async def main() -> None:
     import signal
 
@@ -1010,8 +1040,7 @@ async def main() -> None:
         while True:
             try:
                 raw = input(
-                    f"\n{BOLD}Enter TCP port for the VdcHost "
-                    f"[default 8444]: {RESET}"
+                    f"\n{BOLD}Enter TCP port for the VdcHost [default 8444]: {RESET}"
                 ).strip()
                 if not raw:
                     return 8444
@@ -1102,7 +1131,7 @@ async def main() -> None:
     await start_mocks(mocks)
 
     # ── Interactive menu loop ───────────────────────────────────────────
-    device_d: Optional[Device] = None
+    device_d: Device | None = None
 
     while True:
         # Honour Ctrl+C between menu iterations

@@ -1,11 +1,8 @@
 """Tests for VdcHost debounced auto-save functionality."""
 
-import threading
 import time
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import yaml
 
 from pydsvdcapi.vdc_host import AUTO_SAVE_DELAY, VdcHost
@@ -17,6 +14,7 @@ TEST_MAC = "AA:BB:CC:DD:EE:FF"
 # Helper — wait for auto-save to complete (with safety margin)
 # ---------------------------------------------------------------------------
 
+
 def _wait_for_auto_save(margin: float = 0.3) -> None:
     """Sleep long enough for the debounce timer to fire."""
     time.sleep(AUTO_SAVE_DELAY + margin)
@@ -26,8 +24,8 @@ def _wait_for_auto_save(margin: float = 0.3) -> None:
 # Auto-save triggers
 # ---------------------------------------------------------------------------
 
-class TestAutoSaveTriggers:
 
+class TestAutoSaveTriggers:
     def test_changing_name_triggers_save(self, tmp_path):
         path = tmp_path / "host.yaml"
         host = VdcHost(mac=TEST_MAC, state_path=path, name="Initial")
@@ -74,8 +72,8 @@ class TestAutoSaveTriggers:
 # Debounce coalescence
 # ---------------------------------------------------------------------------
 
-class TestAutoSaveDebounce:
 
+class TestAutoSaveDebounce:
     def test_rapid_changes_coalesce(self, tmp_path):
         """Multiple rapid changes should result in only the final state."""
         path = tmp_path / "host.yaml"
@@ -109,8 +107,8 @@ class TestAutoSaveDebounce:
 # No auto-save without persistence
 # ---------------------------------------------------------------------------
 
-class TestNoAutoSaveWithoutStore:
 
+class TestNoAutoSaveWithoutStore:
     def test_no_timer_without_state_path(self):
         host = VdcHost(mac=TEST_MAC)
         assert not host._auto_save_enabled
@@ -140,7 +138,7 @@ class TestNoAutoSaveWithoutStore:
     def test_init_auto_save_fires_after_delay(self, tmp_path):
         """After the debounce delay the initial state is persisted."""
         path = tmp_path / "host.yaml"
-        host = VdcHost(
+        VdcHost(
             mac=TEST_MAC,
             state_path=path,
             name="Delayed",
@@ -155,8 +153,8 @@ class TestNoAutoSaveWithoutStore:
 # No auto-save during load()
 # ---------------------------------------------------------------------------
 
-class TestNoAutoSaveDuringLoad:
 
+class TestNoAutoSaveDuringLoad:
     def test_load_does_not_trigger_auto_save(self, tmp_path):
         path = tmp_path / "host.yaml"
 
@@ -181,8 +179,8 @@ class TestNoAutoSaveDuringLoad:
 # flush()
 # ---------------------------------------------------------------------------
 
-class TestFlush:
 
+class TestFlush:
     def test_flush_saves_immediately(self, tmp_path):
         path = tmp_path / "host.yaml"
         host = VdcHost(mac=TEST_MAC, state_path=path, name="Before")
@@ -224,8 +222,8 @@ class TestFlush:
 # Manual save() cancels pending auto-save
 # ---------------------------------------------------------------------------
 
-class TestManualSaveCancels:
 
+class TestManualSaveCancels:
     def test_save_cancels_pending_auto_save(self, tmp_path):
         path = tmp_path / "host.yaml"
         host = VdcHost(mac=TEST_MAC, state_path=path)
@@ -256,8 +254,8 @@ class TestManualSaveCancels:
 # Private attrs do NOT trigger auto-save
 # ---------------------------------------------------------------------------
 
-class TestPrivateAttrsIgnored:
 
+class TestPrivateAttrsIgnored:
     def test_private_attrs_do_not_trigger(self, tmp_path):
         path = tmp_path / "host.yaml"
         host = VdcHost(mac=TEST_MAC, state_path=path)
