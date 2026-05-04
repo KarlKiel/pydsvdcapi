@@ -53,6 +53,7 @@ from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 
 if TYPE_CHECKING:
+    from pydsvdcapi.device_template import DeviceTemplate
     from pydsvdcapi.session import VdcSession
     from pydsvdcapi.vdc_host import VdcHost
     from pydsvdcapi.vdsd import Device, Vdsd
@@ -441,9 +442,10 @@ class Vdc:
 
         unannounced = [d for d in self._devices.values() if not d.is_announced]
 
-        async def _announce_one(device) -> int:
+        async def _announce_one(device: Any) -> int:
             try:
-                return await device.announce(session)
+                result = await device.announce(session)
+                return int(result)
             except Exception:  # noqa: BLE001
                 logger.exception(
                     "Failed to announce device %s", device.dsuid
