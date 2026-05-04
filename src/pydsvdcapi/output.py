@@ -99,9 +99,9 @@ if TYPE_CHECKING:
 
 #: Type alias for the channel-applied callback.
 #: ``async def callback(output, channel_updates) -> None``
-#: where *channel_updates* is a dict ``{OutputChannelType: value}``.
+#: where *channel_updates* is a dict ``{OutputChannelType | int: value}``.
 ChannelAppliedCallback = Callable[
-    ["Output", Dict[OutputChannelType, float]],
+    ["Output", Dict[Union[OutputChannelType, int], float]],
     Coroutine[Any, Any, None],
 ]
 
@@ -1349,9 +1349,7 @@ class Output:
         Hardware callback is NOT invoked yet.
         """
         channel.set_value_from_vdsm(value)
-        self._pending_channel_updates[channel.ds_index] = (
-            channel.value  # type: ignore[arg-type]
-        )
+        self._pending_channel_updates[channel.ds_index] = value
 
     async def apply_pending_channels(self) -> None:
         """Apply all buffered channel value changes to hardware.
@@ -1366,7 +1364,7 @@ class Output:
             return
 
         # Build the callback argument: {OutputChannelType: value}.
-        updates: Dict[OutputChannelType, float] = {}
+        updates: Dict[Union[OutputChannelType, int], float] = {}
         for ds_index, value in self._pending_channel_updates.items():
             ch = self._channels.get(ds_index)
             if ch is not None:
