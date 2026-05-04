@@ -615,7 +615,7 @@ def build_vdsd_sheet(
     ws = wb.create_sheet(title=f"D{di_idx:02d} {safe}"[:31])
     _set_col_widths(ws, [28, 22, 40, 14, 50])
 
-    title_fill = _GROUP_TITLE_FILL.get(primary_group, "CCCCCC")
+    _GROUP_TITLE_FILL.get(primary_group, "CCCCCC")
     row = _write_title_row(
         ws,
         1,

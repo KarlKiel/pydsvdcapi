@@ -21,9 +21,9 @@ The ``TICK`` constant (seconds) controls the simulation resolution.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import random
-from typing import Optional
 
 from pydsvdcapi import (
     BinaryInput,
@@ -77,7 +77,7 @@ class MockDevice1:
         self._vdsd = _first_vdsd(device)
         self._btn: ButtonInput = self._vdsd.button_inputs[0]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-1")
 
     def start(self) -> None:
@@ -86,10 +86,8 @@ class MockDevice1:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -132,7 +130,7 @@ class MockDevice2:
         self._btn_down: ButtonInput = self._vdsd.button_inputs[0]
         self._btn_up: ButtonInput = self._vdsd.button_inputs[1]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-2")
 
     def start(self) -> None:
@@ -141,10 +139,8 @@ class MockDevice2:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -187,7 +183,7 @@ class MockDevice3:
         self._vdsd = _first_vdsd(device)
         self._bi: BinaryInput = self._vdsd.binary_inputs[0]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-3")
         self._door_open = False
         self._shade_pos = 0.0
@@ -199,10 +195,8 @@ class MockDevice3:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -270,7 +264,7 @@ class MockDevice4:
         self._si_lux: SensorInput = self._vdsd.sensor_inputs[0]
         self._si_power: SensorInput = self._vdsd.sensor_inputs[1]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-4")
         # Simulated readings.
         self._lux = 350.0
@@ -289,10 +283,8 @@ class MockDevice4:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:
@@ -378,7 +370,7 @@ class MockDevice5:
         self._vdsd = _first_vdsd(device)
         self._prop: DeviceProperty = self._vdsd.device_properties[0]
         self._event: DeviceEvent = self._vdsd.device_events[0]
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-5")
         self._counter = 0.0
 
@@ -388,10 +380,8 @@ class MockDevice5:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run(self) -> None:

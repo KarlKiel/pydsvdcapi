@@ -59,7 +59,6 @@ import shutil
 import signal
 import sys
 from pathlib import Path
-from typing import Dict, Optional
 
 # ---------------------------------------------------------------------------
 # Make the package importable when running from the repository root.
@@ -172,7 +171,7 @@ class ColourFormatter(logging.Formatter):
 
 
 # Logging is **off** by default — menu option [6] toggles it.
-_log_handler: Optional[logging.Handler] = None
+_log_handler: logging.Handler | None = None
 _logging_enabled = False
 
 
@@ -272,7 +271,7 @@ async def wait_for_session(
 async def on_message(
     session,
     msg: pb.Message,
-) -> Optional[pb.Message]:
+) -> pb.Message | None:
     if msg.message_id > 0:
         resp = pb.Message()
         resp.type = pb.GENERIC_RESPONSE
@@ -775,7 +774,7 @@ def build_device_5(vdc: Vdc) -> Device:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def build_all_devices(vdc: Vdc) -> Dict[str, Device]:
+def build_all_devices(vdc: Vdc) -> dict[str, Device]:
     """Build all five devices and return them keyed by label."""
     return {
         "1": build_device_1(vdc),
@@ -788,7 +787,7 @@ def build_all_devices(vdc: Vdc) -> Dict[str, Device]:
 
 async def announce_devices(
     host: VdcHost,
-    devices: Dict[str, Device],
+    devices: dict[str, Device],
 ) -> None:
     """Announce all devices concurrently.
 
@@ -812,7 +811,7 @@ async def announce_devices(
 
 async def vanish_devices(
     host: VdcHost,
-    devices: Dict[str, Device],
+    devices: dict[str, Device],
 ) -> None:
     """Vanish all devices."""
     session = host.session
@@ -821,7 +820,7 @@ async def vanish_devices(
         info(f"{YELLOW}[{label}]{RESET} vanished")
 
 
-def build_mocks(devices: Dict[str, Device]) -> Dict[str, object]:
+def build_mocks(devices: dict[str, Device]) -> dict[str, object]:
     """Wrap each device in its mock simulator."""
     return {
         "1": MockDevice1(devices["1"]),
@@ -832,12 +831,12 @@ def build_mocks(devices: Dict[str, Device]) -> Dict[str, object]:
     }
 
 
-async def start_mocks(mocks: Dict[str, object]) -> None:
+async def start_mocks(mocks: dict[str, object]) -> None:
     for m in mocks.values():
         m.start()
 
 
-async def stop_mocks(mocks: Dict[str, object]) -> None:
+async def stop_mocks(mocks: dict[str, object]) -> None:
     for m in mocks.values():
         await m.stop()
 
@@ -853,8 +852,8 @@ async def stop_mocks(mocks: Dict[str, object]) -> None:
 async def action_shutdown_restore(
     host: VdcHost,
     vdc: Vdc,
-    devices: Dict[str, Device],
-    mocks: Dict[str, object],
+    devices: dict[str, Device],
+    mocks: dict[str, object],
     port: int,
 ) -> tuple:
     """Simulate a VDC breakdown: stop, rebuild from YAML, re-announce.
@@ -946,7 +945,7 @@ async def action_shutdown_restore(
 
 
 async def action_create_converter(
-    devices: Dict[str, Device],
+    devices: dict[str, Device],
 ) -> None:
     """Attach a W→kW uplink converter to device 4's active-power sensor.
 
@@ -982,8 +981,8 @@ async def action_create_converter(
 async def action_template_workflow(
     host: VdcHost,
     vdc: Vdc,
-    devices: Dict[str, Device],
-) -> Optional[Device]:
+    devices: dict[str, Device],
+) -> Device | None:
     """Save device 1 as a template, then instantiate a new device from it.
 
     Demonstrates the full template lifecycle:
@@ -1070,7 +1069,7 @@ async def action_template_workflow(
 
 
 async def action_fire_event(
-    mocks: Dict[str, object],
+    mocks: dict[str, object],
 ) -> None:
     """Trigger device 5's custom event and push it to the dSS.
 
@@ -1088,9 +1087,9 @@ async def action_fire_event(
 
 async def action_end(
     host: VdcHost,
-    devices: Dict[str, Device],
-    mocks: Dict[str, object],
-    template_device: Optional[Device],
+    devices: dict[str, Device],
+    mocks: dict[str, object],
+    template_device: Device | None,
 ) -> None:
     """Vanish all devices, stop host, remove all temporary files."""
     banner("Menu [5] — End simulation & cleanup")
@@ -1345,7 +1344,7 @@ async def main() -> None:
     info("All mock simulators running.")
 
     # Track devices created via the template workflow.
-    template_device: Optional[Device] = None
+    template_device: Device | None = None
 
     # When stdin is not a real terminal (e.g. background process / no tty),
     # skip the interactive menu and run headlessly until SIGINT / SIGTERM.

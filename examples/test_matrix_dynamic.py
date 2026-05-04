@@ -27,7 +27,6 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from pydsvdcapi import (
     ColorGroup,
@@ -65,7 +64,7 @@ class DeviceConfig:
     # Extra model features to add manually before derive_model_features()
     extra_features: list[str] = field(default_factory=list)
     # Optional GTIN
-    gtin: Optional[str] = None
+    gtin: str | None = None
     # Note for the summary
     note: str = ""
 
@@ -247,7 +246,7 @@ class DeviceRuntime:
     device: Device
     vdsd: Vdsd
     output: Output
-    channel: Optional[OutputChannel]
+    channel: OutputChannel | None
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +303,7 @@ def build_device(vdc: Vdc, cfg: DeviceConfig) -> DeviceRuntime:
         ch.confirm_applied()  # mark initial value as hardware-confirmed (age != null)
 
     # Bind the primary channel for later push.
-    channel: Optional[OutputChannel] = output.get_channel(0)
+    channel: OutputChannel | None = output.get_channel(0)
 
     # Log inbound value changes from the dSS.
     device_name = cfg.name  # close over for the callback

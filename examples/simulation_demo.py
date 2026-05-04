@@ -68,7 +68,6 @@ import random
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Make the package importable when running from the repository root.
@@ -76,6 +75,8 @@ from typing import Optional
 _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+import contextlib
 
 from pydsvdcapi import (  # noqa: E402
     PROPERTY_TYPE_NUMERIC,
@@ -272,7 +273,7 @@ async def show_menu() -> str:
 # ---------------------------------------------------------------------------
 
 
-async def on_message(session, msg: pb.Message) -> Optional[pb.Message]:
+async def on_message(session, msg: pb.Message) -> pb.Message | None:
     """Handle messages not already consumed by the session layer."""
     type_name = pb.Type.Name(msg.type)
     logging.getLogger("pb").debug(
@@ -379,7 +380,7 @@ class MockDeviceA:
         self._vdsd: Vdsd = list(device.vdsds.values())[0]
         self._bi: BinaryInput = self._vdsd.binary_inputs[0]
         self._output: Output = self._vdsd.output
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-A")
         self._motion = False
         self._brightness = 0.0
@@ -406,10 +407,8 @@ class MockDeviceA:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         info("Mock Device A stopped")
 
@@ -536,7 +535,7 @@ class MockDeviceB:
         self._output: Output = self._vdsd.output
         self._prop: DeviceProperty = self._vdsd.device_properties[0]
         self._sensor: SensorInput = self._vdsd.sensor_inputs[0]
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-B")
         self._brightness = 50.0
         # CT is in mired (100–1000).  333 mired ≈ 3000 K (warm white).
@@ -555,10 +554,8 @@ class MockDeviceB:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         info("Mock Device B stopped")
 
@@ -686,7 +683,7 @@ class MockDeviceC:
         self._bi: BinaryInput = self._vdsd.binary_inputs[0]
         self._output: Output = self._vdsd.output
         self._event: DeviceEvent = self._vdsd.device_events[0]
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._log = logging.getLogger("mock-C")
         self._window_open = False
         self._relay_on = False
@@ -698,10 +695,8 @@ class MockDeviceC:
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         info("Mock Device C stopped")
 
@@ -920,7 +915,7 @@ async def action_save_template_create_d(
     host: VdcHost,
     vdc: Vdc,
     devices: dict,
-) -> Optional[Device]:
+) -> Device | None:
     """Save Device A as template, load and instantiate Device D."""
     banner("Menu [2] — Save Device A as template → Device D")
 
@@ -983,7 +978,7 @@ async def action_end(
     host: VdcHost,
     devices: dict,
     mocks: dict,
-    device_d: Optional[Device],
+    device_d: Device | None,
 ) -> None:
     """Vanish all devices, stop host, clean up all temporary files."""
     banner("Menu [3] — End simulation")
@@ -1136,7 +1131,7 @@ async def main() -> None:
     await start_mocks(mocks)
 
     # ── Interactive menu loop ───────────────────────────────────────────
-    device_d: Optional[Device] = None
+    device_d: Device | None = None
 
     while True:
         # Honour Ctrl+C between menu iterations
