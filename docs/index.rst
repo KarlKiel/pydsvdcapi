@@ -8,12 +8,3 @@ Python library for the digitalSTROM virtual Device Connector (vDC) API.
    :caption: Contents
 
    api
-
-API Reference
-=============
-
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   pydsvdcapi
