@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.device_event import DeviceEvent
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.enums import ColorGroup, OutputFunction, OutputUsage
-from pydsvdcapi.output import Output
+from pydsvdcapi.enums import ColorGroup
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -44,12 +41,10 @@ def _make_vdc(host: VdcHost, **kwargs: Any) -> Vdc:
 
 
 def _base_dsuid() -> DsUid:
-    return DsUid.from_name_in_space(
-        "evt-test-device", DsUidNamespace.VDC
-    )
+    return DsUid.from_name_in_space("evt-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -151,9 +146,7 @@ class TestDeviceEventDescriptionProperties:
 
     def test_with_description(self):
         _, _, _, vdsd = _make_stack()
-        evt = DeviceEvent(
-            vdsd=vdsd, name="ring", description="Ring pressed"
-        )
+        evt = DeviceEvent(vdsd=vdsd, name="ring", description="Ring pressed")
         props = evt.get_description_properties()
         assert props == {"name": "ring", "description": "Ring pressed"}
 
@@ -175,7 +168,9 @@ class TestDeviceEventPersistence:
     def test_property_tree_full(self):
         _, _, _, vdsd = _make_stack()
         evt = DeviceEvent(
-            vdsd=vdsd, ds_index=3, name="knock",
+            vdsd=vdsd,
+            ds_index=3,
+            name="knock",
             description="Someone knocked",
         )
         tree = evt.get_property_tree()
@@ -194,9 +189,7 @@ class TestDeviceEventPersistence:
 
     def test_apply_state_partial(self):
         _, _, _, vdsd = _make_stack()
-        evt = DeviceEvent(
-            vdsd=vdsd, ds_index=0, name="orig", description="kept"
-        )
+        evt = DeviceEvent(vdsd=vdsd, ds_index=0, name="orig", description="kept")
         evt._apply_state({"name": "changed"})
         assert evt.name == "changed"
         # description not in state → unchanged
@@ -206,7 +199,9 @@ class TestDeviceEventPersistence:
         """get_property_tree → _apply_state roundtrip."""
         _, _, _, vdsd = _make_stack()
         evt = DeviceEvent(
-            vdsd=vdsd, ds_index=5, name="press",
+            vdsd=vdsd,
+            ds_index=5,
+            name="press",
             description="Button press",
         )
         tree = evt.get_property_tree()
@@ -311,7 +306,9 @@ class TestDeviceEventsInProperties:
     def test_events_in_properties(self):
         _, _, _, vdsd = _make_stack()
         evt = DeviceEvent(
-            vdsd=vdsd, ds_index=0, name="bell",
+            vdsd=vdsd,
+            ds_index=0,
+            name="bell",
             description="Doorbell",
         )
         vdsd.add_device_event(evt)
@@ -324,12 +321,8 @@ class TestDeviceEventsInProperties:
 
     def test_multiple_events_in_properties(self):
         _, _, _, vdsd = _make_stack()
-        vdsd.add_device_event(
-            DeviceEvent(vdsd=vdsd, ds_index=0, name="bell")
-        )
-        vdsd.add_device_event(
-            DeviceEvent(vdsd=vdsd, ds_index=1, name="motion")
-        )
+        vdsd.add_device_event(DeviceEvent(vdsd=vdsd, ds_index=0, name="bell"))
+        vdsd.add_device_event(DeviceEvent(vdsd=vdsd, ds_index=1, name="motion"))
 
         props = vdsd.get_properties()
         desc = props["deviceEventDescriptions"]
@@ -349,8 +342,7 @@ class TestDeviceEventVdsdPersistence:
     def test_property_tree_includes_events(self):
         _, _, _, vdsd = _make_stack()
         vdsd.add_device_event(
-            DeviceEvent(vdsd=vdsd, ds_index=0, name="bell",
-                        description="Doorbell ring")
+            DeviceEvent(vdsd=vdsd, ds_index=0, name="bell", description="Doorbell ring")
         )
         tree = vdsd.get_property_tree()
 
@@ -385,11 +377,13 @@ class TestDeviceEventVdsdPersistence:
         evt = DeviceEvent(vdsd=vdsd, ds_index=0, name="old")
         vdsd.add_device_event(evt)
 
-        vdsd._apply_state({
-            "deviceEvents": [
-                {"dsIndex": 0, "name": "updated", "description": "New"},
-            ]
-        })
+        vdsd._apply_state(
+            {
+                "deviceEvents": [
+                    {"dsIndex": 0, "name": "updated", "description": "New"},
+                ]
+            }
+        )
         assert vdsd.get_device_event(0).name == "updated"
         assert vdsd.get_device_event(0) is evt  # Same instance
 
@@ -397,12 +391,9 @@ class TestDeviceEventVdsdPersistence:
         """get_property_tree → new vdsd._apply_state roundtrip."""
         _, _, _, vdsd = _make_stack()
         vdsd.add_device_event(
-            DeviceEvent(vdsd=vdsd, ds_index=0, name="bell",
-                        description="Ding dong")
+            DeviceEvent(vdsd=vdsd, ds_index=0, name="bell", description="Ding dong")
         )
-        vdsd.add_device_event(
-            DeviceEvent(vdsd=vdsd, ds_index=1, name="motion")
-        )
+        vdsd.add_device_event(DeviceEvent(vdsd=vdsd, ds_index=1, name="motion"))
         tree = vdsd.get_property_tree()
 
         # Create a new vdsd and restore.

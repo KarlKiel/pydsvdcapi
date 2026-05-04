@@ -69,7 +69,7 @@ from __future__ import annotations
 import copy
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pydsvdcapi.dsuid import DsUid
@@ -82,6 +82,7 @@ logger = logging.getLogger(__name__)
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class TemplateNotConfiguredError(Exception):
     """Raised when :meth:`DeviceTemplate.instantiate` is called before
     all required fields have been supplied.
@@ -92,12 +93,11 @@ class TemplateNotConfiguredError(Exception):
         List of field path strings that are still ``None``.
     """
 
-    def __init__(self, missing_fields: List[str]) -> None:
+    def __init__(self, missing_fields: list[str]) -> None:
         self.missing_fields = list(missing_fields)
         joined = ", ".join(missing_fields)
         super().__init__(
-            f"Template is not fully configured.  "
-            f"Missing required fields: {joined}"
+            f"Template is not fully configured.  Missing required fields: {joined}"
         )
 
 
@@ -111,7 +111,7 @@ class AnnouncementNotReadyError(Exception):
         List of callback path strings that are still ``None``.
     """
 
-    def __init__(self, missing_callbacks: List[str]) -> None:
+    def __init__(self, missing_callbacks: list[str]) -> None:
         self.missing_callbacks = list(missing_callbacks)
         joined = ", ".join(missing_callbacks)
         super().__init__(
@@ -123,6 +123,7 @@ class AnnouncementNotReadyError(Exception):
 # ---------------------------------------------------------------------------
 # DeviceTemplate
 # ---------------------------------------------------------------------------
+
 
 class DeviceTemplate:
     """A structural snapshot of a :class:`Device`, minus instance fields.
@@ -158,24 +159,20 @@ class DeviceTemplate:
         template_type: str,
         integration: str,
         name: str,
-        tree: Dict[str, Any],
-        required_fields: Dict[str, Any],
-        required_callbacks: Dict[str, None],
-        description: Optional[str] = None,
-        created_at: Optional[str] = None,
+        tree: dict[str, Any],
+        required_fields: dict[str, Any],
+        required_callbacks: dict[str, None],
+        description: str | None = None,
+        created_at: str | None = None,
     ) -> None:
         self._template_type = template_type
         self._integration = integration
         self._name = name
         self._tree = copy.deepcopy(tree)
-        self._required_fields: Dict[str, Any] = dict(required_fields)
-        self._required_callbacks: Dict[str, None] = dict(
-            required_callbacks
-        )
+        self._required_fields: dict[str, Any] = dict(required_fields)
+        self._required_callbacks: dict[str, None] = dict(required_callbacks)
         self.description = description
-        self.created_at = created_at or datetime.now(
-            timezone.utc
-        ).isoformat()
+        self.created_at = created_at or datetime.now(timezone.utc).isoformat()
 
     # ---- read-only accessors -----------------------------------------
 
@@ -195,18 +192,18 @@ class DeviceTemplate:
         return self._name
 
     @property
-    def required_fields(self) -> Dict[str, Any]:
+    def required_fields(self) -> dict[str, Any]:
         """Current values of required instance fields (copy)."""
         return dict(self._required_fields)
 
     @property
-    def required_callbacks(self) -> Dict[str, None]:
+    def required_callbacks(self) -> dict[str, None]:
         """Callback paths that must be set before announcement (copy)."""
         return dict(self._required_callbacks)
 
     # ---- configuration -----------------------------------------------
 
-    def configure(self, values: Dict[str, Any]) -> "DeviceTemplate":
+    def configure(self, values: dict[str, Any]) -> DeviceTemplate:
         """Set required instance-field values.
 
         Parameters
@@ -246,8 +243,8 @@ class DeviceTemplate:
         self,
         *,
         vdc: Any,
-        dsuid: Optional["DsUid"] = None,
-    ) -> "Device":
+        dsuid: DsUid | None = None,
+    ) -> Device:
         """Create a :class:`Device` from this template.
 
         Parameters
@@ -272,10 +269,7 @@ class DeviceTemplate:
             If :meth:`is_ready` returns ``False``.
         """
         if not self.is_ready():
-            missing = [
-                k for k, v in self._required_fields.items()
-                if v is None
-            ]
+            missing = [k for k, v in self._required_fields.items() if v is None]
             raise TemplateNotConfiguredError(missing)
 
         from pydsvdcapi.dsuid import DsUid
@@ -305,7 +299,7 @@ class DeviceTemplate:
 
     # ---- serialisation -----------------------------------------------
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialise this template to a plain dict (for YAML)."""
         return {
             "templateType": self._template_type,
@@ -319,11 +313,9 @@ class DeviceTemplate:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "DeviceTemplate":
+    def from_dict(cls, data: dict[str, Any]) -> DeviceTemplate:
         """Restore a :class:`DeviceTemplate` from a serialised dict."""
-        required_callbacks = {
-            k: None for k in data.get("requiredCallbacks", [])
-        }
+        required_callbacks = {k: None for k in data.get("requiredCallbacks", [])}
         return cls(
             template_type=data["templateType"],
             integration=data["integration"],
@@ -340,20 +332,21 @@ class DeviceTemplate:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def build_required_fields(vdsd_trees: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+def build_required_fields(vdsd_trees: list[dict[str, Any]]) -> dict[str, Any]:
     """Build the ``requiredFields`` manifest from a list of vdSD trees.
 
     Currently the only required field per vdSD is ``name``.
     """
-    fields: Dict[str, Any] = {}
+    fields: dict[str, Any] = {}
     for idx, _ in enumerate(vdsd_trees):
         fields[f"vdsds[{idx}].name"] = None
     return fields
 
 
 def build_required_callbacks(
-    vdsd_trees: List[Dict[str, Any]],
-) -> Dict[str, None]:
+    vdsd_trees: list[dict[str, Any]],
+) -> dict[str, None]:
     """Build the ``requiredCallbacks`` manifest from a list of vdSD trees.
 
     Rules:
@@ -365,15 +358,12 @@ def build_required_callbacks(
     * ``vdsds[N].output.on_channel_applied`` — if the vdSD has an
       ``output``
     """
-    callbacks: Dict[str, None] = {}
+    callbacks: dict[str, None] = {}
     for idx, vdsd_tree in enumerate(vdsd_trees):
-        if (
-            vdsd_tree.get("actionDescriptions")
-            or vdsd_tree.get("standardActions")
-        ):
+        if vdsd_tree.get("actionDescriptions") or vdsd_tree.get("standardActions"):
             callbacks[f"vdsds[{idx}].on_invoke_action"] = None
 
-        model_features: List[str] = vdsd_tree.get("modelFeatures", [])
+        model_features: list[str] = vdsd_tree.get("modelFeatures", [])
         if "identification" in model_features:
             callbacks[f"vdsds[{idx}].on_identify"] = None
 
@@ -386,7 +376,7 @@ def build_required_callbacks(
     return callbacks
 
 
-def strip_instance_fields(device_tree: Dict[str, Any]) -> Dict[str, Any]:
+def strip_instance_fields(device_tree: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of *device_tree* with instance-specific fields removed.
 
     Strips:
@@ -404,7 +394,7 @@ def strip_instance_fields(device_tree: Dict[str, Any]) -> Dict[str, Any]:
     return tree
 
 
-def _set_field_in_state(state: Dict[str, Any], path: str, value: Any) -> None:
+def _set_field_in_state(state: dict[str, Any], path: str, value: Any) -> None:
     """Apply a required-field value into a state dict.
 
     Supported path formats:

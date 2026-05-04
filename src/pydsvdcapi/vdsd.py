@@ -66,16 +66,13 @@ Usage example::
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Awaitable,
     Callable,
     ClassVar,
-    Dict,
-    List,
     Optional,
-    Set,
     Union,
 )
 
@@ -140,7 +137,7 @@ ControlValueCallback = Callable[
 #: (e.g. ``"std.play"``), and ``params`` is a dict of any
 #: additional parameter name → value pairs (may be empty).
 InvokeActionCallback = Callable[
-    ["Vdsd", str, Dict[str, Any]],
+    ["Vdsd", str, dict[str, Any]],
     Union[None, Awaitable[None]],
 ]
 
@@ -165,6 +162,7 @@ IdentifyCallback = Callable[
 # ---------------------------------------------------------------------------
 # Vdsd — one API-visible device
 # ---------------------------------------------------------------------------
+
 
 class Vdsd:
     """A single virtual digitalSTROM device (one dSUID).
@@ -232,24 +230,35 @@ class Vdsd:
     """
 
     #: Attribute names whose mutation triggers a debounced auto-save.
-    _TRACKED_ATTRS: ClassVar[frozenset] = frozenset({
-        "name", "model", "model_version", "model_uid",
-        "hardware_version", "hardware_guid", "hardware_model_guid",
-        "vendor_name", "vendor_id", "vendor_guid",
-        "descriptions_group", "descriptions_class",
-        "oem_guid", "oem_model_guid",
-        "config_url", "device_icon_name", "device_class",
-        "device_class_version", "zone_id",
-    })
+    _TRACKED_ATTRS: ClassVar[frozenset] = frozenset(
+        {
+            "name",
+            "model",
+            "model_version",
+            "model_uid",
+            "hardware_version",
+            "hardware_guid",
+            "hardware_model_guid",
+            "vendor_name",
+            "vendor_id",
+            "vendor_guid",
+            "descriptions_group",
+            "descriptions_class",
+            "oem_guid",
+            "oem_model_guid",
+            "config_url",
+            "device_icon_name",
+            "device_class",
+            "device_class_version",
+            "zone_id",
+        }
+    )
 
     # ---- attribute change tracking -----------------------------------
 
     def __setattr__(self, name: str, value: object) -> None:
         super().__setattr__(name, value)
-        if (
-            name in self._TRACKED_ATTRS
-            and getattr(self, "_auto_save_enabled", False)
-        ):
+        if name in self._TRACKED_ATTRS and getattr(self, "_auto_save_enabled", False):
             device = getattr(self, "_device", None)
             if device is not None:
                 device._schedule_auto_save()
@@ -264,28 +273,28 @@ class Vdsd:
         subdevice_index: int = 0,
         name: str,
         model: str,
-        model_version: Optional[str] = None,
-        model_uid: Optional[str] = None,
-        hardware_version: Optional[str] = None,
-        hardware_guid: Optional[str] = None,
-        hardware_model_guid: Optional[str] = None,
-        vendor_name: Optional[str] = None,
-        vendor_id: Optional[str] = None,
-        vendor_guid: Optional[str] = None,
-        descriptions_group: Optional[str] = None,
-        descriptions_class: Optional[str] = None,
-        oem_guid: Optional[str] = None,
-        oem_model_guid: Optional[str] = None,
-        config_url: Optional[str] = None,
-        device_icon_16: Optional[bytes] = None,
-        device_icon_name: Optional[str] = None,
-        device_class: Optional[str] = None,
-        device_class_version: Optional[str] = None,
+        model_version: str | None = None,
+        model_uid: str | None = None,
+        hardware_version: str | None = None,
+        hardware_guid: str | None = None,
+        hardware_model_guid: str | None = None,
+        vendor_name: str | None = None,
+        vendor_id: str | None = None,
+        vendor_guid: str | None = None,
+        descriptions_group: str | None = None,
+        descriptions_class: str | None = None,
+        oem_guid: str | None = None,
+        oem_model_guid: str | None = None,
+        config_url: str | None = None,
+        device_icon_16: bytes | None = None,
+        device_icon_name: str | None = None,
+        device_class: str | None = None,
+        device_class_version: str | None = None,
         zone_id: int = 0,
-        model_features: Optional[Set[str]] = None,
-        prog_mode: Optional[bool] = None,
-        current_config_id: Optional[str] = None,
-        configurations: Optional[List[str]] = None,
+        model_features: set[str] | None = None,
+        prog_mode: bool | None = None,
+        current_config_id: str | None = None,
+        configurations: list[str] | None = None,
     ) -> None:
         # Auto-save must be disabled during construction.
         self._auto_save_enabled: bool = False
@@ -295,9 +304,7 @@ class Vdsd:
 
         # --- identity -------------------------------------------------
         self._subdevice_index: int = subdevice_index
-        self._dsuid: DsUid = device.dsuid.derive_subdevice(
-            subdevice_index
-        )
+        self._dsuid: DsUid = device.dsuid.derive_subdevice(subdevice_index)
 
         # --- common properties ----------------------------------------
         if not name:
@@ -306,69 +313,63 @@ class Vdsd:
             raise ValueError("Vdsd.model must not be empty")
         self.name: str = name
         self.model: str = model
-        self.model_version: Optional[str] = model_version
-        self.model_uid: str = (
-            model_uid or self._derive_model_uid(self.model)
-        )
-        self.hardware_version: Optional[str] = hardware_version
-        self.hardware_guid: Optional[str] = hardware_guid
-        self.hardware_model_guid: Optional[str] = hardware_model_guid
-        self.vendor_name: Optional[str] = vendor_name
-        self.vendor_id: Optional[str] = vendor_id
-        self.vendor_guid: Optional[str] = vendor_guid
-        self.descriptions_group: Optional[str] = descriptions_group
-        self.descriptions_class: Optional[str] = descriptions_class
-        self.oem_guid: Optional[str] = oem_guid
-        self.oem_model_guid: Optional[str] = oem_model_guid
-        self.config_url: Optional[str] = config_url
-        self.device_icon_16: Optional[bytes] = device_icon_16
-        self.device_icon_name: Optional[str] = device_icon_name
-        self.device_class: Optional[str] = device_class
-        self.device_class_version: Optional[str] = device_class_version
+        self.model_version: str | None = model_version
+        self.model_uid: str = model_uid or self._derive_model_uid(self.model)
+        self.hardware_version: str | None = hardware_version
+        self.hardware_guid: str | None = hardware_guid
+        self.hardware_model_guid: str | None = hardware_model_guid
+        self.vendor_name: str | None = vendor_name
+        self.vendor_id: str | None = vendor_id
+        self.vendor_guid: str | None = vendor_guid
+        self.descriptions_group: str | None = descriptions_group
+        self.descriptions_class: str | None = descriptions_class
+        self.oem_guid: str | None = oem_guid
+        self.oem_model_guid: str | None = oem_model_guid
+        self.config_url: str | None = config_url
+        self.device_icon_16: bytes | None = device_icon_16
+        self.device_icon_name: str | None = device_icon_name
+        self.device_class: str | None = device_class
+        self.device_class_version: str | None = device_class_version
 
         # --- vdSD-specific properties ---------------------------------
         if primary_group is None:
             raise ValueError("primary_group is mandatory and must not be None.")
         self._primary_group: ColorGroup = primary_group
         self.zone_id: int = zone_id
-        self._model_features: Set[str] = (
+        self._model_features: set[str] = (
             set(model_features) if model_features else set()
         )
         self._features_derived: bool = False
-        self.prog_mode: Optional[bool] = prog_mode
-        self.current_config_id: Optional[str] = current_config_id
-        self._configurations: List[str] = (
-            list(configurations) if configurations else []
-        )
+        self.prog_mode: bool | None = prog_mode
+        self.current_config_id: str | None = current_config_id
+        self._configurations: list[str] = list(configurations) if configurations else []
 
         # --- components -----------------------------------------------
-        self._binary_inputs: Dict[int, BinaryInput] = {}
-        self._button_inputs: Dict[int, ButtonInput] = {}
-        self._sensor_inputs: Dict[int, SensorInput] = {}
-        self._device_events: Dict[int, DeviceEvent] = {}
-        self._device_states: Dict[int, DeviceState] = {}
-        self._device_properties: Dict[int, DeviceProperty] = {}
-        self._action_descriptions: Dict[
-            int, DeviceActionDescription
-        ] = {}
-        self._standard_actions: Dict[int, StandardAction] = {}
-        self._custom_actions: Dict[int, CustomAction] = {}
-        self._dynamic_actions: Dict[int, DynamicAction] = {}
-        self._output: Optional[Output] = None
+        self._binary_inputs: dict[int, BinaryInput] = {}
+        self._button_inputs: dict[int, ButtonInput] = {}
+        self._sensor_inputs: dict[int, SensorInput] = {}
+        self._device_events: dict[int, DeviceEvent] = {}
+        self._device_states: dict[int, DeviceState] = {}
+        self._device_properties: dict[int, DeviceProperty] = {}
+        self._action_descriptions: dict[int, DeviceActionDescription] = {}
+        self._standard_actions: dict[int, StandardAction] = {}
+        self._custom_actions: dict[int, CustomAction] = {}
+        self._dynamic_actions: dict[int, DynamicAction] = {}
+        self._output: Output | None = None
 
         # --- runtime state --------------------------------------------
         self._active: bool = True
         self._announced: bool = False
-        self._session: Optional[VdcSession] = None
+        self._session: VdcSession | None = None
 
         # --- control values (volatile – NOT persisted) ----------------
         #: Stores the latest control values received from the dSS.
         #: Keyed by control-value name (e.g. ``"heatingLevel"``).
         #: Each entry is a dict with ``value``, ``group``, ``zone_id``.
-        self._control_values: Dict[str, Dict[str, Any]] = {}
-        self._on_control_value: Optional[ControlValueCallback] = None
-        self._on_invoke_action: Optional[InvokeActionCallback] = None
-        self._on_identify: Optional[IdentifyCallback] = None
+        self._control_values: dict[str, dict[str, Any]] = {}
+        self._on_control_value: ControlValueCallback | None = None
+        self._on_invoke_action: InvokeActionCallback | None = None
+        self._on_identify: IdentifyCallback | None = None
 
         # Enable auto-save now that construction is complete.
         self._auto_save_enabled = True
@@ -379,6 +380,7 @@ class Vdsd:
     def _derive_model_uid(model: str) -> str:
         """Derive a deterministic ``modelUID`` from the model name."""
         from pydsvdcapi.dsuid import DsUidNamespace
+
         uid = DsUid.from_name_in_space(model, DsUidNamespace.VDC)
         return str(uid)
 
@@ -405,7 +407,7 @@ class Vdsd:
         return self._subdevice_index
 
     @property
-    def primary_group(self) -> Optional[ColorGroup]:
+    def primary_group(self) -> ColorGroup | None:
         """The primary dS class (colour) of this device."""
         return self._primary_group
 
@@ -419,7 +421,7 @@ class Vdsd:
         self._active = bool(value)
 
     @property
-    def model_features(self) -> Set[str]:
+    def model_features(self) -> set[str]:
         """Set of model-feature flag names (read-only view).
 
         Modify via :meth:`add_model_feature` /
@@ -428,7 +430,7 @@ class Vdsd:
         return set(self._model_features)
 
     @property
-    def configurations(self) -> List[str]:
+    def configurations(self) -> list[str]:
         """List of supported configuration/profile IDs (§4.1.1, read-only).
 
         Set via constructor or persistence restore.
@@ -448,18 +450,15 @@ class Vdsd:
     # ---- control values (volatile runtime state from dSS) -----------
 
     @property
-    def control_values(self) -> Dict[str, Dict[str, Any]]:
+    def control_values(self) -> dict[str, dict[str, Any]]:
         """All current control values as ``{name: {value, group, zone_id}}``.
 
         Returns a shallow copy — callers cannot mutate the internal
         store.
         """
-        return {
-            name: dict(entry)
-            for name, entry in self._control_values.items()
-        }
+        return {name: dict(entry) for name, entry in self._control_values.items()}
 
-    def get_control_value(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_control_value(self, name: str) -> dict[str, Any] | None:
         """Return a single control value entry, or ``None`` if unset.
 
         The returned dict has keys ``value`` (float), ``group``
@@ -471,22 +470,20 @@ class Vdsd:
         return None
 
     @property
-    def on_control_value(self) -> Optional[ControlValueCallback]:
+    def on_control_value(self) -> ControlValueCallback | None:
         """Callback invoked when the dSS pushes a control value."""
         return self._on_control_value
 
     @on_control_value.setter
-    def on_control_value(
-        self, callback: Optional[ControlValueCallback]
-    ) -> None:
+    def on_control_value(self, callback: ControlValueCallback | None) -> None:
         self._on_control_value = callback
 
     async def set_control_value(
         self,
         name: str,
         value: float,
-        group: Optional[int] = None,
-        zone_id: Optional[int] = None,
+        group: int | None = None,
+        zone_id: int | None = None,
     ) -> None:
         """Store a control value received from the dSS.
 
@@ -507,28 +504,27 @@ class Vdsd:
             "zone_id": zone_id,
         }
         logger.debug(
-            "vdSD %s: control value '%s' = %s "
-            "(group=%s, zone_id=%s)",
-            self._dsuid, name, value, group, zone_id,
+            "vdSD %s: control value '%s' = %s (group=%s, zone_id=%s)",
+            self._dsuid,
+            name,
+            value,
+            group,
+            zone_id,
         )
         if self._on_control_value is not None:
             import asyncio
 
-            result = self._on_control_value(
-                self, name, value, group, zone_id
-            )
+            result = self._on_control_value(self, name, value, group, zone_id)
             if asyncio.iscoroutine(result):
                 await result
 
     @property
-    def on_identify(self) -> Optional[IdentifyCallback]:
+    def on_identify(self) -> IdentifyCallback | None:
         """Callback invoked when the vdSM sends an identify notification (§7.3.7)."""
         return self._on_identify
 
     @on_identify.setter
-    def on_identify(
-        self, callback: Optional[IdentifyCallback]
-    ) -> None:
+    def on_identify(self, callback: IdentifyCallback | None) -> None:
         self._on_identify = callback
 
     async def identify(self) -> None:
@@ -539,7 +535,8 @@ class Vdsd:
         native device (e.g. blink an LED, beep, vibrate).
         """
         logger.info(
-            "vdSD %s: identify requested", self._dsuid,
+            "vdSD %s: identify requested",
+            self._dsuid,
         )
         if self._on_identify is not None:
             import asyncio as _asyncio
@@ -555,20 +552,18 @@ class Vdsd:
                 )
 
     @property
-    def on_invoke_action(self) -> Optional[InvokeActionCallback]:
+    def on_invoke_action(self) -> InvokeActionCallback | None:
         """Callback invoked when the vdSM invokes a device action (§7.3.10)."""
         return self._on_invoke_action
 
     @on_invoke_action.setter
-    def on_invoke_action(
-        self, callback: Optional[InvokeActionCallback]
-    ) -> None:
+    def on_invoke_action(self, callback: InvokeActionCallback | None) -> None:
         self._on_invoke_action = callback
 
     async def invoke_action(
         self,
         action_id: str,
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
     ) -> None:
         """Handle an ``invokeDeviceAction`` request from the vdSM (§7.3.10).
 
@@ -584,7 +579,9 @@ class Vdsd:
         params = params or {}
         logger.debug(
             "vdSD %s: invokeDeviceAction id='%s' params=%s",
-            self._dsuid, action_id, params,
+            self._dsuid,
+            action_id,
+            params,
         )
         if self._on_invoke_action is not None:
             import asyncio as _asyncio
@@ -621,7 +618,7 @@ class Vdsd:
 
     # Channel-type IDs that support transitions (used by derive_model_features).
     _TRANST_CHANNEL_TYPES: frozenset = frozenset(
-        set(range(1, 13))   # 1–12
+        set(range(1, 13))  # 1–12
         | set(range(14, 19))  # 14–18
         | set(range(22, 25))  # 22–24
     )
@@ -637,21 +634,33 @@ class Vdsd:
     #      to the change.
     #   2. Hardware-only features (ledauto, leddark, dimmodeconfig, …) relate
     #      to physical device capabilities that have no VDC write-back path.
-    _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset({
-        # LED indicators — not API-controlled on VDC devices
-        "ledauto", "leddark",
-        # Hardware dimmer type selection — no VDC path
-        "dimmodeconfig",
-        # Hardware LED on consumption events — no VDC path
-        "consumptioneventled",
-        # Output-mode selectors that write via DS485, not via VDC
-        "outmode", "outmodeswitch", "heatingoutmode", "umroutmode",
-        "extradimmer", "optypeconfig", "outmodetempcontrol", "outmodeenoceanvalve",
-        # Button-type features tied to physical TKM hardware
-        "twowayconfig", "pushbcombined",
-        # Hardware-device-specific features with no VDC equivalent
-        "ftwdisplaysettings", "ftwbacklighttimeout", "grkl387workaround",
-    })
+    _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset(
+        {
+            # LED indicators — not API-controlled on VDC devices
+            "ledauto",
+            "leddark",
+            # Hardware dimmer type selection — no VDC path
+            "dimmodeconfig",
+            # Hardware LED on consumption events — no VDC path
+            "consumptioneventled",
+            # Output-mode selectors that write via DS485, not via VDC
+            "outmode",
+            "outmodeswitch",
+            "heatingoutmode",
+            "umroutmode",
+            "extradimmer",
+            "optypeconfig",
+            "outmodetempcontrol",
+            "outmodeenoceanvalve",
+            # Button-type features tied to physical TKM hardware
+            "twowayconfig",
+            "pushbcombined",
+            # Hardware-device-specific features with no VDC equivalent
+            "ftwdisplaysettings",
+            "ftwbacklighttimeout",
+            "grkl387workaround",
+        }
+    )
 
     def derive_model_features(self) -> None:
         """Derive and add model-feature flags from the configured components.
@@ -760,10 +769,7 @@ class Vdsd:
             self._model_features.add("blink")
 
             fn = int(self._output.function)
-            ch_types = {
-                int(ch.channel_type)
-                for ch in self._output.channels.values()
-            }
+            ch_types = {int(ch.channel_type) for ch in self._output.channels.values()}
             has_blade_channel = bool(ch_types & {9, 10})
 
             # transt: channels with smooth transition support
@@ -860,8 +866,7 @@ class Vdsd:
             self._model_features.add("locationconfig")
             self._model_features.add("operationlock")
             ch_types_grey = {
-                int(ch.channel_type)
-                for ch in self._output.channels.values()
+                int(ch.channel_type) for ch in self._output.channels.values()
             }
             if ch_types_grey & {9, 10}:  # slat/angle channel → jalousie/blind
                 self._model_features.add("windprotectionconfigblind")
@@ -878,17 +883,18 @@ class Vdsd:
         self._features_derived = True
         logger.debug(
             "derive_model_features '%s': %s",
-            self.name, sorted(self._model_features),
+            self.name,
+            sorted(self._model_features),
         )
 
     # ---- binary input management -------------------------------------
 
     @property
-    def binary_inputs(self) -> Dict[int, "BinaryInput"]:
+    def binary_inputs(self) -> dict[int, BinaryInput]:
         """All binary inputs keyed by ``dsIndex`` (read-only view)."""
         return dict(self._binary_inputs)
 
-    def add_binary_input(self, bi: "BinaryInput") -> None:
+    def add_binary_input(self, bi: BinaryInput) -> None:
         """Register a :class:`BinaryInput` with this vdSD.
 
         The input is indexed by its ``dsIndex``.  Adding an input
@@ -908,14 +914,16 @@ class Vdsd:
         self._binary_inputs[bi.ds_index] = bi
         logger.debug(
             "Added BinaryInput[%d] '%s' to vdSD %s",
-            bi.ds_index, bi.name, self._dsuid,
+            bi.ds_index,
+            bi.name,
+            self._dsuid,
         )
         # If already announced, start the alive timer immediately.
         if self._announced and self._session is not None:
             bi.start_alive_timer(self._session)
         self._schedule_auto_save_if_enabled()
 
-    def remove_binary_input(self, ds_index: int) -> Optional["BinaryInput"]:
+    def remove_binary_input(self, ds_index: int) -> BinaryInput | None:
         """Remove a binary input by ``dsIndex``.
 
         Returns the removed :class:`BinaryInput` or ``None``.
@@ -925,18 +933,18 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return bi
 
-    def get_binary_input(self, ds_index: int) -> Optional["BinaryInput"]:
+    def get_binary_input(self, ds_index: int) -> BinaryInput | None:
         """Look up a binary input by ``dsIndex``."""
         return self._binary_inputs.get(ds_index)
 
     # ---- button input management -------------------------------------
 
     @property
-    def button_inputs(self) -> Dict[int, "ButtonInput"]:
+    def button_inputs(self) -> dict[int, ButtonInput]:
         """All button inputs keyed by ``dsIndex`` (read-only view)."""
         return dict(self._button_inputs)
 
-    def add_button_input(self, btn: "ButtonInput") -> None:
+    def add_button_input(self, btn: ButtonInput) -> None:
         """Register a :class:`ButtonInput` with this vdSD.
 
         The input is indexed by its ``dsIndex``.  Adding an input
@@ -956,14 +964,16 @@ class Vdsd:
         self._button_inputs[btn.ds_index] = btn
         logger.debug(
             "Added ButtonInput[%d] '%s' to vdSD %s",
-            btn.ds_index, btn.name, self._dsuid,
+            btn.ds_index,
+            btn.name,
+            self._dsuid,
         )
         # If already announced, start the session hook immediately.
         if self._announced and self._session is not None:
             btn.start_alive_timer(self._session)
         self._schedule_auto_save_if_enabled()
 
-    def remove_button_input(self, ds_index: int) -> Optional["ButtonInput"]:
+    def remove_button_input(self, ds_index: int) -> ButtonInput | None:
         """Remove a button input by ``dsIndex``.
 
         Returns the removed :class:`ButtonInput` or ``None``.
@@ -973,18 +983,18 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return btn
 
-    def get_button_input(self, ds_index: int) -> Optional["ButtonInput"]:
+    def get_button_input(self, ds_index: int) -> ButtonInput | None:
         """Look up a button input by ``dsIndex``."""
         return self._button_inputs.get(ds_index)
 
     # ---- sensor inputs -----------------------------------------------
 
     @property
-    def sensor_inputs(self) -> Dict[int, "SensorInput"]:
+    def sensor_inputs(self) -> dict[int, SensorInput]:
         """All sensor inputs keyed by ``dsIndex`` (read-only view)."""
         return dict(self._sensor_inputs)
 
-    def add_sensor_input(self, si: "SensorInput") -> None:
+    def add_sensor_input(self, si: SensorInput) -> None:
         """Register a :class:`SensorInput` with this vdSD.
 
         The input is indexed by its ``dsIndex``.  Adding an input
@@ -1004,14 +1014,16 @@ class Vdsd:
         self._sensor_inputs[si.ds_index] = si
         logger.debug(
             "Added SensorInput[%d] '%s' to vdSD %s",
-            si.ds_index, si.name, self._dsuid,
+            si.ds_index,
+            si.name,
+            self._dsuid,
         )
         # If already announced, start the alive timer immediately.
         if self._announced and self._session is not None:
             si.start_alive_timer(self._session)
         self._schedule_auto_save_if_enabled()
 
-    def remove_sensor_input(self, ds_index: int) -> Optional["SensorInput"]:
+    def remove_sensor_input(self, ds_index: int) -> SensorInput | None:
         """Remove a sensor input by ``dsIndex``.
 
         Returns the removed :class:`SensorInput` or ``None``.
@@ -1021,18 +1033,18 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return si
 
-    def get_sensor_input(self, ds_index: int) -> Optional["SensorInput"]:
+    def get_sensor_input(self, ds_index: int) -> SensorInput | None:
         """Look up a sensor input by ``dsIndex``."""
         return self._sensor_inputs.get(ds_index)
 
     # ---- output management ---------------------------------------------
 
     @property
-    def output(self) -> Optional["Output"]:
+    def output(self) -> Output | None:
         """The output component, or ``None``."""
         return self._output
 
-    def set_output(self, output: "Output") -> None:
+    def set_output(self, output: Output) -> None:
         """Set the single output for this vdSD.
 
         Replaces any previously set output.
@@ -1050,14 +1062,15 @@ class Vdsd:
         self._output = output
         logger.debug(
             "Set Output '%s' on vdSD %s",
-            output.name, self._dsuid,
+            output.name,
+            self._dsuid,
         )
         # If already announced, start the session hook immediately.
         if self._announced and self._session is not None:
             output.start_session(self._session)
         self._schedule_auto_save_if_enabled()
 
-    def remove_output(self) -> Optional["Output"]:
+    def remove_output(self) -> Output | None:
         """Remove the output from this vdSD.
 
         Returns the removed :class:`Output` or ``None``.
@@ -1072,11 +1085,11 @@ class Vdsd:
     # ---- device state management ------------------------------------
 
     @property
-    def device_states(self) -> Dict[int, "DeviceState"]:
+    def device_states(self) -> dict[int, DeviceState]:
         """All device states keyed by ``dsIndex`` (read-only view)."""
         return dict(self._device_states)
 
-    def add_device_state(self, st: "DeviceState") -> None:
+    def add_device_state(self, st: DeviceState) -> None:
         """Register a :class:`DeviceState` with this vdSD.
 
         The state is indexed by its ``dsIndex``.  Adding a state
@@ -1096,13 +1109,13 @@ class Vdsd:
         self._device_states[st.ds_index] = st
         logger.debug(
             "Added DeviceState[%d] '%s' to vdSD %s",
-            st.ds_index, st.name, self._dsuid,
+            st.ds_index,
+            st.name,
+            self._dsuid,
         )
         self._schedule_auto_save_if_enabled()
 
-    def remove_device_state(
-        self, ds_index: int
-    ) -> Optional["DeviceState"]:
+    def remove_device_state(self, ds_index: int) -> DeviceState | None:
         """Remove a device state by ``dsIndex``.
 
         Returns the removed :class:`DeviceState` or ``None``.
@@ -1112,17 +1125,15 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return st
 
-    def get_device_state(
-        self, ds_index: int
-    ) -> Optional["DeviceState"]:
+    def get_device_state(self, ds_index: int) -> DeviceState | None:
         """Look up a device state by ``dsIndex``."""
         return self._device_states.get(ds_index)
 
     async def update_device_state(
         self,
         ds_index: int,
-        value: Union[str, int],
-        session: Optional["VdcSession"] = None,
+        value: str | int,
+        session: VdcSession | None = None,
     ) -> None:
         """Convenience: update the device state at *ds_index*.
 
@@ -1143,20 +1154,17 @@ class Vdsd:
         """
         st = self._device_states.get(ds_index)
         if st is None:
-            raise KeyError(
-                f"No DeviceState at index {ds_index} on vdSD "
-                f"{self._dsuid}"
-            )
+            raise KeyError(f"No DeviceState at index {ds_index} on vdSD {self._dsuid}")
         await st.update_value(value, session)
 
     # ---- device property management ----------------------------------
 
     @property
-    def device_properties(self) -> Dict[int, "DeviceProperty"]:
+    def device_properties(self) -> dict[int, DeviceProperty]:
         """All device properties keyed by ``dsIndex`` (read-only view)."""
         return dict(self._device_properties)
 
-    def add_device_property(self, prop: "DeviceProperty") -> None:
+    def add_device_property(self, prop: DeviceProperty) -> None:
         """Register a :class:`DeviceProperty` with this vdSD.
 
         The property is indexed by its ``dsIndex``.  Adding a property
@@ -1176,13 +1184,13 @@ class Vdsd:
         self._device_properties[prop.ds_index] = prop
         logger.debug(
             "Added DeviceProperty[%d] '%s' to vdSD %s",
-            prop.ds_index, prop.name, self._dsuid,
+            prop.ds_index,
+            prop.name,
+            self._dsuid,
         )
         self._schedule_auto_save_if_enabled()
 
-    def remove_device_property(
-        self, ds_index: int
-    ) -> Optional["DeviceProperty"]:
+    def remove_device_property(self, ds_index: int) -> DeviceProperty | None:
         """Remove a device property by ``dsIndex``.
 
         Returns the removed :class:`DeviceProperty` or ``None``.
@@ -1192,17 +1200,15 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return prop
 
-    def get_device_property(
-        self, ds_index: int
-    ) -> Optional["DeviceProperty"]:
+    def get_device_property(self, ds_index: int) -> DeviceProperty | None:
         """Look up a device property by ``dsIndex``."""
         return self._device_properties.get(ds_index)
 
     async def update_device_property(
         self,
         ds_index: int,
-        value: Union[float, int, str],
-        session: Optional["VdcSession"] = None,
+        value: float | int | str,
+        session: VdcSession | None = None,
     ) -> None:
         """Convenience: update the device property at *ds_index*.
 
@@ -1224,19 +1230,18 @@ class Vdsd:
         prop = self._device_properties.get(ds_index)
         if prop is None:
             raise KeyError(
-                f"No DeviceProperty at index {ds_index} on vdSD "
-                f"{self._dsuid}"
+                f"No DeviceProperty at index {ds_index} on vdSD {self._dsuid}"
             )
         await prop.update_value(value, session)
 
     # ---- device event management ------------------------------------
 
     @property
-    def device_events(self) -> Dict[int, "DeviceEvent"]:
+    def device_events(self) -> dict[int, DeviceEvent]:
         """All device events keyed by ``dsIndex`` (read-only view)."""
         return dict(self._device_events)
 
-    def add_device_event(self, evt: "DeviceEvent") -> None:
+    def add_device_event(self, evt: DeviceEvent) -> None:
         """Register a :class:`DeviceEvent` with this vdSD.
 
         The event is indexed by its ``dsIndex``.  Adding an event
@@ -1256,13 +1261,13 @@ class Vdsd:
         self._device_events[evt.ds_index] = evt
         logger.debug(
             "Added DeviceEvent[%d] '%s' to vdSD %s",
-            evt.ds_index, evt.name, self._dsuid,
+            evt.ds_index,
+            evt.name,
+            self._dsuid,
         )
         self._schedule_auto_save_if_enabled()
 
-    def remove_device_event(
-        self, ds_index: int
-    ) -> Optional["DeviceEvent"]:
+    def remove_device_event(self, ds_index: int) -> DeviceEvent | None:
         """Remove a device event by ``dsIndex``.
 
         Returns the removed :class:`DeviceEvent` or ``None``.
@@ -1272,16 +1277,14 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return evt
 
-    def get_device_event(
-        self, ds_index: int
-    ) -> Optional["DeviceEvent"]:
+    def get_device_event(self, ds_index: int) -> DeviceEvent | None:
         """Look up a device event by ``dsIndex``."""
         return self._device_events.get(ds_index)
 
     async def raise_device_event(
         self,
         ds_index: int,
-        session: Optional["VdcSession"] = None,
+        session: VdcSession | None = None,
     ) -> None:
         """Convenience: raise the device event at *ds_index*.
 
@@ -1300,10 +1303,7 @@ class Vdsd:
         """
         evt = self._device_events.get(ds_index)
         if evt is None:
-            raise KeyError(
-                f"No DeviceEvent at index {ds_index} on vdSD "
-                f"{self._dsuid}"
-            )
+            raise KeyError(f"No DeviceEvent at index {ds_index} on vdSD {self._dsuid}")
         await evt.raise_event(session)
 
     # ---- action description management (§4.5.2) ---------------------
@@ -1311,13 +1311,11 @@ class Vdsd:
     @property
     def action_descriptions(
         self,
-    ) -> Dict[int, "DeviceActionDescription"]:
+    ) -> dict[int, DeviceActionDescription]:
         """All action descriptions keyed by ``dsIndex`` (read-only view)."""
         return dict(self._action_descriptions)
 
-    def add_device_action_description(
-        self, desc: "DeviceActionDescription"
-    ) -> None:
+    def add_device_action_description(self, desc: DeviceActionDescription) -> None:
         """Register a :class:`DeviceActionDescription` with this vdSD.
 
         The description is indexed by its ``dsIndex``.  Adding one
@@ -1336,13 +1334,15 @@ class Vdsd:
         self._action_descriptions[desc.ds_index] = desc
         logger.debug(
             "Added DeviceActionDescription[%d] '%s' to vdSD %s",
-            desc.ds_index, desc.name, self._dsuid,
+            desc.ds_index,
+            desc.name,
+            self._dsuid,
         )
         self._schedule_auto_save_if_enabled()
 
     def remove_device_action_description(
         self, ds_index: int
-    ) -> Optional["DeviceActionDescription"]:
+    ) -> DeviceActionDescription | None:
         """Remove an action description by ``dsIndex``.
 
         Returns the removed :class:`DeviceActionDescription` or ``None``.
@@ -1354,18 +1354,18 @@ class Vdsd:
 
     def get_device_action_description(
         self, ds_index: int
-    ) -> Optional["DeviceActionDescription"]:
+    ) -> DeviceActionDescription | None:
         """Look up an action description by ``dsIndex``."""
         return self._action_descriptions.get(ds_index)
 
     # ---- standard action management (§4.5.3) ------------------------
 
     @property
-    def standard_actions(self) -> Dict[int, "StandardAction"]:
+    def standard_actions(self) -> dict[int, StandardAction]:
         """All standard actions keyed by ``dsIndex`` (read-only view)."""
         return dict(self._standard_actions)
 
-    def add_standard_action(self, std: "StandardAction") -> None:
+    def add_standard_action(self, std: StandardAction) -> None:
         """Register a :class:`StandardAction` with this vdSD.
 
         The action is indexed by its ``dsIndex``.  Adding one
@@ -1384,13 +1384,13 @@ class Vdsd:
         self._standard_actions[std.ds_index] = std
         logger.debug(
             "Added StandardAction[%d] '%s' to vdSD %s",
-            std.ds_index, std.name, self._dsuid,
+            std.ds_index,
+            std.name,
+            self._dsuid,
         )
         self._schedule_auto_save_if_enabled()
 
-    def remove_standard_action(
-        self, ds_index: int
-    ) -> Optional["StandardAction"]:
+    def remove_standard_action(self, ds_index: int) -> StandardAction | None:
         """Remove a standard action by ``dsIndex``.
 
         Returns the removed :class:`StandardAction` or ``None``.
@@ -1400,20 +1400,18 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return std
 
-    def get_standard_action(
-        self, ds_index: int
-    ) -> Optional["StandardAction"]:
+    def get_standard_action(self, ds_index: int) -> StandardAction | None:
         """Look up a standard action by ``dsIndex``."""
         return self._standard_actions.get(ds_index)
 
     # ---- custom action management (§4.5.3) --------------------------
 
     @property
-    def custom_actions(self) -> Dict[int, "CustomAction"]:
+    def custom_actions(self) -> dict[int, CustomAction]:
         """All custom actions keyed by ``dsIndex`` (read-only view)."""
         return dict(self._custom_actions)
 
-    def add_custom_action(self, cust: "CustomAction") -> None:
+    def add_custom_action(self, cust: CustomAction) -> None:
         """Register a :class:`CustomAction` with this vdSD.
 
         The action is indexed by its ``dsIndex``.  Adding one
@@ -1432,13 +1430,13 @@ class Vdsd:
         self._custom_actions[cust.ds_index] = cust
         logger.debug(
             "Added CustomAction[%d] '%s' to vdSD %s",
-            cust.ds_index, cust.name, self._dsuid,
+            cust.ds_index,
+            cust.name,
+            self._dsuid,
         )
         self._schedule_auto_save_if_enabled()
 
-    def remove_custom_action(
-        self, ds_index: int
-    ) -> Optional["CustomAction"]:
+    def remove_custom_action(self, ds_index: int) -> CustomAction | None:
         """Remove a custom action by ``dsIndex``.
 
         Returns the removed :class:`CustomAction` or ``None``.
@@ -1448,20 +1446,18 @@ class Vdsd:
             self._schedule_auto_save_if_enabled()
         return cust
 
-    def get_custom_action(
-        self, ds_index: int
-    ) -> Optional["CustomAction"]:
+    def get_custom_action(self, ds_index: int) -> CustomAction | None:
         """Look up a custom action by ``dsIndex``."""
         return self._custom_actions.get(ds_index)
 
     # ---- dynamic action management (§4.5.3) -------------------------
 
     @property
-    def dynamic_actions(self) -> Dict[int, "DynamicAction"]:
+    def dynamic_actions(self) -> dict[int, DynamicAction]:
         """All dynamic actions keyed by ``dsIndex`` (read-only view)."""
         return dict(self._dynamic_actions)
 
-    def add_dynamic_action(self, dyn: "DynamicAction") -> None:
+    def add_dynamic_action(self, dyn: DynamicAction) -> None:
         """Register a :class:`DynamicAction` with this vdSD.
 
         The action is indexed by its ``dsIndex``.  Adding one
@@ -1480,22 +1476,20 @@ class Vdsd:
         self._dynamic_actions[dyn.ds_index] = dyn
         logger.debug(
             "Added DynamicAction[%d] '%s' to vdSD %s",
-            dyn.ds_index, dyn.name, self._dsuid,
+            dyn.ds_index,
+            dyn.name,
+            self._dsuid,
         )
         # Dynamic actions are transient — no auto-save.
 
-    def remove_dynamic_action(
-        self, ds_index: int
-    ) -> Optional["DynamicAction"]:
+    def remove_dynamic_action(self, ds_index: int) -> DynamicAction | None:
         """Remove a dynamic action by ``dsIndex``.
 
         Returns the removed :class:`DynamicAction` or ``None``.
         """
         return self._dynamic_actions.pop(ds_index, None)
 
-    def get_dynamic_action(
-        self, ds_index: int
-    ) -> Optional["DynamicAction"]:
+    def get_dynamic_action(self, ds_index: int) -> DynamicAction | None:
         """Look up a dynamic action by ``dsIndex``."""
         return self._dynamic_actions.get(ds_index)
 
@@ -1508,13 +1502,13 @@ class Vdsd:
 
     # ---- property dict (for getProperty responses) -------------------
 
-    def get_properties(self) -> Dict[str, Any]:
+    def get_properties(self) -> dict[str, Any]:
         """Return all properties as a flat dictionary.
 
         Keys match the vDC API property names.
         ``None`` values indicate unset optional properties.
         """
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             # Common properties
             "dSUID": str(self._dsuid),
             "displayId": self.display_id,
@@ -1547,16 +1541,13 @@ class Vdsd:
         }
         # modelFeatures — each enabled feature is a boolean True element.
         if self._model_features:
-            props["modelFeatures"] = {
-                f: True for f in sorted(self._model_features)
-            }
+            props["modelFeatures"] = {f: True for f in sorted(self._model_features)}
         else:
             props["modelFeatures"] = {}
 
         # configurations (§4.1.1) — mandatory; empty dict when no profiles.
         props["configurations"] = {
-            str(i): {"id": cid}
-            for i, cid in enumerate(self._configurations)
+            str(i): {"id": cid} for i, cid in enumerate(self._configurations)
         }
 
         # Button input component properties (§4.2 / §4.1.2).
@@ -1629,103 +1620,126 @@ class Vdsd:
             # SingleDevice, even if empty.
             # The element name (dict key) IS the action ID used by the
             # dSS — it calls vdcAction.getName() to identify the action.
-            props["deviceActionDescriptions"] = {
-                desc.name: desc.get_description_properties()
-                for desc in self._action_descriptions.values()
-            } if self._action_descriptions else {}
+            props["deviceActionDescriptions"] = (
+                {
+                    desc.name: desc.get_description_properties()
+                    for desc in self._action_descriptions.values()
+                }
+                if self._action_descriptions
+                else {}
+            )
 
             # Standard actions (§4.5.3).
             # Key = standard action name, e.g. "std.play".
-            props["standardActions"] = {
-                std.name: std.get_properties()
-                for std in self._standard_actions.values()
-            } if self._standard_actions else {}
+            props["standardActions"] = (
+                {
+                    std.name: std.get_properties()
+                    for std in self._standard_actions.values()
+                }
+                if self._standard_actions
+                else {}
+            )
 
             # Custom actions (§4.5.3).
             # Key = custom action name, e.g. "custom.play-loud".
-            props["customActions"] = {
-                cust.name: cust.get_properties()
-                for cust in self._custom_actions.values()
-            } if self._custom_actions else {}
+            props["customActions"] = (
+                {
+                    cust.name: cust.get_properties()
+                    for cust in self._custom_actions.values()
+                }
+                if self._custom_actions
+                else {}
+            )
 
             # Dynamic device actions (§4.5.3).
             # Key = dynamic action name, e.g. "dynamic.special".
-            props["dynamicActionDescriptions"] = {
-                dyn.name: dyn.get_properties()
-                for dyn in self._dynamic_actions.values()
-            } if self._dynamic_actions else {}
+            props["dynamicActionDescriptions"] = (
+                {
+                    dyn.name: dyn.get_properties()
+                    for dyn in self._dynamic_actions.values()
+                }
+                if self._dynamic_actions
+                else {}
+            )
 
             # Device event descriptions (§4.7) — always present for
             # SingleDevice, even if empty.
             # Key = event name, e.g. "customAlert".
-            props["deviceEventDescriptions"] = {
-                evt.name: evt.get_description_properties()
-                for evt in self._device_events.values()
-            } if self._device_events else {}
+            props["deviceEventDescriptions"] = (
+                {
+                    evt.name: evt.get_description_properties()
+                    for evt in self._device_events.values()
+                }
+                if self._device_events
+                else {}
+            )
 
             # Device state descriptions & values (§4.6.1 / §4.6.2).
             # Key = state name, e.g. "operatingState".
-            props["deviceStateDescriptions"] = {
-                st.name: st.get_description_properties()
-                for st in self._device_states.values()
-            } if self._device_states else {}
-            props["deviceStates"] = {
-                st.name: st.get_state_properties()
-                for st in self._device_states.values()
-            } if self._device_states else {}
+            props["deviceStateDescriptions"] = (
+                {
+                    st.name: st.get_description_properties()
+                    for st in self._device_states.values()
+                }
+                if self._device_states
+                else {}
+            )
+            props["deviceStates"] = (
+                {
+                    st.name: st.get_state_properties()
+                    for st in self._device_states.values()
+                }
+                if self._device_states
+                else {}
+            )
 
             # Device property descriptions & values (§4.6.3 / §4.6.4).
             # Key = property name, e.g. "eventCounter".
-            props["devicePropertyDescriptions"] = {
-                prop.name: prop.get_description_properties()
-                for prop in self._device_properties.values()
-            } if self._device_properties else {}
-            props["deviceProperties"] = {
-                prop.name: prop.get_value_properties()
-                for prop in self._device_properties.values()
-            } if self._device_properties else {}
+            props["devicePropertyDescriptions"] = (
+                {
+                    prop.name: prop.get_description_properties()
+                    for prop in self._device_properties.values()
+                }
+                if self._device_properties
+                else {}
+            )
+            props["deviceProperties"] = (
+                {
+                    prop.name: prop.get_value_properties()
+                    for prop in self._device_properties.values()
+                }
+                if self._device_properties
+                else {}
+            )
 
         # Output component properties (§4.8).
         if self._output is not None:
-            props["outputDescription"] = (
-                self._output.get_description_properties()
-            )
-            props["outputSettings"] = (
-                self._output.get_settings_properties()
-            )
-            props["outputState"] = (
-                self._output.get_state_properties()
-            )
+            props["outputDescription"] = self._output.get_description_properties()
+            props["outputSettings"] = self._output.get_settings_properties()
+            props["outputState"] = self._output.get_state_properties()
 
             # Channel properties (§4.9 / §4.1.3).
             ch_desc = self._output.get_channel_descriptions()
             if ch_desc:
                 props["channelDescriptions"] = ch_desc
-                props["channelSettings"] = (
-                    self._output.get_channel_settings()
-                )
-                props["channelStates"] = (
-                    self._output.get_channel_states()
-                )
+                props["channelSettings"] = self._output.get_channel_settings()
+                props["channelStates"] = self._output.get_channel_states()
 
             # Scene properties (§4.1.4 / §4.10).
             if ch_desc:
-                props["scenes"] = (
-                    self._output.get_scene_properties()
-                )
+                props["scenes"] = self._output.get_scene_properties()
 
         # Control values (volatile runtime state from dSS, §4.11).
         if self._control_values:
             props["controlValues"] = {
-                name: dict(entry)
-                for name, entry in self._control_values.items()
+                name: dict(entry) for name, entry in self._control_values.items()
             }
 
         return props
 
     # ---- property tree (for YAML persistence) ------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the vdSD data for inclusion in the Device's persisted
         property tree.
 
@@ -1741,7 +1755,7 @@ class Vdsd:
               - identification
             zoneID: 0
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "subdeviceIndex": self._subdevice_index,
             "dSUID": str(self._dsuid),
             "primaryGroup": int(self._primary_group),
@@ -1775,64 +1789,55 @@ class Vdsd:
         # Button inputs (description + settings; state is volatile).
         if self._button_inputs:
             node["buttonInputs"] = [
-                btn.get_property_tree()
-                for btn in self._button_inputs.values()
+                btn.get_property_tree() for btn in self._button_inputs.values()
             ]
 
         # Binary inputs (description + settings; state is volatile).
         if self._binary_inputs:
             node["binaryInputs"] = [
-                bi.get_property_tree()
-                for bi in self._binary_inputs.values()
+                bi.get_property_tree() for bi in self._binary_inputs.values()
             ]
 
         # Sensor inputs (description + settings; state is volatile).
         if self._sensor_inputs:
             node["sensorInputs"] = [
-                si.get_property_tree()
-                for si in self._sensor_inputs.values()
+                si.get_property_tree() for si in self._sensor_inputs.values()
             ]
 
         # Device events (description only; events are stateless).
         if self._device_events:
             node["deviceEvents"] = [
-                evt.get_property_tree()
-                for evt in self._device_events.values()
+                evt.get_property_tree() for evt in self._device_events.values()
             ]
 
         # Device states (description only; state values are volatile).
         if self._device_states:
             node["deviceStates"] = [
-                st.get_property_tree()
-                for st in self._device_states.values()
+                st.get_property_tree() for st in self._device_states.values()
             ]
 
         # Device properties (description + value; both persisted).
         if self._device_properties:
             node["deviceProperties"] = [
-                prop.get_property_tree()
-                for prop in self._device_properties.values()
+                prop.get_property_tree() for prop in self._device_properties.values()
             ]
 
         # Action descriptions (§4.5.2) — template actions, persisted.
         if self._action_descriptions:
             node["actionDescriptions"] = [
-                desc.get_property_tree()
-                for desc in self._action_descriptions.values()
+                desc.get_property_tree() for desc in self._action_descriptions.values()
             ]
 
         # Standard actions (§4.5.3) — static, persisted.
         if self._standard_actions:
             node["standardActions"] = [
-                std.get_property_tree()
-                for std in self._standard_actions.values()
+                std.get_property_tree() for std in self._standard_actions.values()
             ]
 
         # Custom actions (§4.5.3) — user-configured, persisted.
         if self._custom_actions:
             node["customActions"] = [
-                cust.get_property_tree()
-                for cust in self._custom_actions.values()
+                cust.get_property_tree() for cust in self._custom_actions.values()
             ]
 
         # NOTE: Dynamic actions are transient and NOT persisted.
@@ -1845,7 +1850,7 @@ class Vdsd:
 
     # ---- state restoration -------------------------------------------
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Apply a persisted state dict to this vdSD's properties.
 
         Auto-save is suppressed during restoration.
@@ -1858,9 +1863,7 @@ class Vdsd:
             if "subdeviceIndex" in state:
                 self._subdevice_index = int(state["subdeviceIndex"])
             if "primaryGroup" in state:
-                self._primary_group = ColorGroup(
-                    int(state["primaryGroup"])
-                )
+                self._primary_group = ColorGroup(int(state["primaryGroup"]))
             if "name" in state:
                 self.name = state["name"]
             if "model" in state:
@@ -1912,6 +1915,7 @@ class Vdsd:
             # Restore button inputs.
             if "buttonInputs" in state:
                 from pydsvdcapi.button_input import ButtonInput
+
                 for btn_state in state["buttonInputs"]:
                     idx = btn_state.get("dsIndex", 0)
                     btn = self._button_inputs.get(idx)
@@ -1926,6 +1930,7 @@ class Vdsd:
             # Restore binary inputs.
             if "binaryInputs" in state:
                 from pydsvdcapi.binary_input import BinaryInput
+
                 for bi_state in state["binaryInputs"]:
                     idx = bi_state.get("dsIndex", 0)
                     bi = self._binary_inputs.get(idx)
@@ -1940,6 +1945,7 @@ class Vdsd:
             # Restore sensor inputs.
             if "sensorInputs" in state:
                 from pydsvdcapi.sensor_input import SensorInput
+
                 for si_state in state["sensorInputs"]:
                     idx = si_state.get("dsIndex", 0)
                     si = self._sensor_inputs.get(idx)
@@ -1954,6 +1960,7 @@ class Vdsd:
             # Restore device events.
             if "deviceEvents" in state:
                 from pydsvdcapi.device_event import DeviceEvent
+
                 for evt_state in state["deviceEvents"]:
                     idx = evt_state.get("dsIndex", 0)
                     evt = self._device_events.get(idx)
@@ -1968,6 +1975,7 @@ class Vdsd:
             # Restore device states.
             if "deviceStates" in state:
                 from pydsvdcapi.device_state import DeviceState
+
                 for st_state in state["deviceStates"]:
                     idx = st_state.get("dsIndex", 0)
                     st = self._device_states.get(idx)
@@ -1982,6 +1990,7 @@ class Vdsd:
             # Restore device properties.
             if "deviceProperties" in state:
                 from pydsvdcapi.device_property import DeviceProperty
+
                 for prop_state in state["deviceProperties"]:
                     idx = prop_state.get("dsIndex", 0)
                     prop = self._device_properties.get(idx)
@@ -1996,6 +2005,7 @@ class Vdsd:
             # Restore action descriptions (§4.5.2).
             if "actionDescriptions" in state:
                 from pydsvdcapi.actions import DeviceActionDescription
+
                 for desc_state in state["actionDescriptions"]:
                     idx = desc_state.get("dsIndex", 0)
                     desc = self._action_descriptions.get(idx)
@@ -2010,6 +2020,7 @@ class Vdsd:
             # Restore standard actions (§4.5.3).
             if "standardActions" in state:
                 from pydsvdcapi.actions import StandardAction
+
                 for std_state in state["standardActions"]:
                     idx = std_state.get("dsIndex", 0)
                     std = self._standard_actions.get(idx)
@@ -2024,6 +2035,7 @@ class Vdsd:
             # Restore custom actions (§4.5.3).
             if "customActions" in state:
                 from pydsvdcapi.actions import CustomAction
+
                 for cust_state in state["customActions"]:
                     idx = cust_state.get("dsIndex", 0)
                     cust = self._custom_actions.get(idx)
@@ -2040,6 +2052,7 @@ class Vdsd:
             # Restore output.
             if "output" in state:
                 from pydsvdcapi.output import Output
+
                 out_state = state["output"]
                 if self._output is None:
                     self._output = Output(
@@ -2056,9 +2069,7 @@ class Vdsd:
 
     # ---- announcement ------------------------------------------------
 
-    async def _wait_for_initial_values(
-        self, timeout: float = 61.0
-    ) -> None:
+    async def _wait_for_initial_values(self, timeout: float = 61.0) -> None:
         """Wait until every value-bearing component has reported its first value.
 
         Raises
@@ -2074,31 +2085,39 @@ class Vdsd:
         if self._output is not None:
             for ch in self._output._channels.values():
                 if not ch._initial_value_ready.is_set():
-                    pending.append((
-                        f"OutputChannel[{ch.ds_index}] '{ch.name}'",
-                        ch._initial_value_ready,
-                    ))
+                    pending.append(
+                        (
+                            f"OutputChannel[{ch.ds_index}] '{ch.name}'",
+                            ch._initial_value_ready,
+                        )
+                    )
 
         for si in self._sensor_inputs.values():
             if not si._initial_value_ready.is_set():
-                pending.append((
-                    f"SensorInput[{si.ds_index}]",
-                    si._initial_value_ready,
-                ))
+                pending.append(
+                    (
+                        f"SensorInput[{si.ds_index}]",
+                        si._initial_value_ready,
+                    )
+                )
 
         for st in self._device_states.values():
             if not st._initial_value_ready.is_set():
-                pending.append((
-                    f"DeviceState '{st.name}'",
-                    st._initial_value_ready,
-                ))
+                pending.append(
+                    (
+                        f"DeviceState '{st.name}'",
+                        st._initial_value_ready,
+                    )
+                )
 
         for prop in self._device_properties.values():
             if not prop._initial_value_ready.is_set():
-                pending.append((
-                    f"DeviceProperty '{prop.name}'",
-                    prop._initial_value_ready,
-                ))
+                pending.append(
+                    (
+                        f"DeviceProperty '{prop.name}'",
+                        prop._initial_value_ready,
+                    )
+                )
 
         if not pending:
             return
@@ -2116,9 +2135,7 @@ class Vdsd:
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            still_missing = [
-                label for label, ev in pending if not ev.is_set()
-            ]
+            still_missing = [label for label, ev in pending if not ev.is_set()]
             raise RuntimeError(
                 f"vdSD '{self.name}': timed out after {timeout:.0f}s waiting "
                 f"for initial values. The following components did not report: "
@@ -2155,7 +2172,9 @@ class Vdsd:
 
         logger.info(
             "Announcing vdSD '%s' (dSUID %s, vdc %s)",
-            self.name, self._dsuid, vdc.dsuid,
+            self.name,
+            self._dsuid,
+            vdc.dsuid,
         )
 
         response = await session.send_request(msg)
@@ -2221,9 +2240,7 @@ class Vdsd:
         # Stop session for output.
         if self._output is not None:
             self._output.stop_session()
-        logger.info(
-            "vdSD '%s' vanished (dSUID %s)", self.name, self._dsuid
-        )
+        logger.info("vdSD '%s' vanished (dSUID %s)", self.name, self._dsuid)
 
     def reset_announcement(self) -> None:
         """Mark this vdSD as unannounced (e.g. on session disconnect)."""
@@ -2256,6 +2273,7 @@ class Vdsd:
 # Device — physical hardware wrapper
 # ---------------------------------------------------------------------------
 
+
 class Device:
     """Represents a single physical hardware device.
 
@@ -2284,12 +2302,12 @@ class Device:
         # Store the device-level base dSUID (sub-device index 0).
         self._dsuid: DsUid = dsuid.device_base()
         # Ordered list preserving insertion order.
-        self._vdsds: Dict[int, Vdsd] = {}  # keyed by subdevice_index
+        self._vdsds: dict[int, Vdsd] = {}  # keyed by subdevice_index
         self._announced: bool = False
         # Required-callbacks manifest set by DeviceTemplate.instantiate().
         # None means no template was used; an empty dict means all callbacks
         # were already satisfied at template instantiation time.
-        self._required_callbacks: Optional[Dict[str, None]] = None
+        self._required_callbacks: dict[str, None] | None = None
 
     # ---- accessors ---------------------------------------------------
 
@@ -2304,7 +2322,7 @@ class Device:
         return self._dsuid
 
     @property
-    def vdsds(self) -> Dict[int, Vdsd]:
+    def vdsds(self) -> dict[int, Vdsd]:
         """All contained Vdsd instances keyed by sub-device index."""
         return dict(self._vdsds)
 
@@ -2351,10 +2369,12 @@ class Device:
         self._vdsds[idx] = vdsd
         logger.debug(
             "Added vdSD '%s' (sub-device %d) to device %s",
-            vdsd.name, idx, self._dsuid,
+            vdsd.name,
+            idx,
+            self._dsuid,
         )
 
-    def remove_vdsd(self, subdevice_index: int) -> Optional[Vdsd]:
+    def remove_vdsd(self, subdevice_index: int) -> Vdsd | None:
         """Remove a vdSD by sub-device index.
 
         Returns the removed :class:`Vdsd` or ``None``.
@@ -2372,11 +2392,11 @@ class Device:
             )
         return self._vdsds.pop(subdevice_index, None)
 
-    def get_vdsd(self, subdevice_index: int) -> Optional[Vdsd]:
+    def get_vdsd(self, subdevice_index: int) -> Vdsd | None:
         """Look up a vdSD by sub-device index."""
         return self._vdsds.get(subdevice_index)
 
-    def get_vdsd_by_dsuid(self, dsuid: DsUid) -> Optional[Vdsd]:
+    def get_vdsd_by_dsuid(self, dsuid: DsUid) -> Vdsd | None:
         """Look up a vdSD by its full dSUID."""
         dsuid_str = str(dsuid)
         for vdsd in self._vdsds.values():
@@ -2386,23 +2406,21 @@ class Device:
 
     # ---- announcement ------------------------------------------------
 
-    def _check_required_callbacks(self) -> List[str]:
+    def _check_required_callbacks(self) -> list[str]:
         """Return a list of required-callback paths that are still unset.
 
         Only called when ``self._required_callbacks`` is not ``None``
         (i.e. the device was created from a template).
         """
-        vdsds_by_index = {
-            idx: vdsd for idx, vdsd in enumerate(self._vdsds.values())
-        }
-        missing: List[str] = []
-        for path in (self._required_callbacks or {}):
+        vdsds_by_index = {idx: vdsd for idx, vdsd in enumerate(self._vdsds.values())}
+        missing: list[str] = []
+        for path in self._required_callbacks or {}:
             # Parse path: "vdsds[N].attr" or "vdsds[N].output.attr"
             if path.startswith("vdsds["):
                 # Extract index and remainder.
                 bracket_end = path.index("]")
                 idx = int(path[6:bracket_end])
-                remainder = path[bracket_end + 2:]  # skip "]."
+                remainder = path[bracket_end + 2 :]  # skip "]."
                 vdsd = vdsds_by_index.get(idx)
                 if vdsd is None:
                     missing.append(path)
@@ -2440,9 +2458,7 @@ class Device:
             If the device has no vdSDs or is already announced.
         """
         if not self._vdsds:
-            raise RuntimeError(
-                "Cannot announce a device with no vdSDs"
-            )
+            raise RuntimeError("Cannot announce a device with no vdSDs")
         if self._announced:
             raise RuntimeError(
                 "Device is already announced.  "
@@ -2455,6 +2471,7 @@ class Device:
             missing = self._check_required_callbacks()
             if missing:
                 from pydsvdcapi.device_template import AnnouncementNotReadyError
+
                 raise AnnouncementNotReadyError(missing)
 
         # Register with the parent VDC so the device is persisted and
@@ -2468,14 +2485,14 @@ class Device:
                 if ok:
                     count += 1
             except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Failed to announce vdSD '%s'", vdsd.name
-                )
+                logger.exception("Failed to announce vdSD '%s'", vdsd.name)
 
         self._announced = count == len(self._vdsds)
         logger.info(
             "Device %s: announced %d/%d vdSDs",
-            self._dsuid, count, len(self._vdsds),
+            self._dsuid,
+            count,
+            len(self._vdsds),
         )
         return count
 
@@ -2489,9 +2506,7 @@ class Device:
                 try:
                     await vdsd.vanish(session)
                 except Exception:  # noqa: BLE001
-                    logger.exception(
-                        "Failed to vanish vdSD '%s'", vdsd.name
-                    )
+                    logger.exception("Failed to vanish vdSD '%s'", vdsd.name)
         self._announced = False
         logger.info("Device %s: all vdSDs vanished", self._dsuid)
 
@@ -2559,7 +2574,7 @@ class Device:
 
     # ---- persistence -------------------------------------------------
 
-    def get_template_tree(self) -> Dict[str, Any]:
+    def get_template_tree(self) -> dict[str, Any]:
         """Return the Device data stripped of instance-specific fields,
         suitable for saving as a device template.
 
@@ -2572,9 +2587,10 @@ class Device:
         this method calls internally).
         """
         from pydsvdcapi.device_template import strip_instance_fields
+
         return strip_instance_fields(self.get_property_tree())
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the Device data for inclusion in the Vdc's persisted
         property tree.
 
@@ -2591,13 +2607,10 @@ class Device:
         """
         return {
             "baseDsUID": str(self._dsuid),
-            "vdsds": [
-                vdsd.get_property_tree()
-                for vdsd in self._vdsds.values()
-            ],
+            "vdsds": [vdsd.get_property_tree() for vdsd in self._vdsds.values()],
         }
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore Device state from a persisted dict.
 
         Creates Vdsd instances for any entries in ``vdsds`` that do
@@ -2605,9 +2618,7 @@ class Device:
         index are updated in-place.
         """
         if "baseDsUID" in state:
-            self._dsuid = DsUid.from_string(
-                state["baseDsUID"]
-            ).device_base()
+            self._dsuid = DsUid.from_string(state["baseDsUID"]).device_base()
 
         for vdsd_state in state.get("vdsds", []):
             idx = vdsd_state.get("subdeviceIndex", 0)
@@ -2631,6 +2642,4 @@ class Device:
 
     def __repr__(self) -> str:
         n = len(self._vdsds)
-        return (
-            f"Device(dsuid={self._dsuid!r}, vdsds={n})"
-        )
+        return f"Device(dsuid={self._dsuid!r}, vdsds={n})"

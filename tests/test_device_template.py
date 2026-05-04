@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
 
-from pydsvdcapi.binary_input import BinaryInput
 from pydsvdcapi.device_template import (
     AnnouncementNotReadyError,
     DeviceTemplate,
@@ -31,12 +30,10 @@ from pydsvdcapi.device_template import (
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import ColorGroup
 from pydsvdcapi.output import Output
-from pydsvdcapi.sensor_input import SensorInput
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers shared across tests
@@ -44,7 +41,7 @@ from pydsvdcapi.vdsd import Device, Vdsd
 
 
 def _make_host(**kwargs: Any) -> VdcHost:
-    kw: Dict[str, Any] = {"name": "Test Host", "mac": "AA:BB:CC:DD:EE:FF"}
+    kw: dict[str, Any] = {"name": "Test Host", "mac": "AA:BB:CC:DD:EE:FF"}
     kw.update(kwargs)
     host = VdcHost(**kw)
     host._cancel_auto_save()
@@ -52,7 +49,7 @@ def _make_host(**kwargs: Any) -> VdcHost:
 
 
 def _make_vdc(host: VdcHost, **kwargs: Any) -> Vdc:
-    defaults: Dict[str, Any] = {
+    defaults: dict[str, Any] = {
         "host": host,
         "implementation_id": "x-test",
         "name": "Test vDC",
@@ -415,9 +412,7 @@ class TestDeviceAnnounceCallbackGuard:
         device = _make_simple_device(vdc)
         session = _make_session()
         # Should not raise — no _required_callbacks set
-        asyncio.get_event_loop().run_until_complete(
-            device.announce(session)
-        )
+        asyncio.get_event_loop().run_until_complete(device.announce(session))
 
     def test_raises_when_callbacks_missing(self):
         host = _make_host()
@@ -427,9 +422,7 @@ class TestDeviceAnnounceCallbackGuard:
         device._required_callbacks = {"vdsds[0].on_identify": None}
         session = _make_session()
         with pytest.raises(AnnouncementNotReadyError) as exc_info:
-            asyncio.get_event_loop().run_until_complete(
-                device.announce(session)
-            )
+            asyncio.get_event_loop().run_until_complete(device.announce(session))
         assert "vdsds[0].on_identify" in exc_info.value.missing_callbacks
 
     def test_no_raise_when_callback_is_set(self):
@@ -441,40 +434,27 @@ class TestDeviceAnnounceCallbackGuard:
         vdsd.on_identify = lambda v: None
         session = _make_session()
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(
-            device.announce(session)
-        )
+        asyncio.get_event_loop().run_until_complete(device.announce(session))
 
     def test_raises_when_output_callback_missing(self):
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_output_device(vdc)
-        device._required_callbacks = {
-            "vdsds[0].output.on_channel_applied": None
-        }
+        device._required_callbacks = {"vdsds[0].output.on_channel_applied": None}
         session = _make_session()
         with pytest.raises(AnnouncementNotReadyError) as exc_info:
-            asyncio.get_event_loop().run_until_complete(
-                device.announce(session)
-            )
-        assert (
-            "vdsds[0].output.on_channel_applied"
-            in exc_info.value.missing_callbacks
-        )
+            asyncio.get_event_loop().run_until_complete(device.announce(session))
+        assert "vdsds[0].output.on_channel_applied" in exc_info.value.missing_callbacks
 
     def test_no_raise_when_output_callback_set(self):
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_output_device(vdc)
-        device._required_callbacks = {
-            "vdsds[0].output.on_channel_applied": None
-        }
+        device._required_callbacks = {"vdsds[0].output.on_channel_applied": None}
         vdsd = list(device.vdsds.values())[0]
         vdsd._output.on_channel_applied = lambda o, u: None
         session = _make_session()
-        asyncio.get_event_loop().run_until_complete(
-            device.announce(session)
-        )
+        asyncio.get_event_loop().run_until_complete(device.announce(session))
 
 
 # ---------------------------------------------------------------------------
@@ -571,9 +551,7 @@ class TestVdcTemplatePersistence:
         new_device = tmpl.instantiate(vdc=vdc)
         assert new_device.vdsds[0].name == "New Instance"
 
-    def test_model_template_goes_in_model_templates_folder(
-        self, tmp_path: Path
-    ):
+    def test_model_template_goes_in_model_templates_folder(self, tmp_path: Path):
         host = _make_host()
         vdc = _make_vdc(host, template_path=tmp_path)
         device = _make_simple_device(vdc)

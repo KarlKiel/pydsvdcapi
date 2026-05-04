@@ -84,9 +84,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi.conversion import apply_converter, compile_converter
@@ -127,7 +124,7 @@ class ChannelSpec:
 
 #: Metadata table for all standard channel types (vDC API §4.9.4).
 #: IDs follow the ``OutputChannelType`` enum.
-CHANNEL_SPECS: Dict[OutputChannelType, ChannelSpec] = {
+CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
     # -- Light channels ------------------------------------------------
     OutputChannelType.BRIGHTNESS: ChannelSpec(
         name="brightness", min_value=0, max_value=100, resolution=100 / 255
@@ -149,90 +146,135 @@ CHANNEL_SPECS: Dict[OutputChannelType, ChannelSpec] = {
     ),
     # -- Shade channels ------------------------------------------------
     OutputChannelType.SHADE_POSITION_OUTSIDE: ChannelSpec(
-        name="shadePositionOutside", min_value=0, max_value=100,
+        name="shadePositionOutside",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.SHADE_POSITION_INDOOR: ChannelSpec(
-        name="shadePositionIndoor", min_value=0, max_value=100,
+        name="shadePositionIndoor",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE: ChannelSpec(
-        name="shadeOpeningAngleOutside", min_value=0, max_value=100,
+        name="shadeOpeningAngleOutside",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.SHADE_OPENING_ANGLE_INDOOR: ChannelSpec(
-        name="shadeOpeningAngleIndoor", min_value=0, max_value=100,
+        name="shadeOpeningAngleIndoor",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.TRANSPARENCY: ChannelSpec(
-        name="transparency", min_value=0, max_value=100,
+        name="transparency",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     # -- Climate channels ----------------------------------------------
     OutputChannelType.HEATING_POWER: ChannelSpec(
-        name="heatingPower", min_value=0, max_value=100,
+        name="heatingPower",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.COOLING_CAPACITY: ChannelSpec(
-        name="coolingCapacity", min_value=0, max_value=100,
+        name="coolingCapacity",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.AIR_FLOW_INTENSITY: ChannelSpec(
-        name="airFlowIntensity", min_value=0, max_value=100,
+        name="airFlowIntensity",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.AIR_FLOW_DIRECTION: ChannelSpec(
-        name="airFlowDirection", min_value=0, max_value=2,
+        name="airFlowDirection",
+        min_value=0,
+        max_value=2,
         resolution=1,
     ),
     OutputChannelType.AIR_FLAP_POSITION: ChannelSpec(
-        name="airFlapPosition", min_value=0, max_value=100,
+        name="airFlapPosition",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.AIR_LOUVER_POSITION: ChannelSpec(
-        name="airLouverPosition", min_value=0, max_value=100,
+        name="airLouverPosition",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.AIR_LOUVER_AUTO: ChannelSpec(
-        name="airLouverAuto", min_value=0, max_value=1, resolution=1,
+        name="airLouverAuto",
+        min_value=0,
+        max_value=1,
+        resolution=1,
     ),
     OutputChannelType.AIR_FLOW_AUTO: ChannelSpec(
-        name="airFlowAuto", min_value=0, max_value=1, resolution=1,
+        name="airFlowAuto",
+        min_value=0,
+        max_value=1,
+        resolution=1,
     ),
     # -- Audio channels ------------------------------------------------
     OutputChannelType.AUDIO_VOLUME: ChannelSpec(
-        name="audioVolume", min_value=0, max_value=100,
+        name="audioVolume",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     # -- Misc channels -------------------------------------------------
     OutputChannelType.WATER_TEMPERATURE: ChannelSpec(
-        name="waterTemperature", min_value=0, max_value=150,
+        name="waterTemperature",
+        min_value=0,
+        max_value=150,
         resolution=150 / 255,
     ),
     OutputChannelType.WATER_FLOW_RATE: ChannelSpec(
-        name="waterFlowRate", min_value=0, max_value=100,
+        name="waterFlowRate",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     OutputChannelType.POWER_STATE: ChannelSpec(
-        name="powerState", min_value=0, max_value=3, resolution=1,
+        name="powerState",
+        min_value=0,
+        max_value=3,
+        resolution=1,
     ),
     OutputChannelType.POWER_LEVEL: ChannelSpec(
-        name="powerLevel", min_value=0, max_value=100,
+        name="powerLevel",
+        min_value=0,
+        max_value=100,
         resolution=100 / 255,
     ),
     # -- Video channels ------------------------------------------------
     OutputChannelType.VIDEO_STATION: ChannelSpec(
-        name="videoStation", min_value=0, max_value=65535, resolution=1,
+        name="videoStation",
+        min_value=0,
+        max_value=65535,
+        resolution=1,
     ),
     OutputChannelType.VIDEO_INPUT_SOURCE: ChannelSpec(
-        name="videoInputSource", min_value=0, max_value=255, resolution=1,
+        name="videoInputSource",
+        min_value=0,
+        max_value=255,
+        resolution=1,
     ),
 }
 
 
 def get_channel_spec(
-    channel_type: Union[OutputChannelType, int],
-) -> Optional[ChannelSpec]:
+    channel_type: OutputChannelType | int,
+) -> ChannelSpec | None:
     """Look up the :class:`ChannelSpec` for a standard channel type.
 
     Returns ``None`` for unknown / device-specific channel types
@@ -280,19 +322,19 @@ class OutputChannel:
         self,
         *,
         output: Output,
-        channel_type: Union[OutputChannelType, int],
+        channel_type: OutputChannelType | int,
         ds_index: int = 0,
-        name: Optional[str] = None,
-        min_value: Optional[float] = None,
-        max_value: Optional[float] = None,
-        resolution: Optional[float] = None,
+        name: str | None = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        resolution: float | None = None,
     ) -> None:
         self._output: Output = output
 
         # Store as enum if possible, otherwise keep raw int.
         try:
-            self._channel_type: Union[OutputChannelType, int] = (
-                OutputChannelType(int(channel_type))
+            self._channel_type: OutputChannelType | int = OutputChannelType(
+                int(channel_type)
             )
         except ValueError:
             self._channel_type = int(channel_type)
@@ -314,37 +356,34 @@ class OutputChannel:
 
         # Ensure float so protobuf serialises as v_double (not v_uint64).
         self._min_value: float = float(
-            min_value if min_value is not None
-            else (spec.min_value if spec else 0.0)
+            min_value if min_value is not None else (spec.min_value if spec else 0.0)
         )
         self._max_value: float = float(
-            max_value if max_value is not None
-            else (spec.max_value if spec else 100.0)
+            max_value if max_value is not None else (spec.max_value if spec else 100.0)
         )
         self._resolution: float = float(
-            resolution if resolution is not None
-            else (spec.resolution if spec else 1.0)
+            resolution if resolution is not None else (spec.resolution if spec else 1.0)
         )
 
         # ---- volatile state (NOT persisted) --------------------------
-        self._value: Optional[float] = None
+        self._value: float | None = None
         #: Monotonic timestamp of last confirmed hardware apply.
-        self._last_update: Optional[float] = None
+        self._last_update: float | None = None
 
         # Set when the first real value has been received from the device.
         self._initial_value_ready: asyncio.Event = asyncio.Event()
 
         # ---- value converters (optional, persisted) ------------------
-        self._uplink_converter_code: Optional[str] = None
-        self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
-        self._downlink_converter_code: Optional[str] = None
-        self._downlink_converter_fn: Optional[Callable[[Any], Any]] = None
+        self._uplink_converter_code: str | None = None
+        self._uplink_converter_fn: Callable[[Any], Any] | None = None
+        self._downlink_converter_code: str | None = None
+        self._downlink_converter_fn: Callable[[Any], Any] | None = None
 
     # ==================================================================
     # Converter management
     # ==================================================================
 
-    def set_uplink_converter(self, code: Optional[str]) -> None:
+    def set_uplink_converter(self, code: str | None) -> None:
         """Set or clear the uplink value converter.
 
         Applied when the device confirms a channel value via
@@ -374,11 +413,11 @@ class OutputChannel:
             self._uplink_converter_code = code
 
     @property
-    def uplink_converter_code(self) -> Optional[str]:
+    def uplink_converter_code(self) -> str | None:
         """The stored uplink converter snippet, or ``None``."""
         return self._uplink_converter_code
 
-    def set_downlink_converter(self, code: Optional[str]) -> None:
+    def set_downlink_converter(self, code: str | None) -> None:
         """Set or clear the downlink value converter.
 
         Applied when the vdSM sets a channel value via
@@ -411,7 +450,7 @@ class OutputChannel:
             self._downlink_converter_code = code
 
     @property
-    def downlink_converter_code(self) -> Optional[str]:
+    def downlink_converter_code(self) -> str | None:
         """The stored downlink converter snippet, or ``None``."""
         return self._downlink_converter_code
 
@@ -425,7 +464,7 @@ class OutputChannel:
         return self._output
 
     @property
-    def channel_type(self) -> Union[OutputChannelType, int]:
+    def channel_type(self) -> OutputChannelType | int:
         """Channel type ID (enum or raw int for device-specific)."""
         return self._channel_type
 
@@ -464,12 +503,12 @@ class OutputChannel:
     # ==================================================================
 
     @property
-    def value(self) -> Optional[float]:
+    def value(self) -> float | None:
         """Current channel value (``None`` = unknown)."""
         return self._value
 
     @property
-    def age(self) -> Optional[float]:
+    def age(self) -> float | None:
         """Seconds since the value was last confirmed by hardware.
 
         ``None`` means the value was never confirmed (e.g. a new value
@@ -510,7 +549,9 @@ class OutputChannel:
         self._last_update = time.monotonic()
         logger.debug(
             "OutputChannel[%d] '%s' device-side update → %s",
-            self._ds_index, self._name, self._value,
+            self._ds_index,
+            self._name,
+            self._value,
         )
         # Push to vdSM if output.pushChanges is set.
         if self._output.push_changes:
@@ -544,7 +585,9 @@ class OutputChannel:
         self._last_update = None
         logger.debug(
             "OutputChannel[%d] '%s' vdSM-side set → %s (pending)",
-            self._ds_index, self._name, self._value,
+            self._ds_index,
+            self._name,
+            self._value,
         )
 
     def confirm_applied(self) -> None:
@@ -557,14 +600,16 @@ class OutputChannel:
         self._last_update = time.monotonic()
         logger.debug(
             "OutputChannel[%d] '%s' confirmed applied (value=%s)",
-            self._ds_index, self._name, self._value,
+            self._ds_index,
+            self._name,
+            self._value,
         )
 
     # ==================================================================
     # Property dicts (for getProperty responses)
     # ==================================================================
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return the ``channelDescriptions[N]`` property dict.
 
         Keys match the vDC API property names (§4.9.1).
@@ -578,34 +623,34 @@ class OutputChannel:
             "resolution": self._resolution,
         }
 
-    def get_settings_properties(self) -> Dict[str, Any]:
+    def get_settings_properties(self) -> dict[str, Any]:
         """Return the ``channelSettings[N]`` property dict.
 
         Currently no per-channel settings are defined (§4.9.2).
         """
         return {}
 
-    def get_state_properties(self) -> Dict[str, Any]:
+    def get_state_properties(self) -> dict[str, Any]:
         """Return the ``channelStates[N]`` property dict.
 
         Keys match the vDC API property names (§4.9.3).
         """
         return {
-            "value": self._value,    # may be None (NULL)
-            "age": self.age,         # may be None (NULL)
+            "value": self._value,  # may be None (NULL)
+            "age": self.age,  # may be None (NULL)
         }
 
     # ==================================================================
     # Persistence
     # ==================================================================
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a serialisable dict for YAML persistence.
 
         Only description metadata is persisted.  Channel value/age
         are volatile.
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "channelType": int(self._channel_type),
             "dsIndex": self._ds_index,
             "name": self._name,
@@ -619,7 +664,7 @@ class OutputChannel:
             node["downlinkConverter"] = self._downlink_converter_code
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted property tree dict.
 
         Only description fields; value/age remain at defaults.

@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import logging
 import textwrap
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, cast
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def compile_converter(code: str) -> Callable[[Any], Any]:
 
 
 def apply_converter(
-    fn: Optional[Callable[[Any], Any]],
+    fn: Callable[[Any], Any] | None,
     value: Any,
     *,
     component_id: str,

@@ -54,9 +54,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
@@ -143,19 +140,19 @@ class BinaryInput:
         self._sensor_function: BinaryInputType = sensor_function
 
         # ---- state properties (volatile, NOT persisted) --------------
-        self._value: Optional[bool] = None
-        self._extended_value: Optional[int] = None
-        self._age: Optional[float] = None
+        self._value: bool | None = None
+        self._extended_value: int | None = None
+        self._age: float | None = None
         self._error: InputError = InputError.OK
         #: Monotonic timestamp of the last value update (for age calc).
-        self._last_update: Optional[float] = None
+        self._last_update: float | None = None
 
         # ---- session (stored by start_alive_timer for push fallback) -
-        self._session: Optional[VdcSession] = None
+        self._session: VdcSession | None = None
 
         # ---- value converter (optional, persisted) -------------------
-        self._uplink_converter_code: Optional[str] = None
-        self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
+        self._uplink_converter_code: str | None = None
+        self._uplink_converter_fn: Callable[[Any], Any] | None = None
 
     # ---- read-only accessors -----------------------------------------
 
@@ -216,13 +213,13 @@ class BinaryInput:
         return self._sensor_function
 
     @sensor_function.setter
-    def sensor_function(self, value: Union[BinaryInputType, int]) -> None:
+    def sensor_function(self, value: BinaryInputType | int) -> None:
         self._sensor_function = BinaryInputType(int(value))
         self._schedule_auto_save()
 
     # ---- converter management ---------------------------------------
 
-    def set_uplink_converter(self, code: Optional[str]) -> None:
+    def set_uplink_converter(self, code: str | None) -> None:
         """Set or clear the uplink value converter.
 
         The converter snippet is a block of Python code that
@@ -266,19 +263,19 @@ class BinaryInput:
             self._uplink_converter_code = code
 
     @property
-    def uplink_converter_code(self) -> Optional[str]:
+    def uplink_converter_code(self) -> str | None:
         """The stored uplink converter snippet, or ``None``."""
         return self._uplink_converter_code
 
     # ---- state accessors (volatile) ----------------------------------
 
     @property
-    def value(self) -> Optional[bool]:
+    def value(self) -> bool | None:
         """Current boolean value (``None`` = unknown)."""
         return self._value
 
     @property
-    def extended_value(self) -> Optional[int]:
+    def extended_value(self) -> int | None:
         """Current extended (integer) value (``None`` = unknown).
 
         When set, this takes precedence over :attr:`value`.
@@ -286,7 +283,7 @@ class BinaryInput:
         return self._extended_value
 
     @property
-    def age(self) -> Optional[float]:
+    def age(self) -> float | None:
         """Seconds since the last value update (``None`` = unknown)."""
         if self._last_update is None:
             return None
@@ -298,15 +295,15 @@ class BinaryInput:
         return self._error
 
     @error.setter
-    def error(self, value: Union[InputError, int]) -> None:
+    def error(self, value: InputError | int) -> None:
         self._error = InputError(int(value))
 
     # ---- state update (called by the physical device) ----------------
 
     async def update_value(
         self,
-        value: Optional[bool],
-        session: Optional[VdcSession] = None,
+        value: bool | None,
+        session: VdcSession | None = None,
     ) -> None:
         """Set the boolean value and push a state notification.
 
@@ -330,14 +327,16 @@ class BinaryInput:
         self._last_update = time.monotonic()
         logger.debug(
             "BinaryInput[%d] '%s' value → %s",
-            self._ds_index, self._name, value,
+            self._ds_index,
+            self._name,
+            value,
         )
         await self._push_state(session or self._session)
 
     async def update_extended_value(
         self,
-        value: Optional[int],
-        session: Optional[VdcSession] = None,
+        value: int | None,
+        session: VdcSession | None = None,
     ) -> None:
         """Set the extended (integer) value and push a state notification.
 
@@ -360,14 +359,16 @@ class BinaryInput:
         self._last_update = time.monotonic()
         logger.debug(
             "BinaryInput[%d] '%s' extendedValue → %s",
-            self._ds_index, self._name, value,
+            self._ds_index,
+            self._name,
+            value,
         )
         await self._push_state(session or self._session)
 
     async def update_error(
         self,
-        error: Union[InputError, int],
-        session: Optional[VdcSession] = None,
+        error: InputError | int,
+        session: VdcSession | None = None,
     ) -> None:
         """Set the error status and push a state notification.
 
@@ -381,13 +382,15 @@ class BinaryInput:
         self._error = InputError(int(error))
         logger.debug(
             "BinaryInput[%d] '%s' error → %s",
-            self._ds_index, self._name, self._error.name,
+            self._ds_index,
+            self._name,
+            self._error.name,
         )
         await self._push_state(session or self._session)
 
     # ---- property dicts (for getProperty responses) ------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return the ``binaryInputDescriptions[N]`` property dict.
 
         These are read-only hardware characteristics.
@@ -401,7 +404,7 @@ class BinaryInput:
             "updateInterval": self._update_interval,
         }
 
-    def get_settings_properties(self) -> Dict[str, Any]:
+    def get_settings_properties(self) -> dict[str, Any]:
         """Return the ``binaryInputSettings[N]`` property dict.
 
         These are read/write, persisted.
@@ -411,12 +414,12 @@ class BinaryInput:
             "sensorFunction": int(self._sensor_function),
         }
 
-    def get_state_properties(self) -> Dict[str, Any]:
+    def get_state_properties(self) -> dict[str, Any]:
         """Return the ``binaryInputStates[N]`` property dict.
 
         These are read-only volatile state.
         """
-        state: Dict[str, Any] = {}
+        state: dict[str, Any] = {}
 
         # Prefer extendedValue over value when set.
         if self._extended_value is not None:
@@ -430,7 +433,7 @@ class BinaryInput:
 
     # ---- settings mutation (called from vdc_host setProperty) --------
 
-    def apply_settings(self, incoming: Dict[str, Any]) -> None:
+    def apply_settings(self, incoming: dict[str, Any]) -> None:
         """Apply writable settings from a ``setProperty`` request.
 
         Parameters
@@ -444,28 +447,26 @@ class BinaryInput:
             self._group = int(incoming["group"])
             changed = True
         if "sensorFunction" in incoming:
-            self._sensor_function = BinaryInputType(
-                int(incoming["sensorFunction"])
-            )
+            self._sensor_function = BinaryInputType(int(incoming["sensorFunction"]))
             changed = True
         if changed:
             logger.debug(
-                "BinaryInput[%d] settings updated: group=%d, "
-                "sensorFunction=%s",
-                self._ds_index, self._group,
+                "BinaryInput[%d] settings updated: group=%d, sensorFunction=%s",
+                self._ds_index,
+                self._group,
                 self._sensor_function.name,
             )
             self._schedule_auto_save()
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the persisted representation of this binary input.
 
         Only description and settings properties are included (state
         is volatile and not persisted).
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
             "inputType": self._input_type,
@@ -480,7 +481,7 @@ class BinaryInput:
             node["uplinkConverter"] = self._uplink_converter_code
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted property tree dict.
 
         Restores both description and settings properties.  State
@@ -493,22 +494,16 @@ class BinaryInput:
         if "inputType" in state:
             self._input_type = int(state["inputType"])
         if "inputUsage" in state:
-            self._input_usage = BinaryInputUsage(
-                int(state["inputUsage"])
-            )
+            self._input_usage = BinaryInputUsage(int(state["inputUsage"]))
         if "hardwiredFunction" in state:
-            self._hardwired_function = BinaryInputType(
-                int(state["hardwiredFunction"])
-            )
+            self._hardwired_function = BinaryInputType(int(state["hardwiredFunction"]))
         if "updateInterval" in state:
             self._update_interval = float(state["updateInterval"])
         # Settings
         if "group" in state:
             self._group = int(state["group"])
         if "sensorFunction" in state:
-            self._sensor_function = BinaryInputType(
-                int(state["sensorFunction"])
-            )
+            self._sensor_function = BinaryInputType(int(state["sensorFunction"]))
         # Converter
         if "uplinkConverter" in state:
             self.set_uplink_converter(state["uplinkConverter"])
@@ -520,7 +515,7 @@ class BinaryInput:
 
     async def _push_state(
         self,
-        session: Optional[VdcSession],
+        session: VdcSession | None,
         *,
         force: bool = False,
     ) -> None:
@@ -545,7 +540,7 @@ class BinaryInput:
 
         state_dict = self.get_state_properties()
 
-        push_tree: Dict[str, Any] = {
+        push_tree: dict[str, Any] = {
             "binaryInputStates": {
                 str(self._ds_index): state_dict,
             }
@@ -561,13 +556,17 @@ class BinaryInput:
             await session.send_notification(msg)
             logger.debug(
                 "BinaryInput[%d] '%s': pushed state %s for vdSD %s",
-                self._ds_index, self._name, state_dict,
+                self._ds_index,
+                self._name,
+                state_dict,
                 self._vdsd.dsuid,
             )
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "BinaryInput[%d] '%s': failed to push state: %s",
-                self._ds_index, self._name, exc,
+                self._ds_index,
+                self._name,
+                exc,
             )
 
     # ---- session management ------------------------------------------

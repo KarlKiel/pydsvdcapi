@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,12 +19,10 @@ from pydsvdcapi.enums import (
     OutputUsage,
 )
 from pydsvdcapi.output import Output
-from pydsvdcapi.output_channel import OutputChannel
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,7 +52,7 @@ def _base_dsuid() -> DsUid:
     return DsUid.from_name_in_space("output-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -124,7 +122,9 @@ class TestOutputConstruction:
 
     def test_default_settings(self):
         host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)  # _make_output uses OutputFunction.DIMMER → auto-derives GRADUAL
+        out = _make_output(
+            vdsd
+        )  # _make_output uses OutputFunction.DIMMER → auto-derives GRADUAL
 
         assert out.mode == OutputMode.GRADUAL
         assert out.active_group == 1
@@ -194,7 +194,9 @@ class TestOutputConstruction:
         assert out.dim_time_down_alt1 == 120
         assert out.dim_time_up_alt2 == 200
         assert out.dim_time_down_alt2 == 180
-        assert out.heating_system_capability == HeatingSystemCapability.HEATING_AND_COOLING
+        assert (
+            out.heating_system_capability == HeatingSystemCapability.HEATING_AND_COOLING
+        )
         assert out.heating_system_type == HeatingSystemType.FLOOR_HEATING
 
     def test_construction_with_int_enums(self):
@@ -221,19 +223,40 @@ class TestOutputConstruction:
     def test_all_output_functions(self):
         host, vdc, device, vdsd = _make_stack()
         for func in OutputFunction:
-            out = Output(vdsd=vdsd, function=func, name="test", default_group=1, active_group=1, groups={1})
+            out = Output(
+                vdsd=vdsd,
+                function=func,
+                name="test",
+                default_group=1,
+                active_group=1,
+                groups={1},
+            )
             assert out.function == func
 
     def test_all_output_modes(self):
         host, vdc, device, vdsd = _make_stack()
         for mode in OutputMode:
-            out = Output(vdsd=vdsd, mode=mode, name="test", default_group=1, active_group=1, groups={1})
+            out = Output(
+                vdsd=vdsd,
+                mode=mode,
+                name="test",
+                default_group=1,
+                active_group=1,
+                groups={1},
+            )
             assert out.mode == mode
 
     def test_all_output_usages(self):
         host, vdc, device, vdsd = _make_stack()
         for usage in OutputUsage:
-            out = Output(vdsd=vdsd, output_usage=usage, name="test", default_group=1, active_group=1, groups={1})
+            out = Output(
+                vdsd=vdsd,
+                output_usage=usage,
+                name="test",
+                default_group=1,
+                active_group=1,
+                groups={1},
+            )
             assert out.output_usage == usage
 
 
@@ -368,7 +391,9 @@ class TestOutputSettingsMutators:
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         out.heating_system_capability = 3
-        assert out.heating_system_capability == HeatingSystemCapability.HEATING_AND_COOLING
+        assert (
+            out.heating_system_capability == HeatingSystemCapability.HEATING_AND_COOLING
+        )
 
     def test_heating_system_capability_reset(self):
         host, vdc, device, vdsd = _make_stack()
@@ -549,9 +574,7 @@ class TestOutputSettingsProperties:
         assert settings["heatingSystemCapability"] == int(
             HeatingSystemCapability.HEATING_AND_COOLING
         )
-        assert settings["heatingSystemType"] == int(
-            HeatingSystemType.RADIATOR
-        )
+        assert settings["heatingSystemType"] == int(HeatingSystemType.RADIATOR)
 
 
 # ===========================================================================
@@ -646,14 +669,16 @@ class TestOutputApplySettings:
     def test_apply_dim_times(self):
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
-        out.apply_settings({
-            "dimTimeUp": 100,
-            "dimTimeDown": 80,
-            "dimTimeUpAlt1": 150,
-            "dimTimeDownAlt1": 120,
-            "dimTimeUpAlt2": 200,
-            "dimTimeDownAlt2": 180,
-        })
+        out.apply_settings(
+            {
+                "dimTimeUp": 100,
+                "dimTimeDown": 80,
+                "dimTimeUpAlt1": 150,
+                "dimTimeDownAlt1": 120,
+                "dimTimeUpAlt2": 200,
+                "dimTimeDownAlt2": 180,
+            }
+        )
         assert out.dim_time_up == 100
         assert out.dim_time_down == 80
         assert out.dim_time_up_alt1 == 150
@@ -705,20 +730,24 @@ class TestOutputApplySettings:
 
     def test_apply_empty_dict(self):
         host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)  # DIMMER → auto-derives GRADUAL; empty dict leaves it unchanged
+        out = _make_output(
+            vdsd
+        )  # DIMMER → auto-derives GRADUAL; empty dict leaves it unchanged
         out.apply_settings({})
         assert out.mode == OutputMode.GRADUAL
 
     def test_apply_multiple_settings_at_once(self):
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
-        out.apply_settings({
-            "mode": 2,
-            "activeGroup": 3,
-            "pushChanges": True,
-            "onThreshold": 30.0,
-            "minBrightness": 5.0,
-        })
+        out.apply_settings(
+            {
+                "mode": 2,
+                "activeGroup": 3,
+                "pushChanges": True,
+                "onThreshold": 30.0,
+                "minBrightness": 5.0,
+            }
+        )
         assert out.mode == OutputMode.GRADUAL
         assert out.active_group == 3
         assert out.push_changes is True
@@ -830,9 +859,7 @@ class TestOutputPropertyTree:
         assert tree["heatingSystemCapability"] == int(
             HeatingSystemCapability.HEATING_AND_COOLING
         )
-        assert tree["heatingSystemType"] == int(
-            HeatingSystemType.FLOOR_HEATING
-        )
+        assert tree["heatingSystemType"] == int(HeatingSystemType.FLOOR_HEATING)
 
     def test_state_not_in_tree(self):
         """Volatile state must NOT appear in the property tree."""
@@ -875,7 +902,9 @@ class TestOutputPropertyTree:
         tree = original.get_property_tree()
 
         # Restore into a fresh Output.
-        restored = Output(vdsd=vdsd, name="restored", default_group=0, active_group=0, groups=set())
+        restored = Output(
+            vdsd=vdsd, name="restored", default_group=0, active_group=0, groups=set()
+        )
         restored._apply_state(tree)
 
         assert restored.function == original.function
@@ -910,7 +939,9 @@ class TestOutputPropertyTree:
     def test_apply_state_groups_from_dict(self):
         """_apply_state also handles groups in dict format."""
         host, vdc, device, vdsd = _make_stack()
-        out = Output(vdsd=vdsd, name="tmp", default_group=0, active_group=0, groups=set())
+        out = Output(
+            vdsd=vdsd, name="tmp", default_group=0, active_group=0, groups=set()
+        )
         out._apply_state({"groups": {"1": True, "5": True, "10": False}})
         assert out.groups == {1, 5}
 
@@ -960,10 +991,17 @@ class TestVdsdOutputIntegration:
             vdc=vdc,
             dsuid=DsUid.from_name_in_space("other", DsUidNamespace.VDC),
         )
-        other_vdsd = Vdsd(device=other_device, primary_group=ColorGroup.BLACK, name="Other", model="Test")
+        other_vdsd = Vdsd(
+            device=other_device,
+            primary_group=ColorGroup.BLACK,
+            name="Other",
+            model="Test",
+        )
         other_device.add_vdsd(other_vdsd)
 
-        out = Output(vdsd=other_vdsd, name="out", default_group=1, active_group=1, groups={1})
+        out = Output(
+            vdsd=other_vdsd, name="out", default_group=1, active_group=1, groups={1}
+        )
         with pytest.raises(ValueError, match="different vdSD"):
             vdsd.set_output(out)
 
@@ -1047,15 +1085,19 @@ class TestVdsdOutputIntegration:
     def test_output_restore_merges_with_existing(self):
         """If output already exists, _apply_state updates it."""
         host, vdc, device, vdsd = _make_stack()
-        existing = Output(vdsd=vdsd, name="Existing", default_group=1, active_group=1, groups={1})
+        existing = Output(
+            vdsd=vdsd, name="Existing", default_group=1, active_group=1, groups={1}
+        )
         vdsd.set_output(existing)
 
-        vdsd._apply_state({
-            "output": {
-                "function": int(OutputFunction.BIPOLAR),
-                "name": "Updated",
+        vdsd._apply_state(
+            {
+                "output": {
+                    "function": int(OutputFunction.BIPOLAR),
+                    "name": "Updated",
+                }
             }
-        })
+        )
 
         # Should be the same object, updated.
         assert vdsd.output is existing
@@ -1121,9 +1163,12 @@ class TestVdcHostOutputSetProperty:
         out = _make_output(vdsd)
         vdsd.set_output(out)
 
-        host._apply_vdsd_set_property(vdsd, {
-            "outputSettings": {"mode": 2, "pushChanges": True},
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "outputSettings": {"mode": 2, "pushChanges": True},
+            },
+        )
 
         assert out.mode == OutputMode.GRADUAL
         assert out.push_changes is True
@@ -1133,34 +1178,48 @@ class TestVdcHostOutputSetProperty:
         out = _make_output(vdsd)
         vdsd.set_output(out)
 
-        host._apply_vdsd_set_property(vdsd, {
-            "outputState": {"localPriority": True},
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "outputState": {"localPriority": True},
+            },
+        )
 
         assert out.local_priority is True
 
     def test_apply_output_settings_no_output(self):
         """Settings for non-existing output should not crash."""
         host, vdc, device, vdsd = _make_stack()
-        host._apply_vdsd_set_property(vdsd, {
-            "outputSettings": {"mode": 1},
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "outputSettings": {"mode": 1},
+            },
+        )
 
     def test_apply_output_state_no_output(self):
         """State for non-existing output should not crash."""
         host, vdc, device, vdsd = _make_stack()
-        host._apply_vdsd_set_property(vdsd, {
-            "outputState": {"localPriority": True},
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "outputState": {"localPriority": True},
+            },
+        )
 
     def test_apply_output_settings_not_dict(self):
         """Non-dict outputSettings should be silently ignored."""
         host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)  # DIMMER → auto-derives GRADUAL; invalid settings leave it unchanged
+        out = _make_output(
+            vdsd
+        )  # DIMMER → auto-derives GRADUAL; invalid settings leave it unchanged
         vdsd.set_output(out)
-        host._apply_vdsd_set_property(vdsd, {
-            "outputSettings": "invalid",
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "outputSettings": "invalid",
+            },
+        )
         assert out.mode == OutputMode.GRADUAL
 
     def test_apply_output_state_not_dict(self):
@@ -1168,9 +1227,12 @@ class TestVdcHostOutputSetProperty:
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         vdsd.set_output(out)
-        host._apply_vdsd_set_property(vdsd, {
-            "outputState": "invalid",
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "outputState": "invalid",
+            },
+        )
         assert out.local_priority is False
 
     def test_mixed_set_property(self):
@@ -1179,12 +1241,15 @@ class TestVdcHostOutputSetProperty:
         out = _make_output(vdsd)
         vdsd.set_output(out)
 
-        host._apply_vdsd_set_property(vdsd, {
-            "name": "Renamed",
-            "zoneID": 42,
-            "outputSettings": {"mode": 1},
-            "outputState": {"localPriority": True},
-        })
+        host._apply_vdsd_set_property(
+            vdsd,
+            {
+                "name": "Renamed",
+                "zoneID": 42,
+                "outputSettings": {"mode": 1},
+                "outputState": {"localPriority": True},
+            },
+        )
 
         assert vdsd.name == "Renamed"
         assert vdsd.zone_id == 42
@@ -1303,10 +1368,12 @@ class TestOutputExport:
 
     def test_import_output(self):
         from pydsvdcapi import Output
+
         assert Output is not None
 
     def test_output_is_same_class(self):
         from pydsvdcapi import Output as PkgOutput
+
         assert PkgOutput is Output
 
 
@@ -1404,9 +1471,7 @@ class TestOutputEdgeCases:
         assert settings["heatingSystemCapability"] == int(
             HeatingSystemCapability.HEATING_AND_COOLING
         )
-        assert settings["heatingSystemType"] == int(
-            HeatingSystemType.CONVECTOR_PASSIVE
-        )
+        assert settings["heatingSystemType"] == int(HeatingSystemType.CONVECTOR_PASSIVE)
 
     def test_full_round_trip_through_vdsd(self):
         """Complete persistence round-trip through the vdSD."""
@@ -1473,9 +1538,7 @@ class TestOutputScenes:
                 )
             else:
                 entry = out.get_scene(nr)
-                assert entry is not None, (
-                    f"Scene {nr} missing from default table"
-                )
+                assert entry is not None, f"Scene {nr} missing from default table"
                 for idx in out.channels:
                     assert idx in entry.get("channels", {}), (
                         f"Channel {idx} missing in scene {nr}"
@@ -1631,9 +1694,7 @@ class TestOutputScenes:
     def test_call_scene_respects_channel_dont_care(self):
         """Per-channel dontCare should skip that channel."""
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.DIMMER_COLOR_TEMP
-        )
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
         vdsd.set_output(out)
 
         from pydsvdcapi.enums import SceneNumber
@@ -1738,6 +1799,7 @@ class TestOutputScenes:
 
         # All 128 scenes (minus non-value) should still be present.
         from pydsvdcapi.output import _NON_VALUE_SCENES
+
         for nr in range(128):
             if nr not in _NON_VALUE_SCENES:
                 assert out2.get_scene(nr) is not None, (
@@ -1755,6 +1817,7 @@ class TestOutputScenes:
         # Simulate an old YAML: only include scenes that were in the
         # SceneNumber enum (scene 0 and scene 1 as representatives).
         from pydsvdcapi.output import _NON_VALUE_SCENES
+
         old_tree = out.get_property_tree()
         # Strip all scenes except 0 and 1 to mimic old code output.
         old_tree["scenes"] = {
@@ -1767,8 +1830,8 @@ class TestOutputScenes:
         out2._apply_state(old_tree)
 
         # Persisted scenes should be restored correctly.
-        assert out2.get_scene(0)["dontCare"] is False   # PRESET_0 = off
-        assert out2.get_scene(1)["dontCare"] is False   # PRESET_1 = on
+        assert out2.get_scene(0)["dontCare"] is False  # PRESET_0 = off
+        assert out2.get_scene(1)["dontCare"] is False  # PRESET_1 = on
 
         # All other scenes must have been backfilled with defaults.
         for nr in range(128):
@@ -1830,9 +1893,7 @@ class TestOutputScenes:
     def test_add_channel_updates_scenes(self):
         """Adding a channel should add entries in all existing scenes."""
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.POSITIONAL
-        )
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         vdsd.set_output(out)
 
         from pydsvdcapi.enums import OutputChannelType
@@ -2136,6 +2197,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.DECREMENT))
         cb.assert_not_awaited()
 
@@ -2154,6 +2216,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.INCREMENT))
         cb.assert_not_awaited()
 
@@ -2172,6 +2235,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.DECREMENT))
         cb.assert_awaited_once_with(out, ch, -1, 0)
 
@@ -2190,6 +2254,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.INCREMENT))
         cb.assert_awaited_once_with(out, ch, 1, 0)
 
@@ -2208,6 +2273,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.AREA_1_DEC))
         cb.assert_awaited_once_with(out, ch, -1, 1)
 
@@ -2226,6 +2292,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.AREA_3_INC))
         cb.assert_awaited_once_with(out, ch, 1, 3)
 
@@ -2244,6 +2311,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.call_step_scene(int(SceneNumber.AREA_STEPPING_CONTINUE))
         cb.assert_not_awaited()
 
@@ -2262,6 +2330,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         # Initial area decrement sets direction=-1, area=2.
         await out.call_step_scene(int(SceneNumber.AREA_2_DEC))
         cb.assert_awaited_once_with(out, ch, -1, 2)
@@ -2286,6 +2355,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         # Establish direction.
         await out.call_step_scene(int(SceneNumber.DECREMENT))
         cb.assert_awaited_once()
@@ -2313,6 +2383,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.dispatch_scene(int(SceneNumber.INCREMENT))
         cb.assert_awaited_once_with(out, ch, 1, 0)
 
@@ -2328,6 +2399,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         await out.dispatch_scene(int(SceneNumber.PRESET_0))
         assert ch.value == pytest.approx(0.0)  # off scene applied
 
@@ -2349,6 +2421,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         msg = pb.Message()
         msg.type = pb.VDSM_NOTIFICATION_CALL_SCENE
         msg.vdsm_send_call_scene.dSUID.append(str(vdsd.dsuid))
@@ -2377,6 +2450,7 @@ class TestStepSceneRule6:
         ch.confirm_applied()
 
         from pydsvdcapi.enums import SceneNumber
+
         msg = pb.Message()
         msg.type = pb.VDSM_NOTIFICATION_CALL_SCENE
         msg.vdsm_send_call_scene.dSUID.append(str(vdsd.dsuid))
@@ -2392,8 +2466,14 @@ class TestVdcHostDimChannelDispatch:
     """Tests for VdcHost dispatch of VDSM_NOTIFICATION_DIM_CHANNEL."""
 
     @staticmethod
-    def _make_dim_msg(dsuid: str, *, mode: int = 1, area: int = 0,
-                      channel: int = 0, channel_id: str = "") -> "pb.Message":
+    def _make_dim_msg(
+        dsuid: str,
+        *,
+        mode: int = 1,
+        area: int = 0,
+        channel: int = 0,
+        channel_id: str = "",
+    ) -> pb.Message:
         msg = pb.Message()
         msg.type = pb.VDSM_NOTIFICATION_DIM_CHANNEL
         msg.vdsm_send_dim_channel.dSUID.append(dsuid)
@@ -2423,10 +2503,10 @@ class TestVdcHostDimChannelDispatch:
 
         cb.assert_awaited_once()
         args = cb.await_args[0]
-        assert args[0] is out       # output
+        assert args[0] is out  # output
         assert args[1] is out.get_channel(0)  # default channel
-        assert args[2] == 1         # mode
-        assert args[3] == 0         # area
+        assert args[2] == 1  # mode
+        assert args[3] == 0  # area
 
     @pytest.mark.asyncio
     async def test_dispatch_dim_by_channel_type(self):
@@ -2445,7 +2525,10 @@ class TestVdcHostDimChannelDispatch:
 
         brightness_type = int(OutputChannelType.BRIGHTNESS)
         msg = self._make_dim_msg(
-            str(vdsd.dsuid), mode=-1, area=1, channel=brightness_type,
+            str(vdsd.dsuid),
+            mode=-1,
+            area=1,
+            channel=brightness_type,
         )
         session = _make_mock_session()
         await host._dispatch_message(session, msg)
@@ -2474,7 +2557,10 @@ class TestVdcHostDimChannelDispatch:
         out.on_dim_channel = cb
 
         msg = self._make_dim_msg(
-            str(vdsd.dsuid), mode=0, area=0, channel_id=channel_name,
+            str(vdsd.dsuid),
+            mode=0,
+            area=0,
+            channel_id=channel_name,
         )
         session = _make_mock_session()
         await host._dispatch_message(session, msg)
@@ -2498,8 +2584,7 @@ class TestVdcHostDimChannelDispatch:
         cb = AsyncMock()
         out.on_dim_channel = cb
 
-        msg = self._make_dim_msg("0000000000000000000000000000000000",
-                                 mode=1)
+        msg = self._make_dim_msg("0000000000000000000000000000000000", mode=1)
         session = _make_mock_session()
         await host._dispatch_message(session, msg)
 
@@ -2537,8 +2622,8 @@ class TestVdcHostDimChannelDispatch:
 
         cb.assert_awaited_once()
         args = cb.await_args[0]
-        assert args[2] == 0   # mode = stop
-        assert args[3] == 3   # area
+        assert args[2] == 0  # mode = stop
+        assert args[3] == 3  # area
 
     @pytest.mark.asyncio
     async def test_dispatch_dim_area_values(self):
@@ -2644,25 +2729,29 @@ class TestSceneGroupUndoTracking:
         ch.set_value_from_vdsm(10.0)
         ch.confirm_applied()
 
-        out.call_scene(0, group=1)   # snapshot(1)=10
+        out.call_scene(0, group=1)  # snapshot(1)=10
         assert ch.value == 0.0
 
         ch.set_value_from_vdsm(20.0)
         ch.confirm_applied()
 
-        out.call_scene(5, group=1)   # snapshot(1)=20 (overwrites 10)
+        out.call_scene(5, group=1)  # snapshot(1)=20 (overwrites 10)
         assert ch.value == 100.0
 
         out.undo_scene(5, group=1)
-        assert ch.value == 20.0      # restored to 20, not 10
+        assert ch.value == 20.0  # restored to 20, not 10
 
 
 class TestSceneZoneGroupFiltering:
     """Tests for zone/group filtering in VdcHost scene dispatch."""
 
     def _make_registered_stack(
-        self, *, zone_id=0, primary_group=ColorGroup.YELLOW,
-        active_group=None, groups=None,
+        self,
+        *,
+        zone_id=0,
+        primary_group=ColorGroup.YELLOW,
+        active_group=None,
+        groups=None,
     ):
         host = _make_host()
         vdc = _make_vdc(host)
@@ -2693,7 +2782,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_scene_matching_group_applies(self):
         """callScene with matching group applies the scene."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(50.0)
@@ -2714,7 +2804,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_scene_wrong_group_skips(self):
         """callScene with non-matching group skips the device."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(50.0)
@@ -2735,7 +2826,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_scene_wrong_zone_skips(self):
         """callScene with non-matching zone skips the device."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(50.0)
@@ -2756,7 +2848,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_scene_zero_group_matches_all(self):
         """group=0 means 'not specified' and matches any device."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(50.0)
@@ -2776,7 +2869,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_scene_secondary_group_matches(self):
         """callScene matches if group is in output.groups (secondary)."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
             groups={int(ColorGroup.GREY)},
         )
         ch = out.get_channel(0)
@@ -2800,7 +2894,8 @@ class TestSceneZoneGroupFiltering:
     async def test_save_scene_matching_group_saves(self):
         """saveScene with matching group saves the scene."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(77.0)
@@ -2823,7 +2918,8 @@ class TestSceneZoneGroupFiltering:
     async def test_save_scene_wrong_group_skips(self):
         """saveScene with non-matching group doesn't save."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(77.0)
@@ -2852,7 +2948,8 @@ class TestSceneZoneGroupFiltering:
     async def test_undo_scene_matching_group_undoes(self):
         """undoScene with matching group and matching scene undoes."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(42.0)
@@ -2883,7 +2980,8 @@ class TestSceneZoneGroupFiltering:
     async def test_undo_scene_wrong_group_no_undo(self):
         """undoScene with different group does not undo."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
             groups={int(ColorGroup.GREY)},
         )
         ch = out.get_channel(0)
@@ -2917,7 +3015,8 @@ class TestSceneZoneGroupFiltering:
     async def test_set_local_priority_matching_group(self):
         """setLocalPriority with matching group sets LP."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         assert out.local_priority is False
 
@@ -2936,7 +3035,8 @@ class TestSceneZoneGroupFiltering:
     async def test_set_local_priority_wrong_group_skips(self):
         """setLocalPriority with non-matching group does not set LP."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         assert out.local_priority is False
 
@@ -2957,7 +3057,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_min_scene_matching_group_applies(self):
         """callMinScene with matching group sets min-on."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(0.0)
@@ -2978,7 +3079,8 @@ class TestSceneZoneGroupFiltering:
     async def test_call_min_scene_wrong_zone_skips(self):
         """callMinScene with non-matching zone does not act."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(0.0)
@@ -3002,7 +3104,8 @@ class TestSceneZoneGroupFiltering:
         """Full roundtrip: callScene dispatch stores group-keyed undo
         that can only be undone with the same group."""
         host, _, _, vdsd, out = self._make_registered_stack(
-            zone_id=10, primary_group=ColorGroup.YELLOW,
+            zone_id=10,
+            primary_group=ColorGroup.YELLOW,
         )
         ch = out.get_channel(0)
         ch.set_value_from_vdsm(55.0)
@@ -3051,39 +3154,40 @@ class TestMatchesZoneAndGroup:
         _, _, _, vdsd = _make_stack(zone_id=42)
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
-        assert host._matches_zone_and_group(
-            vdsd, out, 42, int(ColorGroup.YELLOW)
-        ) is True
+        assert (
+            host._matches_zone_and_group(vdsd, out, 42, int(ColorGroup.YELLOW)) is True
+        )
 
     def test_wrong_zone(self):
         host = _make_host()
         _, _, _, vdsd = _make_stack(zone_id=42)
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
-        assert host._matches_zone_and_group(
-            vdsd, out, 99, int(ColorGroup.YELLOW)
-        ) is False
+        assert (
+            host._matches_zone_and_group(vdsd, out, 99, int(ColorGroup.YELLOW)) is False
+        )
 
     def test_wrong_group(self):
         host = _make_host()
         _, _, _, vdsd = _make_stack(zone_id=42)
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
-        assert host._matches_zone_and_group(
-            vdsd, out, 42, int(ColorGroup.GREY)
-        ) is False
+        assert (
+            host._matches_zone_and_group(vdsd, out, 42, int(ColorGroup.GREY)) is False
+        )
 
     def test_primary_group_alone_does_not_match(self):
         """primary_group on vdsd is NOT used — only active_group matters."""
         host = _make_host()
         _, _, _, vdsd = _make_stack(
-            primary_group=ColorGroup.YELLOW, zone_id=42,
+            primary_group=ColorGroup.YELLOW,
+            zone_id=42,
         )
         out = _make_output(vdsd, function=OutputFunction.DIMMER, groups=set())
         out.active_group = int(ColorGroup.GREY)  # different from primary
-        assert host._matches_zone_and_group(
-            vdsd, out, 42, int(ColorGroup.YELLOW)
-        ) is False  # YELLOW is primary but NOT active_group
+        assert (
+            host._matches_zone_and_group(vdsd, out, 42, int(ColorGroup.YELLOW)) is False
+        )  # YELLOW is primary but NOT active_group
 
     def test_secondary_group_matches(self):
         host = _make_host()
@@ -3091,24 +3195,20 @@ class TestMatchesZoneAndGroup:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
         out.groups = {int(ColorGroup.GREY)}
-        assert host._matches_zone_and_group(
-            vdsd, out, 42, int(ColorGroup.GREY)
-        ) is True
+        assert host._matches_zone_and_group(vdsd, out, 42, int(ColorGroup.GREY)) is True
 
     def test_zone_zero_matches_any(self):
         host = _make_host()
         _, _, _, vdsd = _make_stack(zone_id=42)
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
-        assert host._matches_zone_and_group(
-            vdsd, out, 0, int(ColorGroup.YELLOW)
-        ) is True
+        assert (
+            host._matches_zone_and_group(vdsd, out, 0, int(ColorGroup.YELLOW)) is True
+        )
 
     def test_group_zero_matches_any(self):
         host = _make_host()
         _, _, _, vdsd = _make_stack(zone_id=42)
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
-        assert host._matches_zone_and_group(
-            vdsd, out, 42, 0
-        ) is True
+        assert host._matches_zone_and_group(vdsd, out, 42, 0) is True

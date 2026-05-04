@@ -44,7 +44,8 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable
+from typing import Callable, Optional
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
@@ -125,8 +126,8 @@ class VdcSession:
         self,
         connection: VdcConnection,
         host_dsuid: str,
-        on_message: Optional[MessageCallback] = None,
-        on_hello: Optional[HelloCallback] = None,
+        on_message: MessageCallback | None = None,
+        on_hello: HelloCallback | None = None,
     ) -> None:
         self._conn = connection
         self._host_dsuid = host_dsuid
@@ -134,8 +135,8 @@ class VdcSession:
         self._on_hello = on_hello
 
         self._state = SessionState.AWAITING_HELLO
-        self._vdsm_dsuid: Optional[str] = None
-        self._api_version: Optional[int] = None
+        self._vdsm_dsuid: str | None = None
+        self._api_version: int | None = None
 
         # The *last known* message ID is the maximum of all IDs we have
         # received or sent.  The next outgoing request will use
@@ -158,12 +159,12 @@ class VdcSession:
         return self._state
 
     @property
-    def vdsm_dsuid(self) -> Optional[str]:
+    def vdsm_dsuid(self) -> str | None:
         """The dSUID of the connected vdSM (``None`` before hello)."""
         return self._vdsm_dsuid
 
     @property
-    def api_version(self) -> Optional[int]:
+    def api_version(self) -> int | None:
         """API version negotiated during hello (``None`` before hello)."""
         return self._api_version
 
@@ -208,9 +209,7 @@ class VdcSession:
         appropriate handler, and returns when the session terminates
         (bye, connection loss, or :meth:`close`).
         """
-        logger.info(
-            "Session started for connection from %s", self._conn.peername
-        )
+        logger.info("Session started for connection from %s", self._conn.peername)
         try:
             while self._state is not SessionState.CLOSED:
                 try:
@@ -326,9 +325,7 @@ class VdcSession:
                     "Internal error processing message",
                 )
         else:
-            logger.debug(
-                "No handler for %s — ignoring", pb.Type.Name(msg_type)
-            )
+            logger.debug("No handler for %s — ignoring", pb.Type.Name(msg_type))
 
     # ---- hello -------------------------------------------------------
 
@@ -457,7 +454,7 @@ class VdcSession:
         self,
         msg: pb.Message,
         *,
-        timeout: Optional[float] = 30.0,
+        timeout: float | None = 30.0,
     ) -> pb.Message:
         """Send a request and wait for the correlated response.
 
@@ -490,9 +487,7 @@ class VdcSession:
             If the response does not arrive within *timeout*.
         """
         if self._state is not SessionState.ACTIVE:
-            raise ConnectionError(
-                f"Cannot send — session is {self._state.name}"
-            )
+            raise ConnectionError(f"Cannot send — session is {self._state.name}")
 
         msg_id = self._next_message_id()
         msg.message_id = msg_id
@@ -522,9 +517,7 @@ class VdcSession:
             If the session is not active.
         """
         if self._state is not SessionState.ACTIVE:
-            raise ConnectionError(
-                f"Cannot send — session is {self._state.name}"
-            )
+            raise ConnectionError(f"Cannot send — session is {self._state.name}")
         msg.message_id = 0
         await self._conn.send(msg)
 
@@ -542,9 +535,7 @@ class VdcSession:
             If the session is not active.
         """
         if self._state is not SessionState.ACTIVE:
-            raise ConnectionError(
-                f"Cannot send — session is {self._state.name}"
-            )
+            raise ConnectionError(f"Cannot send — session is {self._state.name}")
         # Track the ID so the counter stays consistent.
         if msg.message_id > 0:
             self._track_message_id(msg.message_id)

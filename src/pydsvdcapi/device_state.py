@@ -57,9 +57,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
@@ -113,27 +110,25 @@ class DeviceState:
         vdsd: Vdsd,
         ds_index: int = 0,
         name: str = "",
-        options: Optional[Dict[Union[int, str], str]] = None,
-        description: Optional[str] = None,
+        options: dict[int | str, str] | None = None,
+        description: str | None = None,
     ) -> None:
         self._vdsd = vdsd
         self._ds_index = ds_index
         self._name = name
-        self._options: Dict[Union[int, str], str] = (
-            dict(options) if options else {}
-        )
+        self._options: dict[int | str, str] = dict(options) if options else {}
         self._description = description
         # Volatile runtime state (NOT persisted).
         # Stored as the integer option key (matching Sonos/dSS
         # internal representation where stateValue is integer).
-        self._value: Optional[int] = None
+        self._value: int | None = None
         # Timestamps for age/changed reporting (monotonic seconds).
-        self._last_update: Optional[float] = None
-        self._last_change: Optional[float] = None
+        self._last_update: float | None = None
+        self._last_change: float | None = None
 
         # ---- value converter (optional, persisted) -------------------
-        self._uplink_converter_code: Optional[str] = None
-        self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
+        self._uplink_converter_code: str | None = None
+        self._uplink_converter_fn: Callable[[Any], Any] | None = None
 
         # Set when the first real (non-None) value has been received.
         self._initial_value_ready: asyncio.Event = asyncio.Event()
@@ -162,26 +157,26 @@ class DeviceState:
         self._name = value
 
     @property
-    def options(self) -> Dict[Union[int, str], str]:
+    def options(self) -> dict[int | str, str]:
         """Option-id → label dictionary (copy)."""
         return dict(self._options)
 
     @options.setter
-    def options(self, value: Dict[Union[int, str], str]) -> None:
+    def options(self, value: dict[int | str, str]) -> None:
         self._options = dict(value)
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """Optional human-readable description."""
         return self._description
 
     @description.setter
-    def description(self, value: Optional[str]) -> None:
+    def description(self, value: str | None) -> None:
         self._description = value
 
     # ---- converter management ---------------------------------------
 
-    def set_uplink_converter(self, code: Optional[str]) -> None:
+    def set_uplink_converter(self, code: str | None) -> None:
         """Set or clear the uplink value converter.
 
         Applied in :meth:`update_value` before the value is resolved
@@ -213,19 +208,19 @@ class DeviceState:
             self._uplink_converter_code = code
 
     @property
-    def uplink_converter_code(self) -> Optional[str]:
+    def uplink_converter_code(self) -> str | None:
         """The stored uplink converter snippet, or ``None``."""
         return self._uplink_converter_code
 
     # ---- volatile state accessors ------------------------------------
 
     @property
-    def value(self) -> Optional[int]:
+    def value(self) -> int | None:
         """Current state value as integer option key (volatile, not persisted)."""
         return self._value
 
     @value.setter
-    def value(self, v: Optional[Union[int, str]]) -> None:
+    def value(self, v: int | str | None) -> None:
         """Set state value.
 
         Accepts:
@@ -247,8 +242,9 @@ class DeviceState:
     # ---- value resolution --------------------------------------------
 
     def _resolve_value(
-        self, v: Optional[Union[int, str]],
-    ) -> Optional[int]:
+        self,
+        v: int | str | None,
+    ) -> int | None:
         """Resolve *v* to an integer option key.
 
         * ``None`` → ``None``
@@ -283,7 +279,7 @@ class DeviceState:
 
     # ---- property dicts ----------------------------------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return **deviceStateDescriptions** properties (§4.6.1).
 
         Format::
@@ -298,19 +294,17 @@ class DeviceState:
         carries no scalar value (``NO_VALUE``); the element name IS
         the option label.
         """
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             "name": self._name,
         }
         # Enum options as name-keyed elements with no scalar value.
         # dSS reads: vdcState["value"]["values"] → getName() per element.
-        props["value"] = {
-            "values": {v: NO_VALUE for v in self._options.values()}
-        }
+        props["value"] = {"values": {v: NO_VALUE for v in self._options.values()}}
         if self._description is not None:
             props["description"] = self._description
         return props
 
-    def _value_as_label(self) -> Optional[str]:
+    def _value_as_label(self) -> str | None:
         """Return the current value as a string label.
 
         p44-vdc sends the text label (e.g. ``"Running"``) for
@@ -327,7 +321,7 @@ class DeviceState:
         # Fallback: convert integer to string if label not found.
         return str(self._value)
 
-    def get_state_properties(self) -> Dict[str, Any]:
+    def get_state_properties(self) -> dict[str, Any]:
         """Return **deviceStates** properties (current value, §4.6.2).
 
         Format::
@@ -346,38 +340,33 @@ class DeviceState:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence.
 
         Only description properties are persisted — the runtime state
         value is volatile.
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
         }
         if self._options:
             # Store as list of {"id": ..., "label": ...} for YAML safety.
-            node["options"] = {
-                str(k): v for k, v in self._options.items()
-            }
+            node["options"] = {str(k): v for k, v in self._options.items()}
         if self._description is not None:
             node["description"] = self._description
         if self._uplink_converter_code is not None:
             node["uplinkConverter"] = self._uplink_converter_code
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted state dict (descriptions only)."""
         if "name" in state:
             self._name = state["name"]
         if "options" in state:
             raw = state["options"]
             if isinstance(raw, dict):
-                self._options = {
-                    _parse_option_key(k): v
-                    for k, v in raw.items()
-                }
+                self._options = {_parse_option_key(k): v for k, v in raw.items()}
             elif isinstance(raw, list):
                 # Legacy format: list of {"id": ..., "label": ...}
                 self._options = {
@@ -398,8 +387,8 @@ class DeviceState:
 
     async def update_value(
         self,
-        value: Union[int, str],
-        session: Optional[VdcSession] = None,
+        value: int | str,
+        session: VdcSession | None = None,
     ) -> None:
         """Update the state value and push the change to the vdSM.
 
@@ -434,22 +423,23 @@ class DeviceState:
         session = session or self._vdsd._session
         if session is None or not session.is_active:
             logger.warning(
-                "DeviceState[%d] '%s': cannot push — no active "
-                "session for vdSD %s",
-                self._ds_index, self._name, self._vdsd.dsuid,
+                "DeviceState[%d] '%s': cannot push — no active session for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
             )
             return
 
         if not self._vdsd.is_announced:
             logger.debug(
-                "DeviceState[%d] '%s': vdSD not announced — "
-                "skipping push",
-                self._ds_index, self._name,
+                "DeviceState[%d] '%s': vdSD not announced — skipping push",
+                self._ds_index,
+                self._name,
             )
             return
 
         state_dict = self.get_state_properties()
-        push_tree: Dict[str, Any] = {
+        push_tree: dict[str, Any] = {
             "deviceStates": {
                 str(self._ds_index): state_dict,
             }
@@ -465,13 +455,17 @@ class DeviceState:
             await session.send_notification(msg)
             logger.debug(
                 "DeviceState[%d] '%s': pushed value '%s' for vdSD %s",
-                self._ds_index, self._name, self._value,
+                self._ds_index,
+                self._name,
+                self._value,
                 self._vdsd.dsuid,
             )
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "DeviceState[%d] '%s': failed to push: %s",
-                self._ds_index, self._name, exc,
+                self._ds_index,
+                self._name,
+                exc,
             )
 
     # ---- repr --------------------------------------------------------
@@ -483,7 +477,7 @@ class DeviceState:
         )
 
 
-def _parse_option_key(key: Any) -> Union[int, str]:
+def _parse_option_key(key: Any) -> int | str:
     """Convert a persisted option key back to int when possible."""
     if isinstance(key, int):
         return key

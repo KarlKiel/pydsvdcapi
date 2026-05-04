@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
-import struct
 from pathlib import Path
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
@@ -14,17 +12,16 @@ import yaml
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.session import SessionState, VdcSession
+from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import ENTITY_TYPE_VDC, Vdc, VdcCapabilities
 from pydsvdcapi.vdc_host import VdcHost
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_host(tmp_path: Optional[Path] = None, **kwargs: Any) -> VdcHost:
+def _make_host(tmp_path: Path | None = None, **kwargs: Any) -> VdcHost:
     """Create a VdcHost suitable for testing."""
     kw: dict[str, Any] = {"name": "Test Host", "mac": "AA:BB:CC:DD:EE:FF"}
     if tmp_path is not None:
@@ -115,7 +112,12 @@ class TestVdcConstruction:
 
     def test_minimal_construction(self):
         host = _make_host()
-        vdc = Vdc(host=host, implementation_id="x-test-vdc", name="x-test-vdc", model="pydsvdcapi vDC")
+        vdc = Vdc(
+            host=host,
+            implementation_id="x-test-vdc",
+            name="x-test-vdc",
+            model="pydsvdcapi vDC",
+        )
         assert vdc.implementation_id == "x-test-vdc"
         assert vdc.name == "x-test-vdc"  # explicit name
         assert vdc.model == "pydsvdcapi vDC"
@@ -156,9 +158,7 @@ class TestVdcConstruction:
     def test_model_uid_derived(self):
         host = _make_host()
         vdc = _make_vdc(host, model="MyModel")
-        expected = str(
-            DsUid.from_name_in_space("MyModel", DsUidNamespace.VDC)
-        )
+        expected = str(DsUid.from_name_in_space("MyModel", DsUidNamespace.VDC))
         assert vdc.model_uid == expected
 
     def test_explicit_model_uid(self):
@@ -242,14 +242,32 @@ class TestVdcProperties:
         vdc = _make_vdc(host)
         props = vdc.get_properties()
         expected_keys = {
-            "dSUID", "displayId", "type", "model", "modelVersion",
-            "modelUID", "hardwareVersion", "hardwareGuid",
-            "hardwareModelGuid", "vendorName", "vendorId", "vendorGuid",
-            "descriptionsGroup", "descriptionsClass",
-            "oemGuid", "oemModelGuid", "configURL", "deviceIcon16",
-            "deviceIconName", "name", "deviceClass",
-            "deviceClassVersion", "active", "implementationId",
-            "capabilities", "zoneID",
+            "dSUID",
+            "displayId",
+            "type",
+            "model",
+            "modelVersion",
+            "modelUID",
+            "hardwareVersion",
+            "hardwareGuid",
+            "hardwareModelGuid",
+            "vendorName",
+            "vendorId",
+            "vendorGuid",
+            "descriptionsGroup",
+            "descriptionsClass",
+            "oemGuid",
+            "oemModelGuid",
+            "configURL",
+            "deviceIcon16",
+            "deviceIconName",
+            "name",
+            "deviceClass",
+            "deviceClassVersion",
+            "active",
+            "implementationId",
+            "capabilities",
+            "zoneID",
         }
         assert set(props.keys()) == expected_keys
 
@@ -339,7 +357,7 @@ class TestVdcAutoSave:
 
         # Creating a vDC should NOT trigger host auto-save
         # because _auto_save_enabled is False during __init__.
-        vdc = _make_vdc(host)
+        _make_vdc(host)
         assert host._save_timer is None
 
 
@@ -783,9 +801,7 @@ class TestVdcHostAnnounceVdcs:
 
         session = MagicMock(spec=VdcSession)
         session.is_active = True
-        session.send_request = AsyncMock(
-            side_effect=[resp_ok, resp_fail]
-        )
+        session.send_request = AsyncMock(side_effect=[resp_ok, resp_fail])
         host._session = session
 
         count = await host.announce_vdcs()
@@ -841,9 +857,7 @@ class TestFindVdcForState:
         host.add_vdc(vdc)
         host._cancel_auto_save()
 
-        result = host._find_vdc_for_state(
-            {"implementationId": "x-test-impl"}
-        )
+        result = host._find_vdc_for_state({"implementationId": "x-test-impl"})
         assert result is vdc
 
     def test_find_no_match(self):
@@ -860,8 +874,10 @@ class TestFindVdcForState:
         host._cancel_auto_save()
 
         # Provide both dSUID (matching) and implementationId (non-matching)
-        result = host._find_vdc_for_state({
-            "dSUID": str(vdc.dsuid),
-            "implementationId": "x-other",
-        })
+        result = host._find_vdc_for_state(
+            {
+                "dSUID": str(vdc.dsuid),
+                "implementationId": "x-other",
+            }
+        )
         assert result is vdc

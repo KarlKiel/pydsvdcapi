@@ -16,25 +16,23 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 import time
-from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import pydsvdcapi.vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import (
     ColorGroup,
     OutputChannelType,
     OutputFunction,
-    OutputMode,
     OutputUsage,
 )
 from pydsvdcapi.output import FUNCTION_CHANNELS, Output
 from pydsvdcapi.output_channel import (
     CHANNEL_SPECS,
-    ChannelSpec,
     OutputChannel,
     get_channel_spec,
 )
@@ -42,8 +40,6 @@ from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-import pydsvdcapi.vdc_messages_pb2 as pb
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -70,12 +66,10 @@ def _make_vdc(host: VdcHost, **kwargs: Any) -> Vdc:
 
 
 def _base_dsuid() -> DsUid:
-    return DsUid.from_name_in_space(
-        "channel-test-device", DsUidNamespace.VDC
-    )
+    return DsUid.from_name_in_space("channel-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -408,9 +402,7 @@ class TestFunctionAutoChannels:
 
     def test_dimmer_color_temp_creates_two(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.DIMMER_COLOR_TEMP
-        )
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
         assert len(out.channels) == 2
         types = {ch.channel_type for ch in out.channels.values()}
         assert types == {
@@ -420,9 +412,7 @@ class TestFunctionAutoChannels:
 
     def test_full_color_dimmer_creates_six(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.FULL_COLOR_DIMMER
-        )
+        out = _make_output(vdsd, function=OutputFunction.FULL_COLOR_DIMMER)
         assert len(out.channels) == 6
         types = {ch.channel_type for ch in out.channels.values()}
         assert types == {
@@ -446,16 +436,12 @@ class TestFunctionAutoChannels:
 
     def test_internally_controlled_creates_none(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.INTERNALLY_CONTROLLED
-        )
+        out = _make_output(vdsd, function=OutputFunction.INTERNALLY_CONTROLLED)
         assert len(out.channels) == 0
 
     def test_auto_channels_ds_indices(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.FULL_COLOR_DIMMER
-        )
+        out = _make_output(vdsd, function=OutputFunction.FULL_COLOR_DIMMER)
         assert sorted(out.channels.keys()) == [0, 1, 2, 3, 4, 5]
 
     def test_function_channels_mapping_complete(self):
@@ -492,26 +478,20 @@ class TestChannelManagement:
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         ch1 = out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
-        ch2 = out.add_channel(
-            OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE
-        )
+        ch2 = out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
         assert ch1.ds_index == 0
         assert ch2.ds_index == 1
 
     def test_add_channel_explicit_index(self):
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
-        ch = out.add_channel(
-            OutputChannelType.SHADE_POSITION_OUTSIDE, ds_index=5
-        )
+        ch = out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE, ds_index=5)
         assert ch.ds_index == 5
 
     def test_add_channel_duplicate_index_raises(self):
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
-        out.add_channel(
-            OutputChannelType.SHADE_POSITION_OUTSIDE, ds_index=0
-        )
+        out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE, ds_index=0)
         with pytest.raises(ValueError, match="ds_index 0 already in use"):
             out.add_channel(
                 OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE,
@@ -636,19 +616,13 @@ class TestOutputChannelProperties:
 
     def test_channel_descriptions(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.DIMMER_COLOR_TEMP
-        )
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
         desc = out.get_channel_descriptions()
         assert len(desc) == 2
         assert "0" in desc
         assert "1" in desc
-        assert desc["0"]["channelType"] == int(
-            OutputChannelType.BRIGHTNESS
-        )
-        assert desc["1"]["channelType"] == int(
-            OutputChannelType.COLOR_TEMPERATURE
-        )
+        assert desc["0"]["channelType"] == int(OutputChannelType.BRIGHTNESS)
+        assert desc["1"]["channelType"] == int(OutputChannelType.COLOR_TEMPERATURE)
 
     def test_channel_settings(self):
         _, _, _, vdsd = _make_stack()
@@ -769,9 +743,7 @@ class TestVdsmToDeviceApply:
     @pytest.mark.asyncio
     async def test_buffer_multiple_then_apply(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.DIMMER_COLOR_TEMP
-        )
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
         vdsd.set_output(out)
 
         applied = {}
@@ -782,9 +754,7 @@ class TestVdsmToDeviceApply:
         out.on_channel_applied = on_apply
 
         ch_bright = out.get_channel_by_type(OutputChannelType.BRIGHTNESS)
-        ch_ct = out.get_channel_by_type(
-            OutputChannelType.COLOR_TEMPERATURE
-        )
+        ch_ct = out.get_channel_by_type(OutputChannelType.COLOR_TEMPERATURE)
 
         out.buffer_channel_value(ch_bright, 50.0)
         out.buffer_channel_value(ch_ct, 400.0)
@@ -889,9 +859,7 @@ class TestChannelPersistence:
             ds_index=0,
         )
         tree = {
-            "channelType": int(
-                OutputChannelType.SHADE_POSITION_OUTSIDE
-            ),
+            "channelType": int(OutputChannelType.SHADE_POSITION_OUTSIDE),
             "dsIndex": 0,
             "name": "Custom Name",
             "min": 5.0,
@@ -910,9 +878,7 @@ class TestChannelPersistence:
         tree = out.get_property_tree()
         assert "channels" in tree
         assert len(tree["channels"]) == 1
-        assert tree["channels"][0]["channelType"] == int(
-            OutputChannelType.BRIGHTNESS
-        )
+        assert tree["channels"][0]["channelType"] == int(OutputChannelType.BRIGHTNESS)
 
     def test_output_restore_channels(self):
         _, _, _, vdsd = _make_stack()
@@ -921,40 +887,31 @@ class TestChannelPersistence:
 
         # Create new output and restore.
         out2 = _make_output(
-            vdsd, function=OutputFunction.POSITIONAL  # Different fn.
+            vdsd,
+            function=OutputFunction.POSITIONAL,  # Different fn.
         )
         assert len(out2.channels) == 0  # POSITIONAL = no auto-channels.
 
         out2._apply_state(tree)
         assert out2.function == OutputFunction.DIMMER
         assert len(out2.channels) == 1
-        assert out2.channels[0].channel_type == (
-            OutputChannelType.BRIGHTNESS
-        )
+        assert out2.channels[0].channel_type == (OutputChannelType.BRIGHTNESS)
 
     def test_output_restore_without_channels_key(self):
         """If no 'channels' key, channels should be re-created from fn."""
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.POSITIONAL
-        )
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         # Restore with function=DIMMER but no channels key.
         out._apply_state({"function": int(OutputFunction.DIMMER)})
         assert len(out.channels) == 1
-        assert out.channels[0].channel_type == (
-            OutputChannelType.BRIGHTNESS
-        )
+        assert out.channels[0].channel_type == (OutputChannelType.BRIGHTNESS)
 
     def test_full_color_dimmer_round_trip(self):
         _, _, _, vdsd = _make_stack()
-        out1 = _make_output(
-            vdsd, function=OutputFunction.FULL_COLOR_DIMMER
-        )
+        out1 = _make_output(vdsd, function=OutputFunction.FULL_COLOR_DIMMER)
         tree = out1.get_property_tree()
 
-        out2 = _make_output(
-            vdsd, function=OutputFunction.POSITIONAL
-        )
+        out2 = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out2._apply_state(tree)
 
         assert len(out2.channels) == 6
@@ -968,9 +925,7 @@ class TestChannelPersistence:
 
     def test_manual_channels_round_trip(self):
         _, _, _, vdsd = _make_stack()
-        out1 = _make_output(
-            vdsd, function=OutputFunction.POSITIONAL
-        )
+        out1 = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out1.add_channel(
             OutputChannelType.SHADE_POSITION_OUTSIDE,
             name="Roller",
@@ -982,9 +937,7 @@ class TestChannelPersistence:
         )
         tree = out1.get_property_tree()
 
-        out2 = _make_output(
-            vdsd, function=OutputFunction.POSITIONAL
-        )
+        out2 = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out2._apply_state(tree)
 
         assert len(out2.channels) == 2
@@ -993,9 +946,7 @@ class TestChannelPersistence:
         assert ch0.min_value == 5
         assert ch0.max_value == 95
         ch1 = out2.get_channel(1)
-        assert ch1.channel_type == (
-            OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE
-        )
+        assert ch1.channel_type == (OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
 
 
 # ===========================================================================
@@ -1125,9 +1076,7 @@ class TestVdcHostSetOutputChannelValue:
     @pytest.mark.asyncio
     async def test_dispatch_buffer_then_apply(self):
         host, vdc, device, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.DIMMER_COLOR_TEMP
-        )
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
         vdsd.set_output(out)
 
         applied = {}
@@ -1247,21 +1196,15 @@ class TestEdgeCases:
 
     def test_hue_channel_range(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.FULL_COLOR_DIMMER
-        )
+        out = _make_output(vdsd, function=OutputFunction.FULL_COLOR_DIMMER)
         ch = out.get_channel_by_type(OutputChannelType.HUE)
         assert ch.min_value == 0
         assert ch.max_value == 360
 
     def test_color_temp_channel_range(self):
         _, _, _, vdsd = _make_stack()
-        out = _make_output(
-            vdsd, function=OutputFunction.DIMMER_COLOR_TEMP
-        )
-        ch = out.get_channel_by_type(
-            OutputChannelType.COLOR_TEMPERATURE
-        )
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
+        ch = out.get_channel_by_type(OutputChannelType.COLOR_TEMPERATURE)
         assert ch.min_value == 100
         assert ch.max_value == 1000
 
@@ -1290,13 +1233,21 @@ class TestEdgeCases:
         host.add_vdc(vdc)
 
         out1 = Output(
-            vdsd=vdsd1, function=OutputFunction.DIMMER, name="Out1",
-            default_group=1, active_group=1, groups={1},
+            vdsd=vdsd1,
+            function=OutputFunction.DIMMER,
+            name="Out1",
+            default_group=1,
+            active_group=1,
+            groups={1},
         )
         vdsd1.set_output(out1)
         out2 = Output(
-            vdsd=vdsd2, function=OutputFunction.DIMMER, name="Out2",
-            default_group=1, active_group=1, groups={1},
+            vdsd=vdsd2,
+            function=OutputFunction.DIMMER,
+            name="Out2",
+            default_group=1,
+            active_group=1,
+            groups={1},
         )
         vdsd2.set_output(out2)
 
@@ -1373,19 +1324,21 @@ class TestExports:
 
     def test_output_channel_exported(self):
         from pydsvdcapi import OutputChannel
+
         assert OutputChannel is not None
 
     def test_channel_specs_exported(self):
         from pydsvdcapi import CHANNEL_SPECS, ChannelSpec
+
         assert len(CHANNEL_SPECS) > 0
-        assert isinstance(
-            list(CHANNEL_SPECS.values())[0], ChannelSpec
-        )
+        assert isinstance(list(CHANNEL_SPECS.values())[0], ChannelSpec)
 
     def test_get_channel_spec_exported(self):
         from pydsvdcapi import get_channel_spec
+
         assert callable(get_channel_spec)
 
     def test_function_channels_exported(self):
         from pydsvdcapi import FUNCTION_CHANNELS
+
         assert OutputFunction.DIMMER in FUNCTION_CHANNELS

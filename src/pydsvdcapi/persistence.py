@@ -35,14 +35,14 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
 # Type alias for a nested property tree.
-PropertyTree = Dict[str, Any]
+PropertyTree = dict[str, Any]
 
 # Suffix appended to the primary file for the backup copy.
 _BACKUP_SUFFIX = ".bak"
@@ -60,14 +60,10 @@ class PropertyStore:
         automatically on first :meth:`save`.
     """
 
-    def __init__(self, path: Union[str, Path]) -> None:
+    def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
-        self._backup_path = self._path.with_suffix(
-            self._path.suffix + _BACKUP_SUFFIX
-        )
-        self._tmp_path = self._path.with_suffix(
-            self._path.suffix + _TMP_SUFFIX
-        )
+        self._backup_path = self._path.with_suffix(self._path.suffix + _BACKUP_SUFFIX)
+        self._tmp_path = self._path.with_suffix(self._path.suffix + _TMP_SUFFIX)
 
     # ---- public properties -------------------------------------------
 
@@ -128,16 +124,14 @@ class PropertyStore:
         try:
             os.replace(str(self._tmp_path), str(self._path))
         except OSError:
-            logger.error(
-                "Failed to replace %s with %s", self._path, self._tmp_path
-            )
+            logger.error("Failed to replace %s with %s", self._path, self._tmp_path)
             raise
 
         logger.info("Saved property tree to %s", self._path)
 
     # ---- load ---------------------------------------------------------
 
-    def load(self) -> Optional[PropertyTree]:
+    def load(self) -> PropertyTree | None:
         """Load the property tree from YAML (primary, then backup).
 
         Returns
@@ -188,7 +182,7 @@ class PropertyStore:
     # ---- helpers ------------------------------------------------------
 
     @staticmethod
-    def _try_load(path: Path) -> Optional[PropertyTree]:
+    def _try_load(path: Path) -> PropertyTree | None:
         """Attempt to load and parse a single YAML file.
 
         Returns ``None`` on any failure (missing, unreadable, corrupt).
@@ -196,7 +190,7 @@ class PropertyStore:
         if not path.is_file():
             return None
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = yaml.safe_load(fh)
         except (OSError, yaml.YAMLError) as exc:
             logger.warning("Failed to load %s: %s", path, exc)

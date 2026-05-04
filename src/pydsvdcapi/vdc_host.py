@@ -33,8 +33,9 @@ import logging
 import platform
 import socket
 import threading
+from collections.abc import Awaitable
 from pathlib import Path
-from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional, Union
+from typing import Any, Callable, ClassVar
 
 from zeroconf import ServiceInfo
 from zeroconf.asyncio import AsyncZeroconf
@@ -48,8 +49,8 @@ from pydsvdcapi.property_handling import (
     elements_to_dict,
     expand_setproperty_wildcards,
 )
-from pydsvdcapi.session import MessageCallback, SessionState, VdcSession
-from pydsvdcapi.vdc import Vdc, VdcCapabilities
+from pydsvdcapi.session import MessageCallback, VdcSession
+from pydsvdcapi.vdc import Vdc
 
 #: Callback invoked when the vdSM requests device removal (§6.3).
 #: Receives the dSUID string of the device to remove.
@@ -66,25 +67,19 @@ IdentifyCallback = Callable[[str], Awaitable[None]]
 
 #: Callback for the ``pair`` GenericRequest method (§7.4.1).
 #: ``(dsuid, establish, timeout, params) -> None``
-PairCallback = Callable[[str, bool, int, Dict[str, Any]], Awaitable[None]]
+PairCallback = Callable[[str, bool, int, dict[str, Any]], Awaitable[None]]
 
 #: Callback for the ``authenticate`` GenericRequest method (§7.4.2).
 #: ``(dsuid, auth_data, auth_scope, params) -> None``
-AuthenticateCallback = Callable[
-    [str, str, str, Dict[str, Any]], Awaitable[None]
-]
+AuthenticateCallback = Callable[[str, str, str, dict[str, Any]], Awaitable[None]]
 
 #: Callback for the ``firmwareUpgrade`` GenericRequest method (§7.4.3).
 #: ``(dsuid, check_only, clear_settings, params) -> None``
-FirmwareUpgradeCallback = Callable[
-    [str, bool, bool, Dict[str, Any]], Awaitable[None]
-]
+FirmwareUpgradeCallback = Callable[[str, bool, bool, dict[str, Any]], Awaitable[None]]
 
 #: Callback for the ``setConfiguration`` GenericRequest method (§7.4.4).
 #: ``(dsuid, config_id, params) -> None``
-SetConfigurationCallback = Callable[
-    [str, str, Dict[str, Any]], Awaitable[None]
-]
+SetConfigurationCallback = Callable[[str, str, dict[str, Any]], Awaitable[None]]
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +107,7 @@ AUTO_SAVE_DELAY: float = 1.0
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_default_mac() -> str:
     """Return the MAC address of the primary network interface.
 
@@ -136,6 +132,7 @@ def _get_hostname() -> str:
 # ---------------------------------------------------------------------------
 # VdcHost
 # ---------------------------------------------------------------------------
+
 
 class VdcHost:
     """Represents a digitalSTROM vDC host and its common properties.
@@ -209,12 +206,23 @@ class VdcHost:
     """
 
     #: Attribute names whose mutation triggers a debounced auto-save.
-    _TRACKED_ATTRS: ClassVar[frozenset] = frozenset({
-        "name", "model", "model_version", "model_uid",
-        "hardware_version", "hardware_guid", "hardware_model_guid",
-        "vendor_name", "vendor_guid", "oem_guid", "oem_model_guid",
-        "config_url", "device_icon_name",
-    })
+    _TRACKED_ATTRS: ClassVar[frozenset] = frozenset(
+        {
+            "name",
+            "model",
+            "model_version",
+            "model_uid",
+            "hardware_version",
+            "hardware_guid",
+            "hardware_model_guid",
+            "vendor_name",
+            "vendor_guid",
+            "oem_guid",
+            "oem_model_guid",
+            "config_url",
+            "device_icon_name",
+        }
+    )
 
     # ---- attribute change tracking -----------------------------------
 
@@ -226,48 +234,45 @@ class VdcHost:
         avoid redundant writes.
         """
         super().__setattr__(name, value)
-        if (
-            name in self._TRACKED_ATTRS
-            and getattr(self, "_auto_save_enabled", False)
-        ):
+        if name in self._TRACKED_ATTRS and getattr(self, "_auto_save_enabled", False):
             self._schedule_auto_save()
 
     def __init__(
         self,
         *,
-        mac: Optional[str] = None,
+        mac: str | None = None,
         port: int = DEFAULT_VDC_PORT,
-        dsuid: Optional[DsUid] = None,
-        name: Optional[str] = None,
+        dsuid: DsUid | None = None,
+        name: str | None = None,
         model: str = "pydsvdcapi vDC host",
-        model_version: Optional[str] = None,
-        model_uid: Optional[str] = None,
-        hardware_version: Optional[str] = None,
-        hardware_guid: Optional[str] = None,
-        hardware_model_guid: Optional[str] = None,
-        vendor_name: Optional[str] = None,
-        vendor_guid: Optional[str] = None,
-        oem_guid: Optional[str] = None,
-        oem_model_guid: Optional[str] = None,
-        config_url: Optional[str] = None,
-        device_icon_16: Optional[bytes] = None,
-        device_icon_name: Optional[str] = None,
-        state_path: Optional[Union[str, Path]] = None,
+        model_version: str | None = None,
+        model_uid: str | None = None,
+        hardware_version: str | None = None,
+        hardware_guid: str | None = None,
+        hardware_model_guid: str | None = None,
+        vendor_name: str | None = None,
+        vendor_guid: str | None = None,
+        oem_guid: str | None = None,
+        oem_model_guid: str | None = None,
+        config_url: str | None = None,
+        device_icon_16: bytes | None = None,
+        device_icon_name: str | None = None,
+        state_path: str | Path | None = None,
     ) -> None:
         # --- persistence ----------------------------------------------
-        self._store: Optional[PropertyStore] = (
+        self._store: PropertyStore | None = (
             PropertyStore(state_path) if state_path else None
         )
 
         # --- try restoring from persisted state -----------------------
         restored = self._store.load() if self._store else None
-        host_state: Dict[str, Any] = (
-            restored.get("vdcHost", {}) if restored else {}
-        )
+        host_state: dict[str, Any] = restored.get("vdcHost", {}) if restored else {}
 
         # --- network --------------------------------------------------
         self._mac: str = mac or host_state.get("mac") or _get_default_mac()
-        self._port: int = port if port != DEFAULT_VDC_PORT else host_state.get("port", port)
+        self._port: int = (
+            port if port != DEFAULT_VDC_PORT else host_state.get("port", port)
+        )
 
         # --- identity -------------------------------------------------
         if dsuid is not None:
@@ -279,72 +284,60 @@ class VdcHost:
 
         # --- common properties ----------------------------------------
         self.name: str = (
-            name
-            or host_state.get("name")
-            or f"vDC host on {_get_hostname()}"
+            name or host_state.get("name") or f"vDC host on {_get_hostname()}"
         )
-        self.model: str = model if model != "pydsvdcapi vDC host" else host_state.get("model", model)
-        self.model_version: Optional[str] = (
-            model_version or host_state.get("modelVersion")
+        self.model: str = (
+            model if model != "pydsvdcapi vDC host" else host_state.get("model", model)
         )
+        self.model_version: str | None = model_version or host_state.get("modelVersion")
         self.model_uid: str = (
             model_uid
             or host_state.get("modelUID")
             or self._derive_model_uid(self.model)
         )
-        self.hardware_version: Optional[str] = (
-            hardware_version or host_state.get("hardwareVersion")
+        self.hardware_version: str | None = hardware_version or host_state.get(
+            "hardwareVersion"
         )
         self.hardware_guid: str = (
-            hardware_guid
-            or host_state.get("hardwareGuid")
-            or f"macaddress:{self._mac}"
+            hardware_guid or host_state.get("hardwareGuid") or f"macaddress:{self._mac}"
         )
-        self.hardware_model_guid: Optional[str] = (
-            hardware_model_guid or host_state.get("hardwareModelGuid")
+        self.hardware_model_guid: str | None = hardware_model_guid or host_state.get(
+            "hardwareModelGuid"
         )
-        self.vendor_name: Optional[str] = (
-            vendor_name or host_state.get("vendorName")
+        self.vendor_name: str | None = vendor_name or host_state.get("vendorName")
+        self.vendor_guid: str | None = vendor_guid or host_state.get("vendorGuid")
+        self.oem_guid: str | None = oem_guid or host_state.get("oemGuid")
+        self.oem_model_guid: str | None = oem_model_guid or host_state.get(
+            "oemModelGuid"
         )
-        self.vendor_guid: Optional[str] = (
-            vendor_guid or host_state.get("vendorGuid")
-        )
-        self.oem_guid: Optional[str] = (
-            oem_guid or host_state.get("oemGuid")
-        )
-        self.oem_model_guid: Optional[str] = (
-            oem_model_guid or host_state.get("oemModelGuid")
-        )
-        self.config_url: Optional[str] = (
-            config_url or host_state.get("configURL")
-        )
-        self.device_icon_16: Optional[bytes] = device_icon_16
-        self.device_icon_name: Optional[str] = (
-            device_icon_name or host_state.get("deviceIconName")
+        self.config_url: str | None = config_url or host_state.get("configURL")
+        self.device_icon_16: bytes | None = device_icon_16
+        self.device_icon_name: str | None = device_icon_name or host_state.get(
+            "deviceIconName"
         )
 
         # --- runtime state --------------------------------------------
         self._active: bool = True
-        self._zeroconf: Optional[AsyncZeroconf] = None
-        self._service_info: Optional[ServiceInfo] = None
+        self._zeroconf: AsyncZeroconf | None = None
+        self._service_info: ServiceInfo | None = None
 
         # --- TCP server / session state --------------------------------
-        self._server: Optional[asyncio.AbstractServer] = None
-        self._session: Optional[VdcSession] = None
-        self._session_task: Optional[asyncio.Task] = None
-        self._on_message: Optional[MessageCallback] = None
-        self._on_remove: Optional[RemoveCallback] = None
-        self._on_identify: Optional[IdentifyCallback] = None
-        self._on_pair: Optional[PairCallback] = None
-        self._on_authenticate: Optional[AuthenticateCallback] = None
-        self._on_firmware_upgrade: Optional[FirmwareUpgradeCallback] = None
-        self._on_set_configuration: Optional[SetConfigurationCallback] = None
+        self._server: asyncio.AbstractServer | None = None
+        self._session: VdcSession | None = None
+        self._session_task: asyncio.Task | None = None
+        self._on_message: MessageCallback | None = None
+        self._on_remove: RemoveCallback | None = None
+        self._on_identify: IdentifyCallback | None = None
+        self._on_pair: PairCallback | None = None
+        self._on_authenticate: AuthenticateCallback | None = None
+        self._on_firmware_upgrade: FirmwareUpgradeCallback | None = None
+        self._on_set_configuration: SetConfigurationCallback | None = None
 
         # --- vDC registry ---------------------------------------------
-        self._vdcs: Dict[str, Vdc] = {}  # keyed by dSUID string
+        self._vdcs: dict[str, Vdc] = {}  # keyed by dSUID string
 
         # --- auto-save ------------------------------------------------
-        self._save_timer: Optional[threading.Timer] = None
+        self._save_timer: threading.Timer | None = None
         self._auto_save_enabled: bool = self._store is not None
 
         # --- restore vDCs from persisted state ------------------------
@@ -477,7 +470,7 @@ class VdcHost:
         if self._auto_save_enabled:
             self._schedule_auto_save()
 
-    def remove_vdc(self, dsuid: DsUid) -> Optional[Vdc]:
+    def remove_vdc(self, dsuid: DsUid) -> Vdc | None:
         """Remove a registered vDC by its dSUID.
 
         Returns the removed :class:`Vdc` or ``None`` if no vDC with
@@ -491,7 +484,7 @@ class VdcHost:
                 self._schedule_auto_save()
         return vdc
 
-    def get_vdc(self, dsuid: DsUid) -> Optional[Vdc]:
+    def get_vdc(self, dsuid: DsUid) -> Vdc | None:
         """Look up a registered vDC by its dSUID.
 
         Returns ``None`` if no vDC is registered with that dSUID.
@@ -499,7 +492,7 @@ class VdcHost:
         return self._vdcs.get(str(dsuid))
 
     @property
-    def vdcs(self) -> Dict[str, Vdc]:
+    def vdcs(self) -> dict[str, Vdc]:
         """A read-only view of all registered vDCs (keyed by dSUID)."""
         return dict(self._vdcs)
 
@@ -521,9 +514,7 @@ class VdcHost:
         """
         session = self._session
         if session is None or not session.is_active:
-            raise ConnectionError(
-                "Cannot announce vDCs — no active session"
-            )
+            raise ConnectionError("Cannot announce vDCs — no active session")
 
         announced_count = 0
         for vdc in self._vdcs.values():
@@ -532,9 +523,7 @@ class VdcHost:
                 if success:
                     announced_count += 1
             except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Failed to announce vDC '%s'", vdc.name
-                )
+                logger.exception("Failed to announce vDC '%s'", vdc.name)
 
         logger.info(
             "Announced %d/%d vDCs",
@@ -545,7 +534,7 @@ class VdcHost:
 
     # ---- property tree (for persistence) -----------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return the full property tree suitable for YAML persistence.
 
         The structure is::
@@ -562,7 +551,7 @@ class VdcHost:
                   implementationId: "x-company-light"
                   ...
         """
-        host_node: Dict[str, Any] = {
+        host_node: dict[str, Any] = {
             "dSUID": str(self._dsuid),
             "mac": self._mac,
             "port": self._port,
@@ -582,9 +571,7 @@ class VdcHost:
         }
 
         if self._vdcs:
-            host_node["vdcs"] = [
-                vdc.get_property_tree() for vdc in self._vdcs.values()
-            ]
+            host_node["vdcs"] = [vdc.get_property_tree() for vdc in self._vdcs.values()]
 
         return {"vdcHost": host_node}
 
@@ -673,7 +660,7 @@ class VdcHost:
             self._auto_save_enabled = prev
         return True
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Apply a persisted state dict to this host's properties.
 
         Also restores vDC properties when ``vdcs`` entries match
@@ -719,9 +706,7 @@ class VdcHost:
                 if vdc is not None:
                     vdc._apply_state(vdc_state)
 
-    def _find_vdc_for_state(
-        self, vdc_state: Dict[str, Any]
-    ) -> Optional[Vdc]:
+    def _find_vdc_for_state(self, vdc_state: dict[str, Any]) -> Vdc | None:
         """Find a registered vDC matching *vdc_state*.
 
         Matches by dSUID first, then by ``implementationId`` as a
@@ -810,13 +795,13 @@ class VdcHost:
     async def start(
         self,
         *,
-        on_message: Optional[MessageCallback] = None,
-        on_remove: Optional[RemoveCallback] = None,
-        on_identify: Optional[IdentifyCallback] = None,
-        on_pair: Optional["PairCallback"] = None,
-        on_authenticate: Optional["AuthenticateCallback"] = None,
-        on_firmware_upgrade: Optional["FirmwareUpgradeCallback"] = None,
-        on_set_configuration: Optional["SetConfigurationCallback"] = None,
+        on_message: MessageCallback | None = None,
+        on_remove: RemoveCallback | None = None,
+        on_identify: IdentifyCallback | None = None,
+        on_pair: PairCallback | None = None,
+        on_authenticate: AuthenticateCallback | None = None,
+        on_firmware_upgrade: FirmwareUpgradeCallback | None = None,
+        on_set_configuration: SetConfigurationCallback | None = None,
         announce: bool = True,
         bind_address: str = "0.0.0.0",
     ) -> None:
@@ -935,7 +920,7 @@ class VdcHost:
         return self._server is not None and self._server.is_serving()
 
     @property
-    def session(self) -> Optional[VdcSession]:
+    def session(self) -> VdcSession | None:
         """The currently active session, if any."""
         return self._session
 
@@ -987,8 +972,7 @@ class VdcHost:
     async def _close_session(self) -> None:
         """Close the active session if there is one."""
         if self._session is not None:
-            logger.info("Closing existing session with %s",
-                        self._session.vdsm_dsuid)
+            logger.info("Closing existing session with %s", self._session.vdsm_dsuid)
             await self._session.close()
             self._session = None
             self._session_task = None
@@ -1022,9 +1006,7 @@ class VdcHost:
                     announced,
                 )
             except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Error during auto-announce of vDC '%s'", vdc.name
-                )
+                logger.exception("Error during auto-announce of vDC '%s'", vdc.name)
 
     # ---- property access (internal message handling) -----------------
 
@@ -1032,7 +1014,7 @@ class VdcHost:
         self,
         session: VdcSession,
         msg: pb.Message,
-    ) -> Optional[pb.Message]:
+    ) -> pb.Message | None:
         """Internal message handler installed on every session.
 
         Intercepts ``VDSM_REQUEST_GET_PROPERTY`` and
@@ -1095,9 +1077,7 @@ class VdcHost:
             return await self._on_message(session, msg)
         return None
 
-    def _resolve_entity(
-        self, dsuid_str: str
-    ) -> Optional[Dict[str, Any]]:
+    def _resolve_entity(self, dsuid_str: str) -> dict[str, Any] | None:
         """Return ``(properties_dict, entity)`` for the entity with
         the given dSUID string, or ``None`` if not found."""
         # Normalise to upper-case — the vdSM may send lower-case hex.
@@ -1109,9 +1089,7 @@ class VdcHost:
             return vdc.get_properties()
         # Search for a vdSD across all vDCs.
         for vdc in self._vdcs.values():
-            vdsd = vdc.get_vdsd_by_dsuid(
-                DsUid.from_string(dsuid_str)
-            )
+            vdsd = vdc.get_vdsd_by_dsuid(DsUid.from_string(dsuid_str))
             if vdsd is not None:
                 return vdsd.get_properties()
         return None
@@ -1122,21 +1100,16 @@ class VdcHost:
         props = self._resolve_entity(target_dsuid)
 
         if props is None:
-            logger.debug(
-                "getProperty for unknown dSUID %s", target_dsuid
-            )
+            logger.debug("getProperty for unknown dSUID %s", target_dsuid)
             resp = pb.Message()
             resp.type = pb.GENERIC_RESPONSE
             resp.message_id = msg.message_id
             resp.generic_response.code = pb.ERR_NOT_FOUND
-            resp.generic_response.description = (
-                f"Entity {target_dsuid} not found"
-            )
+            resp.generic_response.description = f"Entity {target_dsuid} not found"
             return resp
 
         query_names = [
-            q.name or "<wildcard>"
-            for q in msg.vdsm_request_get_property.query
+            q.name or "<wildcard>" for q in msg.vdsm_request_get_property.query
         ]
         logger.debug(
             "getProperty for %s — %d query elements: %s",
@@ -1151,9 +1124,7 @@ class VdcHost:
         """Handle a ``VDSM_REQUEST_SET_PROPERTY``."""
         # Normalise to upper-case — the vdSM may send lower-case hex.
         target_dsuid = msg.vdsm_request_set_property.dSUID.upper()
-        incoming = elements_to_dict(
-            msg.vdsm_request_set_property.properties
-        )
+        incoming = elements_to_dict(msg.vdsm_request_set_property.properties)
 
         resp = pb.Message()
         resp.type = pb.GENERIC_RESPONSE
@@ -1173,42 +1144,32 @@ class VdcHost:
 
         # Check for a vdSD across all vDCs.
         for vdc in self._vdcs.values():
-            vdsd = vdc.get_vdsd_by_dsuid(
-                DsUid.from_string(target_dsuid)
-            )
+            vdsd = vdc.get_vdsd_by_dsuid(DsUid.from_string(target_dsuid))
             if vdsd is not None:
                 self._apply_vdsd_set_property(vdsd, incoming)
                 resp.generic_response.code = pb.ERR_OK
                 return resp
 
         resp.generic_response.code = pb.ERR_NOT_FOUND
-        resp.generic_response.description = (
-            f"Entity {target_dsuid} not found"
-        )
+        resp.generic_response.description = f"Entity {target_dsuid} not found"
         return resp
 
-    def _apply_set_property(self, incoming: Dict[str, Any]) -> None:
+    def _apply_set_property(self, incoming: dict[str, Any]) -> None:
         """Apply writable properties to this host."""
         if "name" in incoming:
             self.name = incoming["name"]
             logger.info("Host name set to '%s'", self.name)
 
-    def _apply_vdc_set_property(
-        self, vdc: Vdc, incoming: Dict[str, Any]
-    ) -> None:
+    def _apply_vdc_set_property(self, vdc: Vdc, incoming: dict[str, Any]) -> None:
         """Apply writable properties to a vDC."""
         if "name" in incoming:
             vdc.name = incoming["name"]
             logger.info("vDC '%s' name set to '%s'", vdc.dsuid, vdc.name)
         if "zoneID" in incoming:
             vdc.zone_id = int(incoming["zoneID"])
-            logger.info(
-                "vDC '%s' zoneID set to %d", vdc.dsuid, vdc.zone_id
-            )
+            logger.info("vDC '%s' zoneID set to %d", vdc.dsuid, vdc.zone_id)
 
-    def _apply_vdsd_set_property(
-        self, vdsd: Any, incoming: Dict[str, Any]
-    ) -> None:
+    def _apply_vdsd_set_property(self, vdsd: Any, incoming: dict[str, Any]) -> None:
         """Apply writable properties to a vdSD.
 
         Supports wildcard expansion per §7.1.2: if a container property
@@ -1218,26 +1179,21 @@ class VdcHost:
         """
         if "name" in incoming:
             vdsd.name = incoming["name"]
-            logger.info(
-                "vdSD '%s' name set to '%s'", vdsd.dsuid, vdsd.name
-            )
+            logger.info("vdSD '%s' name set to '%s'", vdsd.dsuid, vdsd.name)
         if "zoneID" in incoming:
             vdsd.zone_id = int(incoming["zoneID"])
-            logger.info(
-                "vdSD '%s' zoneID set to %d", vdsd.dsuid, vdsd.zone_id
-            )
+            logger.info("vdSD '%s' zoneID set to %d", vdsd.dsuid, vdsd.zone_id)
         if "progMode" in incoming:
             val = incoming["progMode"]
             vdsd.prog_mode = bool(val) if val is not None else None
-            logger.info(
-                "vdSD '%s' progMode set to %s", vdsd.dsuid, vdsd.prog_mode
-            )
+            logger.info("vdSD '%s' progMode set to %s", vdsd.dsuid, vdsd.prog_mode)
         # Button input settings (§4.2.2).
         if "buttonInputSettings" in incoming:
             btn_settings = incoming["buttonInputSettings"]
             if isinstance(btn_settings, dict):
                 btn_settings = expand_setproperty_wildcards(
-                    btn_settings, vdsd._button_inputs.keys(),
+                    btn_settings,
+                    vdsd._button_inputs.keys(),
                 )
                 for idx_str, settings in btn_settings.items():
                     if isinstance(settings, dict):
@@ -1246,16 +1202,17 @@ class VdcHost:
                         if btn is not None:
                             btn.apply_settings(settings)
                             logger.info(
-                                "vdSD '%s' buttonInputSettings[%d] "
-                                "updated",
-                                vdsd.dsuid, idx,
+                                "vdSD '%s' buttonInputSettings[%d] updated",
+                                vdsd.dsuid,
+                                idx,
                             )
         # Binary input settings (§4.3.2).
         if "binaryInputSettings" in incoming:
             bi_settings = incoming["binaryInputSettings"]
             if isinstance(bi_settings, dict):
                 bi_settings = expand_setproperty_wildcards(
-                    bi_settings, vdsd._binary_inputs.keys(),
+                    bi_settings,
+                    vdsd._binary_inputs.keys(),
                 )
                 for idx_str, settings in bi_settings.items():
                     if isinstance(settings, dict):
@@ -1264,16 +1221,17 @@ class VdcHost:
                         if bi is not None:
                             bi.apply_settings(settings)
                             logger.info(
-                                "vdSD '%s' binaryInputSettings[%d] "
-                                "updated",
-                                vdsd.dsuid, idx,
+                                "vdSD '%s' binaryInputSettings[%d] updated",
+                                vdsd.dsuid,
+                                idx,
                             )
         # Sensor input settings (§4.3.2).
         if "sensorSettings" in incoming:
             si_settings = incoming["sensorSettings"]
             if isinstance(si_settings, dict):
                 si_settings = expand_setproperty_wildcards(
-                    si_settings, vdsd._sensor_inputs.keys(),
+                    si_settings,
+                    vdsd._sensor_inputs.keys(),
                 )
                 for idx_str, settings in si_settings.items():
                     if isinstance(settings, dict):
@@ -1282,9 +1240,9 @@ class VdcHost:
                         if si is not None:
                             si.apply_settings(settings)
                             logger.info(
-                                "vdSD '%s' sensorSettings[%d] "
-                                "updated",
-                                vdsd.dsuid, idx,
+                                "vdSD '%s' sensorSettings[%d] updated",
+                                vdsd.dsuid,
+                                idx,
                             )
         # Output settings (§4.8.2).
         if "outputSettings" in incoming:
@@ -1313,7 +1271,8 @@ class VdcHost:
             ca_data = incoming["customActions"]
             if isinstance(ca_data, dict):
                 ca_data = expand_setproperty_wildcards(
-                    ca_data, vdsd._custom_actions.keys(),
+                    ca_data,
+                    vdsd._custom_actions.keys(),
                 )
                 for idx_str, settings in ca_data.items():
                     if isinstance(settings, dict):
@@ -1323,7 +1282,8 @@ class VdcHost:
                             cust.apply_settings(settings)
                             logger.info(
                                 "vdSD '%s' customActions[%d] updated",
-                                vdsd.dsuid, idx,
+                                vdsd.dsuid,
+                                idx,
                             )
         # Channel states (§4.9.3) — dSS sends this via setProperty when
         # the user or JSON API sets an output channel value directly
@@ -1351,17 +1311,21 @@ class VdcHost:
                             logger.warning(
                                 "setProperty channelStates: channel '%s' "
                                 "not found on vdSD %s",
-                                ch_name, vdsd.dsuid,
+                                ch_name,
+                                vdsd.dsuid,
                             )
                             continue
                         output.buffer_channel_value(channel_obj, float(new_val))
                         logger.debug(
                             "setProperty channelStates: vdSD %s ch='%s' "
                             "val=%s (buffered)",
-                            vdsd.dsuid, ch_name, new_val,
+                            vdsd.dsuid,
+                            ch_name,
+                            new_val,
                         )
                     # apply_pending_channels is async; schedule it.
                     import asyncio
+
                     asyncio.create_task(output.apply_pending_channels())
                     logger.info(
                         "vdSD '%s' channelStates updated via setProperty",
@@ -1375,7 +1339,8 @@ class VdcHost:
                 if output is not None:
                     # Expand wildcards to all known scene numbers.
                     scene_data = expand_setproperty_wildcards(
-                        scene_data, output.scene_numbers,
+                        scene_data,
+                        output.scene_numbers,
                     )
                     output.apply_scenes(scene_data)
                     logger.info(
@@ -1386,7 +1351,7 @@ class VdcHost:
     # ---- GenericRequest handler (§7.3.10+) -------------------------
 
     async def _handle_generic_request(
-        self, session: "VdcSession", msg: pb.Message
+        self, session: VdcSession, msg: pb.Message
     ) -> pb.Message:
         """Handle ``VDSM_REQUEST_GENERIC_REQUEST`` messages.
 
@@ -1409,7 +1374,7 @@ class VdcHost:
         dsuid_str = req.dSUID
 
         # Parse params PropertyElements into a flat dict.
-        params_dict: Dict[str, Any] = {}
+        params_dict: dict[str, Any] = {}
         for elem in req.params:
             name = elem.name
             if elem.HasField("value"):
@@ -1437,9 +1402,7 @@ class VdcHost:
         if method == "invokeDeviceAction":
             action_id = params_dict.get("id", "")
             # Remove 'id' from the params passed to the callback.
-            action_params = {
-                k: v for k, v in params_dict.items() if k != "id"
-            }
+            action_params = {k: v for k, v in params_dict.items() if k != "id"}
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
             if vdsd is None:
                 logger.warning(
@@ -1447,9 +1410,7 @@ class VdcHost:
                     dsuid_str,
                 )
                 resp.generic_response.code = pb.ERR_NOT_FOUND
-                resp.generic_response.description = (
-                    f"Device {dsuid_str} not found"
-                )
+                resp.generic_response.description = f"Device {dsuid_str} not found"
                 return resp
 
             try:
@@ -1458,7 +1419,8 @@ class VdcHost:
             except Exception as exc:  # noqa: BLE001
                 logger.exception(
                     "invokeDeviceAction '%s' on vdSD %s failed",
-                    action_id, dsuid_str,
+                    action_id,
+                    dsuid_str,
                 )
                 resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
                 resp.generic_response.description = str(exc)
@@ -1467,7 +1429,8 @@ class VdcHost:
         if method == "identify":
             # §7.4.5 — Identify vDC host device.
             logger.info(
-                "GenericRequest identify for dSUID %s", dsuid_str,
+                "GenericRequest identify for dSUID %s",
+                dsuid_str,
             )
             if self._on_identify is not None:
                 try:
@@ -1493,21 +1456,23 @@ class VdcHost:
                         dsuid_str,
                         bool(params_dict.get("establish", True)),
                         int(params_dict.get("timeout", -1)),
-                        {k: v for k, v in params_dict.items()
-                         if k not in ("establish", "timeout")},
+                        {
+                            k: v
+                            for k, v in params_dict.items()
+                            if k not in ("establish", "timeout")
+                        },
                     )
                     resp.generic_response.code = pb.ERR_OK
                 except Exception as exc:  # noqa: BLE001
                     logger.exception(
-                        "on_pair callback raised for %s", dsuid_str,
+                        "on_pair callback raised for %s",
+                        dsuid_str,
                     )
                     resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
                     resp.generic_response.description = str(exc)
             else:
                 resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
-                resp.generic_response.description = (
-                    "pair: no callback registered"
-                )
+                resp.generic_response.description = "pair: no callback registered"
             return resp
 
         if method == "authenticate":
@@ -1518,8 +1483,11 @@ class VdcHost:
                         dsuid_str,
                         str(params_dict.get("authData", "")),
                         str(params_dict.get("authScope", "")),
-                        {k: v for k, v in params_dict.items()
-                         if k not in ("authData", "authScope")},
+                        {
+                            k: v
+                            for k, v in params_dict.items()
+                            if k not in ("authData", "authScope")
+                        },
                     )
                     resp.generic_response.code = pb.ERR_OK
                 except Exception as exc:  # noqa: BLE001
@@ -1544,8 +1512,11 @@ class VdcHost:
                         dsuid_str,
                         bool(params_dict.get("checkonly", False)),
                         bool(params_dict.get("clearsettings", False)),
-                        {k: v for k, v in params_dict.items()
-                         if k not in ("checkonly", "clearsettings")},
+                        {
+                            k: v
+                            for k, v in params_dict.items()
+                            if k not in ("checkonly", "clearsettings")
+                        },
                     )
                     resp.generic_response.code = pb.ERR_OK
                 except Exception as exc:  # noqa: BLE001
@@ -1569,8 +1540,7 @@ class VdcHost:
                     await self._on_set_configuration(
                         dsuid_str,
                         str(params_dict.get("id", "")),
-                        {k: v for k, v in params_dict.items()
-                         if k != "id"},
+                        {k: v for k, v in params_dict.items() if k != "id"},
                     )
                     resp.generic_response.code = pb.ERR_OK
                 except Exception as exc:  # noqa: BLE001
@@ -1594,9 +1564,7 @@ class VdcHost:
                 return result
 
         resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
-        resp.generic_response.description = (
-            f"Unknown generic request method: {method}"
-        )
+        resp.generic_response.description = f"Unknown generic request method: {method}"
         return resp
 
     # ---- remove handler (§6.3) ------------------------------------
@@ -1617,7 +1585,7 @@ class VdcHost:
 
         # Find the vdSD and its owning vDC.
         dsuid = DsUid.from_string(dsuid_str)
-        owning_vdc: Optional[Vdc] = None
+        owning_vdc: Vdc | None = None
         for vdc in self._vdcs.values():
             if vdc.get_vdsd_by_dsuid(dsuid) is not None:
                 owning_vdc = vdc
@@ -1625,12 +1593,11 @@ class VdcHost:
 
         if owning_vdc is None:
             logger.warning(
-                "remove: device %s not found", dsuid_str,
+                "remove: device %s not found",
+                dsuid_str,
             )
             resp.generic_response.code = pb.ERR_NOT_FOUND
-            resp.generic_response.description = (
-                f"Device {dsuid_str} not found"
-            )
+            resp.generic_response.description = f"Device {dsuid_str} not found"
             return resp
 
         # Consult user callback (if set).
@@ -1639,24 +1606,25 @@ class VdcHost:
                 allowed = await self._on_remove(dsuid_str)
             except Exception:  # noqa: BLE001
                 logger.exception(
-                    "on_remove callback failed for %s", dsuid_str,
+                    "on_remove callback failed for %s",
+                    dsuid_str,
                 )
                 allowed = False
             if not allowed:
                 logger.info(
-                    "remove: rejected by callback for %s", dsuid_str,
+                    "remove: rejected by callback for %s",
+                    dsuid_str,
                 )
                 resp.generic_response.code = pb.ERR_FORBIDDEN
-                resp.generic_response.description = (
-                    f"Removal of {dsuid_str} rejected"
-                )
+                resp.generic_response.description = f"Removal of {dsuid_str} rejected"
                 return resp
 
         # Remove the device from the vDC.
         owning_vdc.remove_device(dsuid)
         logger.info(
             "remove: device %s removed from vDC '%s'",
-            dsuid_str, owning_vdc.name,
+            dsuid_str,
+            owning_vdc.name,
         )
         resp.generic_response.code = pb.ERR_OK
         return resp
@@ -1678,14 +1646,16 @@ class VdcHost:
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
             if vdsd is None:
                 logger.warning(
-                    "dimChannel: vdSD %s not found", dsuid_str,
+                    "dimChannel: vdSD %s not found",
+                    dsuid_str,
                 )
                 continue
 
             output = getattr(vdsd, "output", None)
             if output is None:
                 logger.debug(
-                    "dimChannel: vdSD %s has no output", dsuid_str,
+                    "dimChannel: vdSD %s has no output",
+                    dsuid_str,
                 )
                 continue
 
@@ -1699,6 +1669,7 @@ class VdcHost:
                         break
             if channel_obj is None and notif.channel:
                 from pydsvdcapi.enums import OutputChannelType
+
                 try:
                     ct = OutputChannelType(int(notif.channel))
                     channel_obj = output.get_channel_by_type(ct)
@@ -1719,7 +1690,10 @@ class VdcHost:
 
             logger.debug(
                 "dimChannel: %s ch=%s mode=%d area=%d",
-                dsuid_str, channel_obj.name, mode, area,
+                dsuid_str,
+                channel_obj.name,
+                mode,
+                area,
             )
 
             try:
@@ -1745,7 +1719,8 @@ class VdcHost:
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
             if vdsd is None:
                 logger.warning(
-                    "identify: vdSD %s not found", dsuid_str,
+                    "identify: vdSD %s not found",
+                    dsuid_str,
                 )
                 continue
 
@@ -1759,22 +1734,16 @@ class VdcHost:
 
     # ---- setOutputChannelValue notification handler ------------------
 
-    def _find_vdsd_by_dsuid(
-        self, dsuid_str: str
-    ) -> Optional[Any]:
+    def _find_vdsd_by_dsuid(self, dsuid_str: str) -> Any | None:
         """Find a vdSD across all vDCs by dSUID string."""
         dsuid_str = dsuid_str.upper()
         for vdc in self._vdcs.values():
-            vdsd = vdc.get_vdsd_by_dsuid(
-                DsUid.from_string(dsuid_str)
-            )
+            vdsd = vdc.get_vdsd_by_dsuid(DsUid.from_string(dsuid_str))
             if vdsd is not None:
                 return vdsd
         return None
 
-    async def _handle_set_control_value(
-        self, msg: pb.Message
-    ) -> None:
+    async def _handle_set_control_value(self, msg: pb.Message) -> None:
         """Handle ``VDSM_NOTIFICATION_SET_CONTROL_VALUE`` (§7.3.8).
 
         Stores the control value on the target vdSD(s) and invokes
@@ -1783,12 +1752,8 @@ class VdcHost:
         notif = msg.vdsm_send_set_control_value
         name = notif.name
         value = notif.value
-        group: Optional[int] = (
-            int(notif.group) if notif.group else None
-        )
-        zone_id: Optional[int] = (
-            int(notif.zone_id) if notif.zone_id else None
-        )
+        group: int | None = int(notif.group) if notif.group else None
+        zone_id: int | None = int(notif.zone_id) if notif.zone_id else None
 
         for dsuid_str in notif.dSUID:
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
@@ -1799,9 +1764,7 @@ class VdcHost:
                 )
                 continue
             try:
-                await vdsd.set_control_value(
-                    name, value, group, zone_id
-                )
+                await vdsd.set_control_value(name, value, group, zone_id)
             except Exception:
                 logger.exception(
                     "setControlValue callback raised for vdSD %s",
@@ -1855,6 +1818,7 @@ class VdcHost:
             if channel_obj is None and notif.HasField("channel"):
                 # Look up by channel type (int).
                 from pydsvdcapi.enums import OutputChannelType
+
                 try:
                     ct = OutputChannelType(int(notif.channel))
                     channel_obj = output.get_channel_by_type(ct)
@@ -1862,9 +1826,10 @@ class VdcHost:
                     pass
             if channel_obj is None:
                 logger.warning(
-                    "setOutputChannelValue: channel '%s'/%d not "
-                    "found on vdSD %s",
-                    notif.channelId, notif.channel, dsuid_str,
+                    "setOutputChannelValue: channel '%s'/%d not found on vdSD %s",
+                    notif.channelId,
+                    notif.channel,
+                    dsuid_str,
                 )
                 continue
 
@@ -1872,9 +1837,10 @@ class VdcHost:
             output.buffer_channel_value(channel_obj, notif.value)
 
             logger.debug(
-                "setOutputChannelValue: %s ch=%s val=%s "
-                "apply_now=%s",
-                dsuid_str, channel_obj.name, notif.value,
+                "setOutputChannelValue: %s ch=%s val=%s apply_now=%s",
+                dsuid_str,
+                channel_obj.name,
+                notif.value,
                 notif.apply_now,
             )
 
@@ -1887,7 +1853,10 @@ class VdcHost:
 
     @staticmethod
     def _matches_zone_and_group(
-        vdsd: Any, output: Any, zone_id: int, group: int,
+        vdsd: Any,
+        output: Any,
+        zone_id: int,
+        group: int,
     ) -> bool:
         """Check whether *vdsd* / *output* matches the zone/group filter.
 
@@ -1916,18 +1885,17 @@ class VdcHost:
         for dsuid_str in notif.dSUID:
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
             if vdsd is None:
-                logger.warning(
-                    "callScene: vdSD %s not found", dsuid_str
-                )
+                logger.warning("callScene: vdSD %s not found", dsuid_str)
                 continue
             output = getattr(vdsd, "output", None)
             if output is None:
-                logger.debug(
-                    "callScene: vdSD %s has no output", dsuid_str
-                )
+                logger.debug("callScene: vdSD %s has no output", dsuid_str)
                 continue
             if not self._matches_zone_and_group(
-                vdsd, output, zone_id, group,
+                vdsd,
+                output,
+                zone_id,
+                group,
             ):
                 logger.debug(
                     "callScene: vdSD %s skipped (zone/group mismatch)",
@@ -1937,7 +1905,11 @@ class VdcHost:
             await output.dispatch_scene(scene, force=force, group=group)
             logger.debug(
                 "callScene %d (force=%s, group=%d, zone=%d) on vdSD %s",
-                scene, force, group, zone_id, dsuid_str,
+                scene,
+                force,
+                group,
+                zone_id,
+                dsuid_str,
             )
 
     async def _handle_save_scene(self, msg: pb.Message) -> None:
@@ -1950,18 +1922,17 @@ class VdcHost:
         for dsuid_str in notif.dSUID:
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
             if vdsd is None:
-                logger.warning(
-                    "saveScene: vdSD %s not found", dsuid_str
-                )
+                logger.warning("saveScene: vdSD %s not found", dsuid_str)
                 continue
             output = getattr(vdsd, "output", None)
             if output is None:
-                logger.debug(
-                    "saveScene: vdSD %s has no output", dsuid_str
-                )
+                logger.debug("saveScene: vdSD %s has no output", dsuid_str)
                 continue
             if not self._matches_zone_and_group(
-                vdsd, output, zone_id, group,
+                vdsd,
+                output,
+                zone_id,
+                group,
             ):
                 logger.debug(
                     "saveScene: vdSD %s skipped (zone/group mismatch)",
@@ -1971,7 +1942,10 @@ class VdcHost:
             output.save_scene(scene)
             logger.debug(
                 "saveScene %d (group=%d, zone=%d) on vdSD %s",
-                scene, group, zone_id, dsuid_str,
+                scene,
+                group,
+                zone_id,
+                dsuid_str,
             )
 
     async def _handle_undo_scene(self, msg: pb.Message) -> None:
@@ -1984,18 +1958,17 @@ class VdcHost:
         for dsuid_str in notif.dSUID:
             vdsd = self._find_vdsd_by_dsuid(dsuid_str)
             if vdsd is None:
-                logger.warning(
-                    "undoScene: vdSD %s not found", dsuid_str
-                )
+                logger.warning("undoScene: vdSD %s not found", dsuid_str)
                 continue
             output = getattr(vdsd, "output", None)
             if output is None:
-                logger.debug(
-                    "undoScene: vdSD %s has no output", dsuid_str
-                )
+                logger.debug("undoScene: vdSD %s has no output", dsuid_str)
                 continue
             if not self._matches_zone_and_group(
-                vdsd, output, zone_id, group,
+                vdsd,
+                output,
+                zone_id,
+                group,
             ):
                 logger.debug(
                     "undoScene: vdSD %s skipped (zone/group mismatch)",
@@ -2007,12 +1980,13 @@ class VdcHost:
             await output.apply_pending_channels()
             logger.debug(
                 "undoScene %d (group=%d, zone=%d) on vdSD %s",
-                scene, group, zone_id, dsuid_str,
+                scene,
+                group,
+                zone_id,
+                dsuid_str,
             )
 
-    async def _handle_set_local_priority(
-        self, msg: pb.Message
-    ) -> None:
+    async def _handle_set_local_priority(self, msg: pb.Message) -> None:
         """Handle ``VDSM_NOTIFICATION_SET_LOCAL_PRIO`` (§7.3.4).
 
         Sets ``localPriority`` on the output if the referenced scene
@@ -2032,21 +2006,24 @@ class VdcHost:
             if output is None:
                 continue
             if not self._matches_zone_and_group(
-                vdsd, output, zone_id, group,
+                vdsd,
+                output,
+                zone_id,
+                group,
             ):
                 continue
             entry = output.get_scene(scene)
             if entry is not None and not entry.get("dontCare", False):
                 output.local_priority = True
                 logger.debug(
-                    "setLocalPriority: set on vdSD %s "
-                    "(scene %d, group=%d, zone=%d)",
-                    dsuid_str, scene, group, zone_id,
+                    "setLocalPriority: set on vdSD %s (scene %d, group=%d, zone=%d)",
+                    dsuid_str,
+                    scene,
+                    group,
+                    zone_id,
                 )
 
-    async def _handle_call_min_scene(
-        self, msg: pb.Message
-    ) -> None:
+    async def _handle_call_min_scene(self, msg: pb.Message) -> None:
         """Handle ``VDSM_NOTIFICATION_CALL_MIN_SCENE`` (§7.3.6).
 
         If the device is off (primary channel at min), set it to the
@@ -2067,7 +2044,10 @@ class VdcHost:
             if output is None:
                 continue
             if not self._matches_zone_and_group(
-                vdsd, output, zone_id, group,
+                vdsd,
+                output,
+                zone_id,
+                group,
             ):
                 continue
             entry = output.get_scene(scene)
@@ -2089,16 +2069,14 @@ class VdcHost:
             await output.apply_pending_channels()
             logger.debug(
                 "callMinScene %d: set min-on on vdSD %s",
-                scene, dsuid_str,
+                scene,
+                dsuid_str,
             )
 
     # ---- dunder -------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"VdcHost(dsuid={self._dsuid!r}, port={self._port}, "
-            f"name={self.name!r})"
-        )
+        return f"VdcHost(dsuid={self._dsuid!r}, port={self._port}, name={self.name!r})"
 
     def __del__(self) -> None:
         # Cancel any pending auto-save timer.

@@ -59,9 +59,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Optional,
-    Union,
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
@@ -87,11 +84,13 @@ PROPERTY_TYPE_ENUMERATION: str = "enumeration"
 PROPERTY_TYPE_STRING: str = "string"
 
 #: Set of all valid property type strings.
-VALID_PROPERTY_TYPES = frozenset({
-    PROPERTY_TYPE_NUMERIC,
-    PROPERTY_TYPE_ENUMERATION,
-    PROPERTY_TYPE_STRING,
-})
+VALID_PROPERTY_TYPES = frozenset(
+    {
+        PROPERTY_TYPE_NUMERIC,
+        PROPERTY_TYPE_ENUMERATION,
+        PROPERTY_TYPE_STRING,
+    }
+)
 
 
 class DeviceProperty:
@@ -150,13 +149,13 @@ class DeviceProperty:
         ds_index: int = 0,
         name: str = "",
         type: str = PROPERTY_TYPE_STRING,
-        min_value: Optional[float] = None,
-        max_value: Optional[float] = None,
-        resolution: Optional[float] = None,
-        siunit: Optional[str] = None,
-        options: Optional[Dict[Union[int, str], str]] = None,
-        default: Optional[Union[float, str]] = None,
-        description: Optional[str] = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        resolution: float | None = None,
+        siunit: str | None = None,
+        options: dict[int | str, str] | None = None,
+        default: float | str | None = None,
+        description: str | None = None,
     ) -> None:
         self._vdsd = vdsd
         self._ds_index = ds_index
@@ -166,17 +165,15 @@ class DeviceProperty:
         self._max_value = max_value
         self._resolution = resolution
         self._siunit = siunit
-        self._options: Optional[Dict[Union[int, str], str]] = (
-            dict(options) if options else None
-        )
+        self._options: dict[int | str, str] | None = dict(options) if options else None
         self._default = default
         self._description = description
         # Current property value (persisted).
-        self._value: Optional[Union[float, str]] = None
+        self._value: float | str | None = None
 
         # ---- value converter (optional, persisted) -------------------
-        self._uplink_converter_code: Optional[str] = None
-        self._uplink_converter_fn: Optional[Callable[[Any], Any]] = None
+        self._uplink_converter_code: str | None = None
+        self._uplink_converter_fn: Callable[[Any], Any] | None = None
 
         # Set when the first real (non-None) value has been received.
         self._initial_value_ready: asyncio.Event = asyncio.Event()
@@ -215,73 +212,71 @@ class DeviceProperty:
         self._type = value
 
     @property
-    def min_value(self) -> Optional[float]:
+    def min_value(self) -> float | None:
         """Minimum value (numeric only)."""
         return self._min_value
 
     @min_value.setter
-    def min_value(self, value: Optional[float]) -> None:
+    def min_value(self, value: float | None) -> None:
         self._min_value = value
 
     @property
-    def max_value(self) -> Optional[float]:
+    def max_value(self) -> float | None:
         """Maximum value (numeric only)."""
         return self._max_value
 
     @max_value.setter
-    def max_value(self, value: Optional[float]) -> None:
+    def max_value(self, value: float | None) -> None:
         self._max_value = value
 
     @property
-    def resolution(self) -> Optional[float]:
+    def resolution(self) -> float | None:
         """Resolution / LSB size (numeric only)."""
         return self._resolution
 
     @resolution.setter
-    def resolution(self, value: Optional[float]) -> None:
+    def resolution(self, value: float | None) -> None:
         self._resolution = value
 
     @property
-    def siunit(self) -> Optional[str]:
+    def siunit(self) -> str | None:
         """SI unit string (numeric only)."""
         return self._siunit
 
     @siunit.setter
-    def siunit(self, value: Optional[str]) -> None:
+    def siunit(self, value: str | None) -> None:
         self._siunit = value
 
     @property
-    def options(self) -> Optional[Dict[Union[int, str], str]]:
+    def options(self) -> dict[int | str, str] | None:
         """Option key → value mapping (enumeration only, copy)."""
         return dict(self._options) if self._options is not None else None
 
     @options.setter
-    def options(
-        self, value: Optional[Dict[Union[int, str], str]]
-    ) -> None:
+    def options(self, value: dict[int | str, str] | None) -> None:
         self._options = dict(value) if value is not None else None
 
     @property
-    def default(self) -> Optional[Union[float, str]]:
+    def default(self) -> float | str | None:
         """Default value."""
         return self._default
 
     @default.setter
-    def default(self, value: Optional[Union[float, str]]) -> None:
+    def default(self, value: float | str | None) -> None:
         self._default = value
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """Optional human-readable description."""
         return self._description
 
     @description.setter
-    def description(self, value: Optional[str]) -> None:
+    def description(self, value: str | None) -> None:
         self._description = value
 
     # ---- converter management ---------------------------------------
 
-    def set_uplink_converter(self, code: Optional[str]) -> None:
+    def set_uplink_converter(self, code: str | None) -> None:
         """Set or clear the uplink value converter.
 
         Applied in :meth:`update_value` before the value is
@@ -310,26 +305,26 @@ class DeviceProperty:
             self._uplink_converter_code = code
 
     @property
-    def uplink_converter_code(self) -> Optional[str]:
+    def uplink_converter_code(self) -> str | None:
         """The stored uplink converter snippet, or ``None``."""
         return self._uplink_converter_code
 
     # ---- volatile value accessor -------------------------------------
 
     @property
-    def value(self) -> Optional[Union[float, str]]:
+    def value(self) -> float | str | None:
         """Current property value (persisted)."""
         return self._value
 
     @value.setter
-    def value(self, v: Optional[Union[float, str]]) -> None:
+    def value(self, v: float | str | None) -> None:
         self._value = v
         if v is not None:
             self._initial_value_ready.set()
 
     # ---- property dicts ----------------------------------------------
 
-    def get_description_properties(self) -> Dict[str, Any]:
+    def get_description_properties(self) -> dict[str, Any]:
         """Return **devicePropertyDescriptions** properties (§4.6.3).
 
         Format::
@@ -345,7 +340,7 @@ class DeviceProperty:
         reads element names via ``vdcProperty["values"]`` /
         ``vdcValue.getName()``.
         """
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             "name": self._name,
             "type": self._type,
         }
@@ -389,12 +384,12 @@ class DeviceProperty:
 
     # ---- persistence -------------------------------------------------
 
-    def get_property_tree(self) -> Dict[str, Any]:
+    def get_property_tree(self) -> dict[str, Any]:
         """Return a dict suitable for YAML persistence.
 
         Both description and current value are persisted.
         """
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "dsIndex": self._ds_index,
             "name": self._name,
             "type": self._type,
@@ -408,9 +403,7 @@ class DeviceProperty:
         if self._siunit is not None:
             node["siunit"] = self._siunit
         if self._options is not None:
-            node["options"] = {
-                str(k): v for k, v in self._options.items()
-            }
+            node["options"] = {str(k): v for k, v in self._options.items()}
         if self._default is not None:
             node["default"] = self._default
         if self._description is not None:
@@ -422,7 +415,7 @@ class DeviceProperty:
             node["uplinkConverter"] = self._uplink_converter_code
         return node
 
-    def _apply_state(self, state: Dict[str, Any]) -> None:
+    def _apply_state(self, state: dict[str, Any]) -> None:
         """Restore from a persisted state dict."""
         if "name" in state:
             self._name = state["name"]
@@ -439,10 +432,7 @@ class DeviceProperty:
         if "options" in state:
             raw = state["options"]
             if isinstance(raw, dict):
-                self._options = {
-                    _parse_option_key(k): v
-                    for k, v in raw.items()
-                }
+                self._options = {_parse_option_key(k): v for k, v in raw.items()}
         if "default" in state:
             self._default = state["default"]
         if "description" in state:
@@ -462,8 +452,8 @@ class DeviceProperty:
 
     async def update_value(
         self,
-        value: Union[float, int, str],
-        session: Optional[VdcSession] = None,
+        value: float | int | str,
+        session: VdcSession | None = None,
     ) -> None:
         """Update the property value and push the change to the vdSM.
 
@@ -508,22 +498,23 @@ class DeviceProperty:
         session = session or self._vdsd._session
         if session is None or not session.is_active:
             logger.warning(
-                "DeviceProperty[%d] '%s': cannot push — no active "
-                "session for vdSD %s",
-                self._ds_index, self._name, self._vdsd.dsuid,
+                "DeviceProperty[%d] '%s': cannot push — no active session for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
             )
             return
 
         if not self._vdsd.is_announced:
             logger.debug(
-                "DeviceProperty[%d] '%s': vdSD not announced — "
-                "skipping push",
-                self._ds_index, self._name,
+                "DeviceProperty[%d] '%s': vdSD not announced — skipping push",
+                self._ds_index,
+                self._name,
             )
             return
 
         # Push direct scalar value (p44-vdc compatible).
-        push_tree: Dict[str, Any] = {
+        push_tree: dict[str, Any] = {
             "deviceProperties": {
                 self._name: self._value,
             }
@@ -538,15 +529,18 @@ class DeviceProperty:
         try:
             await session.send_notification(msg)
             logger.debug(
-                "DeviceProperty[%d] '%s': pushed value '%s' for "
-                "vdSD %s",
-                self._ds_index, self._name, self._value,
+                "DeviceProperty[%d] '%s': pushed value '%s' for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._value,
                 self._vdsd.dsuid,
             )
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "DeviceProperty[%d] '%s': failed to push: %s",
-                self._ds_index, self._name, exc,
+                self._ds_index,
+                self._name,
+                exc,
             )
 
     # ---- repr --------------------------------------------------------
@@ -560,7 +554,7 @@ class DeviceProperty:
 
     # ---- enum resolution ---------------------------------------------
 
-    def _resolve_enum_label(self, value: Union[float, int, str]) -> str:
+    def _resolve_enum_label(self, value: float | int | str) -> str:
         """Resolve *value* to a string label for enumeration properties.
 
         p44-vdc always sends the text label for enumeration values.
@@ -592,7 +586,7 @@ class DeviceProperty:
         return str(value)
 
 
-def _parse_option_key(key: Any) -> Union[int, str]:
+def _parse_option_key(key: Any) -> int | str:
     """Convert a persisted option key back to int when possible."""
     if isinstance(key, int):
         return key

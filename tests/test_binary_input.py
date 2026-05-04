@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,9 +16,9 @@ from pydsvdcapi.binary_input import (
 )
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
 from pydsvdcapi.enums import (
-    ColorGroup,
     BinaryInputType,
     BinaryInputUsage,
+    ColorGroup,
     InputError,
 )
 from pydsvdcapi.property_handling import elements_to_dict
@@ -26,7 +26,6 @@ from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import VdcHost
 from pydsvdcapi.vdsd import Device, Vdsd
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,7 +55,7 @@ def _base_dsuid() -> DsUid:
     return DsUid.from_name_in_space("bi-test-device", DsUidNamespace.VDC)
 
 
-def _make_device(vdc: Vdc, dsuid: Optional[DsUid] = None) -> Device:
+def _make_device(vdc: Vdc, dsuid: DsUid | None = None) -> Device:
     return Device(vdc=vdc, dsuid=dsuid or _base_dsuid())
 
 
@@ -294,9 +293,7 @@ class TestBinaryInputSettingsProperties:
         settings = bi.get_settings_properties()
 
         assert settings["group"] == 3
-        assert settings["sensorFunction"] == int(
-            BinaryInputType.PRESENCE
-        )
+        assert settings["sensorFunction"] == int(BinaryInputType.PRESENCE)
 
 
 # ===========================================================================
@@ -484,9 +481,7 @@ class TestBinaryInputPushNotification:
         assert msg.vdc_send_push_notification.dSUID == str(vdsd.dsuid)
 
         # Verify the pushed properties tree.
-        props = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
+        props = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
         assert "binaryInputStates" in props
         states = props["binaryInputStates"]
         assert "0" in states
@@ -535,9 +530,7 @@ class TestBinaryInputPushNotification:
 
         session.send_notification.assert_called_once()
         msg = session.send_notification.call_args[0][0]
-        props = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
+        props = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
         states = props["binaryInputStates"]["0"]
         assert states["extendedValue"] == 2
         assert "value" not in states
@@ -557,12 +550,8 @@ class TestBinaryInputPushNotification:
 
         session.send_notification.assert_called_once()
         msg = session.send_notification.call_args[0][0]
-        props = elements_to_dict(
-            msg.vdc_send_push_notification.changedproperties
-        )
-        assert props["binaryInputStates"]["0"]["error"] == int(
-            InputError.SHORT_CIRCUIT
-        )
+        props = elements_to_dict(msg.vdc_send_push_notification.changedproperties)
+        assert props["binaryInputStates"]["0"]["error"] == int(InputError.SHORT_CIRCUIT)
 
     @pytest.mark.asyncio
     async def test_push_handles_connection_error(self):
@@ -591,11 +580,15 @@ class TestBinaryInputPushNotification:
         vdsd = _make_vdsd(device)
 
         bi0 = BinaryInput(
-            vdsd=vdsd, ds_index=0, name="Presence",
+            vdsd=vdsd,
+            ds_index=0,
+            name="Presence",
             sensor_function=BinaryInputType.PRESENCE,
         )
         bi1 = BinaryInput(
-            vdsd=vdsd, ds_index=1, name="Window",
+            vdsd=vdsd,
+            ds_index=1,
+            name="Window",
             sensor_function=BinaryInputType.WINDOW_OPEN,
         )
         vdsd.add_binary_input(bi0)
@@ -611,16 +604,12 @@ class TestBinaryInputPushNotification:
 
         # First call pushes index 0.
         msg0 = session.send_notification.call_args_list[0][0][0]
-        props0 = elements_to_dict(
-            msg0.vdc_send_push_notification.changedproperties
-        )
+        props0 = elements_to_dict(msg0.vdc_send_push_notification.changedproperties)
         assert "0" in props0["binaryInputStates"]
 
         # Second call pushes index 1.
         msg1 = session.send_notification.call_args_list[1][0][0]
-        props1 = elements_to_dict(
-            msg1.vdc_send_push_notification.changedproperties
-        )
+        props1 = elements_to_dict(msg1.vdc_send_push_notification.changedproperties)
         assert "1" in props1["binaryInputStates"]
 
 
@@ -771,11 +760,15 @@ class TestVdsdBinaryInputProperties:
         vdsd = _make_vdsd(device)
 
         bi0 = BinaryInput(
-            vdsd=vdsd, ds_index=0, name="PIR",
+            vdsd=vdsd,
+            ds_index=0,
+            name="PIR",
             sensor_function=BinaryInputType.PRESENCE,
         )
         bi1 = BinaryInput(
-            vdsd=vdsd, ds_index=1, name="Window",
+            vdsd=vdsd,
+            ds_index=1,
+            name="Window",
             sensor_function=BinaryInputType.WINDOW_OPEN,
         )
         vdsd.add_binary_input(bi0)
@@ -815,9 +808,7 @@ class TestBinaryInputPersistence:
         assert tree["name"] == "PIR Sensor"
         assert tree["inputType"] == INPUT_TYPE_DETECTS_CHANGES
         assert tree["inputUsage"] == int(BinaryInputUsage.ROOM_CLIMATE)
-        assert tree["hardwiredFunction"] == int(
-            BinaryInputType.BATTERY_LOW
-        )
+        assert tree["hardwiredFunction"] == int(BinaryInputType.BATTERY_LOW)
         assert tree["updateInterval"] == 30.0
         assert tree["group"] == 5
         assert tree["sensorFunction"] == int(BinaryInputType.PRESENCE)
@@ -829,16 +820,18 @@ class TestBinaryInputPersistence:
         vdsd = _make_vdsd(device)
         bi = BinaryInput(vdsd=vdsd, ds_index=0)
 
-        bi._apply_state({
-            "dsIndex": 3,
-            "name": "Restored Sensor",
-            "inputType": INPUT_TYPE_POLL_ONLY,
-            "inputUsage": int(BinaryInputUsage.OUTDOOR_CLIMATE),
-            "hardwiredFunction": int(BinaryInputType.SMOKE),
-            "updateInterval": 15.0,
-            "group": 7,
-            "sensorFunction": int(BinaryInputType.WIND),
-        })
+        bi._apply_state(
+            {
+                "dsIndex": 3,
+                "name": "Restored Sensor",
+                "inputType": INPUT_TYPE_POLL_ONLY,
+                "inputUsage": int(BinaryInputUsage.OUTDOOR_CLIMATE),
+                "hardwiredFunction": int(BinaryInputType.SMOKE),
+                "updateInterval": 15.0,
+                "group": 7,
+                "sensorFunction": int(BinaryInputType.WIND),
+            }
+        )
 
         assert bi.ds_index == 3
         assert bi.name == "Restored Sensor"
@@ -968,14 +961,18 @@ class TestVdsdBinaryInputPersistence:
         vdsd.add_binary_input(bi)
 
         # Apply saved state with updated group.
-        vdsd._apply_state({
-            "binaryInputs": [{
-                "dsIndex": 0,
-                "name": "Updated PIR",
-                "group": 9,
-                "sensorFunction": int(BinaryInputType.MOTION),
-            }],
-        })
+        vdsd._apply_state(
+            {
+                "binaryInputs": [
+                    {
+                        "dsIndex": 0,
+                        "name": "Updated PIR",
+                        "group": 9,
+                        "sensorFunction": int(BinaryInputType.MOTION),
+                    }
+                ],
+            }
+        )
 
         assert bi.name == "Updated PIR"
         assert bi.group == 9
@@ -989,13 +986,17 @@ class TestVdsdBinaryInputPersistence:
         vdsd = _make_vdsd(device)
 
         bi0 = BinaryInput(
-            vdsd=vdsd, ds_index=0, name="PIR",
+            vdsd=vdsd,
+            ds_index=0,
+            name="PIR",
             sensor_function=BinaryInputType.PRESENCE,
             input_usage=BinaryInputUsage.ROOM_CLIMATE,
             group=1,
         )
         bi1 = BinaryInput(
-            vdsd=vdsd, ds_index=1, name="Window",
+            vdsd=vdsd,
+            ds_index=1,
+            name="Window",
             sensor_function=BinaryInputType.WINDOW_OPEN,
             input_usage=BinaryInputUsage.OUTDOOR_CLIMATE,
             group=3,
@@ -1221,7 +1222,6 @@ class TestBinaryInputAge:
         assert age2 > age1
 
 
-
 # ===========================================================================
 # Session fallback — update_value without explicit session
 # ===========================================================================
@@ -1333,11 +1333,13 @@ class TestVdsdAliveTimerLifecycle:
         vdsd = _make_vdsd(device)
 
         bi0 = BinaryInput(
-            vdsd=vdsd, ds_index=0,
+            vdsd=vdsd,
+            ds_index=0,
             sensor_function=BinaryInputType.PRESENCE,
         )
         bi1 = BinaryInput(
-            vdsd=vdsd, ds_index=1,
+            vdsd=vdsd,
+            ds_index=1,
             sensor_function=BinaryInputType.WINDOW_OPEN,
         )
         vdsd.add_binary_input(bi0)
