@@ -76,7 +76,7 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-import contextlib
+import contextlib  # noqa: E402
 
 from pydsvdcapi import (  # noqa: E402
     PROPERTY_TYPE_NUMERIC,

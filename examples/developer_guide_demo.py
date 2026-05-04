@@ -1326,7 +1326,7 @@ async def main() -> None:
         await host.stop()
         return
 
-    unannounced = [l for l, d in devices.items() if not d.is_announced]
+    unannounced = [loc for loc, d in devices.items() if not d.is_announced]
     if unannounced:
         warn(f"Devices {unannounced} not announced — aborting.")
         await host.stop()
