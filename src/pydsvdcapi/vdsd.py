@@ -624,13 +624,16 @@ class Vdsd:
     _VENTILATION_CHANNEL_TYPES: frozenset = frozenset({12, 13, 14, 15, 20, 21})
 
     # Features that cannot be used with TCP/IP VDC devices and must never be
-    # declared.  Two root causes:
+    # declared.  Three root causes:
     #   1. Output-mode selectors (outmode, outmodeswitch, …) write to the dSS
     #      m_OutputMode field via DS485 CfgFunction_Mode.  The written value is
     #      never forwarded to the VDC, so VDC devices cannot observe or react
     #      to the change.
     #   2. Hardware-only features (ledauto, leddark, dimmodeconfig, …) relate
     #      to physical device capabilities that have no VDC write-back path.
+    #   3. AKM input configuration (akminput, akmdelay) writes to DS485 bus
+    #      registers via setAKMInputProperty() / setAKMInputTimeouts(); the
+    #      written values are never forwarded to the VDC.
     _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset(
         {
             # LED indicators — not API-controlled on VDC devices
@@ -656,6 +659,9 @@ class Vdsd:
             "ftwdisplaysettings",
             "ftwbacklighttimeout",
             "grkl387workaround",
+            # AKM input/delay config — DS485 bus only, never reaches VDC
+            "akminput",
+            "akmdelay",
         }
     )
 
@@ -825,10 +831,8 @@ class Vdsd:
             self._model_features.add("temperatureoffset")
 
         # ---- binary input rules --------------------------------------
-        if self._binary_inputs:  # any binary input → AKM sensor UI
+        if self._binary_inputs:  # any binary input → AKM sensor function UI
             self._model_features.add("akmsensor")
-            self._model_features.add("akminput")
-            self._model_features.add("akmdelay")
 
         # ---- button rules --------------------------------------------
         if self._button_inputs:

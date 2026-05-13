@@ -213,8 +213,8 @@ All require at least one `buttonInputDescription` entry.
 | ID | Feature | Effect | dSS API | Prerequisite | Derivation |
 |---|---|---|---|---|---|
 | 22 | `akmsensor` | "Sensor Function" dropdown to configure the sensor type (motion, window…). | `setAKMInputProperty()` / `binaryInputSettings/sensorFunction` | Any binary input | `auto: any binary input` |
-| 23 | `akminput` | "Input" dropdown to configure sensor behaviour (standard / inverted). Config may be stored on dSS/vdSM rather than vdSD. | `setAKMInputProperty()` | `akmsensor` also present | `auto: any binary input` |
-| 24 | `akmdelay` | "Turn-on / Turn-off delay" dropdowns for delayed sensor response. Config may be stored on dSS/vdSM rather than vdSD. | `setAKMInputTimeouts()` / `getAKMInputTimeouts()` | `akmsensor` or `akminput` present | `auto: any binary input` |
+| 23 | `akminput` | "Input" dropdown to configure sensor behaviour (standard / inverted). **NOT supported for TCP/IP VDC** — configures via DS485 `setAKMInputProperty()` only; values are never forwarded to the VDC. | `setAKMInputProperty()` | `akmsensor` also present | `not-supported-vdc` |
+| 24 | `akmdelay` | "Turn-on / Turn-off delay" dropdowns for delayed sensor response. **NOT supported for TCP/IP VDC** — configures via DS485 `setAKMInputTimeouts()` only; values are never forwarded to the VDC. | `setAKMInputTimeouts()` / `getAKMInputTimeouts()` | `akmsensor` or `akminput` present | `not-supported-vdc` |
 
 ##### D — Joker / Group Assignment (Black / SW Group)
 

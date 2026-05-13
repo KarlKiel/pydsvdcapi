@@ -78,13 +78,13 @@ configured components.  All have a confirmed data path back to the vdSD.
 | Trigger | Features added | Configurator UI |
 |---|---|---|
 | Any binary input present | `akmsensor` | "Sensor Function" dropdown to configure the sensor type |
-| Any binary input present | `akminput` | "Input" dropdown to configure sensor behaviour (standard / inverted) |
-| Any binary input present | `akmdelay` | "Turn-on / Turn-off delay" dropdowns for delayed sensor response |
 
-> **Note on `akminput` / `akmdelay`:** These UI controls have not been
-> confirmed to store their values back to the vdSD (config may be stored on
-> the dSS/vdSM side). They are auto-derived because the three AKM features
-> always appear together on physical hardware.
+> **`akminput` and `akmdelay` are NOT supported for VDC devices.**  Both
+> features configure sensor behaviour and timing via DS485 bus calls
+> (`setAKMInputProperty()` / `setAKMInputTimeouts()`).  The written values
+> are never forwarded to the VDC, so VDC devices cannot observe or react to
+> the change.  Attempting to add either feature with
+> `add_model_feature()` raises `ValueError`.
 
 ### Button Rules
 

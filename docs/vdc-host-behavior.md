@@ -515,7 +515,7 @@ the device is announced.  Key auto-derivation rules:
 - ON_OFF function → `outconfigswitch`, `impulseconfig`
 - DIMMER / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER function → `dimtimeconfig`
 - Grey shade output with slat channel → `shadebladeang`, `motiontimefins`
-- Any binary input → `akmsensor`, `akminput`, `akmdelay`
+- Any binary input → `akmsensor` (`akminput` and `akmdelay` are not supported for VDC devices)
 - Any button → `pushbutton`, `pushbadvanced`, `pushbdisabled`
 
 Some features are **not tested** (can be set manually, VDC behavior unconfirmed):
