@@ -1901,7 +1901,7 @@ class Vdsd:
                 self.device_class = state["deviceClass"]
             if "deviceClassVersion" in state:
                 self.device_class_version = state["deviceClassVersion"]
-            if "zoneID" in state:
+            if "zoneID" in state and state["zoneID"] is not None:
                 self.zone_id = int(state["zoneID"])
             if "modelFeatures" in state:
                 self._model_features = set(state["modelFeatures"])

@@ -1165,7 +1165,7 @@ class VdcHost:
         if "name" in incoming:
             vdc.name = incoming["name"]
             logger.info("vDC '%s' name set to '%s'", vdc.dsuid, vdc.name)
-        if "zoneID" in incoming:
+        if "zoneID" in incoming and incoming["zoneID"] is not None:
             vdc.zone_id = int(incoming["zoneID"])
             logger.info("vDC '%s' zoneID set to %d", vdc.dsuid, vdc.zone_id)
 
@@ -1180,7 +1180,7 @@ class VdcHost:
         if "name" in incoming:
             vdsd.name = incoming["name"]
             logger.info("vdSD '%s' name set to '%s'", vdsd.dsuid, vdsd.name)
-        if "zoneID" in incoming:
+        if "zoneID" in incoming and incoming["zoneID"] is not None:
             vdsd.zone_id = int(incoming["zoneID"])
             logger.info("vdSD '%s' zoneID set to %d", vdsd.dsuid, vdsd.zone_id)
         if "progMode" in incoming:

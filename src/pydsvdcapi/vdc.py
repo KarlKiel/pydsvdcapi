@@ -765,8 +765,8 @@ class Vdc:
                 self.device_class_version = state["deviceClassVersion"]
             if "capabilities" in state:
                 self._capabilities = VdcCapabilities.from_dict(state["capabilities"])
-            if "zoneID" in state:
-                self.zone_id = state["zoneID"]
+            if "zoneID" in state and state["zoneID"] is not None:
+                self.zone_id = int(state["zoneID"])
 
             # Restore devices from persisted state.
             if "devices" in state:
