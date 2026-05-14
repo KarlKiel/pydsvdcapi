@@ -1834,7 +1834,7 @@ class TestDeriveModelFeatures:
 
     # ---- binary input AKM -----------------------------------------------
 
-    def test_binary_input_group8_adds_akm_features(self):
+    def test_binary_input_group8_adds_akmsensor(self):
         vdsd, _ = self._setup()
         bi = BinaryInput(
             vdsd=vdsd,
@@ -1846,11 +1846,11 @@ class TestDeriveModelFeatures:
         vdsd.add_binary_input(bi)
         vdsd.derive_model_features()
         assert "akmsensor" in vdsd.model_features
-        assert "akminput" in vdsd.model_features
-        assert "akmdelay" in vdsd.model_features
+        assert "akminput" not in vdsd.model_features
+        assert "akmdelay" not in vdsd.model_features
 
-    def test_binary_input_non_group8_also_adds_akm_features(self):
-        # Any binary input (regardless of group) enables the AKM sensor UI
+    def test_binary_input_non_group8_also_adds_akmsensor(self):
+        # Any binary input (regardless of group) enables the AKM sensor function UI
         vdsd, _ = self._setup()
         bi = BinaryInput(
             vdsd=vdsd,
@@ -1862,8 +1862,15 @@ class TestDeriveModelFeatures:
         vdsd.add_binary_input(bi)
         vdsd.derive_model_features()
         assert "akmsensor" in vdsd.model_features
-        assert "akminput" in vdsd.model_features
-        assert "akmdelay" in vdsd.model_features
+        assert "akminput" not in vdsd.model_features
+        assert "akmdelay" not in vdsd.model_features
+
+    def test_akminput_akmdelay_are_unsupported(self):
+        vdsd, _ = self._setup()
+        with pytest.raises(ValueError, match="akminput"):
+            vdsd.add_model_feature("akminput")
+        with pytest.raises(ValueError, match="akmdelay"):
+            vdsd.add_model_feature("akmdelay")
 
     # ---- primaryGroup-based rules ---------------------------------------
 

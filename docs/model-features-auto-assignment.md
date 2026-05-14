@@ -79,7 +79,12 @@ configured components.  All have a confirmed data path back to the vdSD.
 |---|---|---|
 | Any binary input present | `akmsensor` | "Sensor Function" dropdown to configure the sensor type |
 
-> **Note on `akminput` / `akmdelay`:** These UI controls are often used in conjunction with akmsensor. Nevertheless, other than akmsensor vdc-api does not contain properties to store the values. Therefore, these are hardware-specific capabilities of native ds devices.
+> **`akminput` and `akmdelay` are NOT supported for VDC devices.**  Both
+> features configure sensor behaviour and timing via DS485 bus calls
+> (`setAKMInputProperty()` / `setAKMInputTimeouts()`).  The written values
+> are never forwarded to the VDC, so VDC devices cannot observe or react to
+> the change.  Attempting to add either feature with
+> `add_model_feature()` raises `ValueError`.
 
 ### Button Rules
 
