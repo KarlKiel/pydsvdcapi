@@ -78,13 +78,8 @@ configured components.  All have a confirmed data path back to the vdSD.
 | Trigger | Features added | Configurator UI |
 |---|---|---|
 | Any binary input present | `akmsensor` | "Sensor Function" dropdown to configure the sensor type |
-| Any binary input present | `akminput` | "Input" dropdown to configure sensor behaviour (standard / inverted) |
-| Any binary input present | `akmdelay` | "Turn-on / Turn-off delay" dropdowns for delayed sensor response |
 
-> **Note on `akminput` / `akmdelay`:** These UI controls have not been
-> confirmed to store their values back to the vdSD (config may be stored on
-> the dSS/vdSM side). They are auto-derived because the three AKM features
-> always appear together on physical hardware.
+> **Note on `akminput` / `akmdelay`:** These UI controls are often used in conjunction with akmsensor. Nevertheless, other than akmsensor vdc-api does not contain properties to store the values. Therefore, these are hardware-specific capabilities of native ds devices.
 
 ### Button Rules
 
@@ -202,6 +197,8 @@ API interaction.
 | `ftwdisplaysettings` | **(B)** FTW display panel settings (brightness, contrast) — hardware-specific to physical SK204/FTW display panels; no VDC equivalent |
 | `ftwbacklighttimeout` | **(B)** FTW display panel backlight timeout — same hardware-specific reason |
 | `grkl387workaround` | **(B)** Hardware workaround for specific KL 0x387 firmware bug — injected by dSS firmware for physical KL devices; meaningless for VDC |
+| `akminput` | **(B)** "Input" dropdown to configure sensor behaviour (standard / inverted...) — hardware specific, no handlers / properties in vdc-API |
+| `akmdelay` | **(B)** "Turn-on / Turn-off delay" timings dropdowns for delayed sensor response — hardware specific, no handlers / properties in vdc-API |
 
 ---
 
