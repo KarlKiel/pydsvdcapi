@@ -8,7 +8,7 @@ vDC API protocol, derived from the official documentation:
 - vDC API properties specification
 - vdcapi.proto
 - vdc_messages.proto
-- re-engineering of dss-mainline-master  
+- re-engineering of dss-mainline-master
 - live testing against dss (1.19.12)
 """
 
@@ -119,7 +119,7 @@ class ColorGroup(IntEnum):
 
     For primaryGroup **only values 1–9 are valid**.  The extended
     Blue sub-types 10 (Ventilation), 11 (Window), and 12 (Recirculation) exist
-    partly for groups[] (only values <64 are supported) and defaultGroup and active Group (full colorClass see below). 
+    partly for groups[] (only values <64 are supported) and defaultGroup and active Group (full colorClass see below).
     Use ``BLUE = 3`` for all climate sub-types
     (heating, cooling, ventilation, window openers, fan-coil units).
 
