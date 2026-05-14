@@ -714,7 +714,9 @@ class TestHandleIdentifyGenericRequest:
 # ---------------------------------------------------------------------------
 
 
-def _make_scan_devices_msg(dsuid_str: str, method: str = "scanDevices", msg_id: int = 55) -> "pb.Message":
+def _make_scan_devices_msg(
+    dsuid_str: str, method: str = "scanDevices", msg_id: int = 55
+) -> "pb.Message":
     """Build a GenericRequest 'scanDevices' protobuf message."""
     msg = pb.Message()
     msg.type = pb.VDSM_REQUEST_GENERIC_REQUEST
