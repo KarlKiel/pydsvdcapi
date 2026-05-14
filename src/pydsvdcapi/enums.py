@@ -6,7 +6,10 @@ vDC API protocol, derived from the official documentation:
 - ds-basics.pdf (v1.6, May 2020)
 - vDC API specification
 - vDC API properties specification
-- genericVDC.proto
+- vdcapi.proto
+- vdc_messages.proto
+- re-engineering of dss-mainline-master  
+- live testing against dss (1.19.12)
 """
 
 from enum import IntEnum, unique
