@@ -217,12 +217,12 @@ All 65 features defined in `src/model/modelconst.h` (enum class `ModelFeatureId`
 | 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable |
 | 17 | `optypeconfig` | Output | Output type configurable (switch/dimmer selector) |
 | 18 | `shadebladeang` | Shade | Venetian blind blade angle configurable |
-| 19 | `highlevel` | Joker | High-level scene/application control |
+| 19 | `highlevel` | Joker | Selection to configure App-Button within pushbutton |
 | 20 | `consumption` | Joker | Power consumption measurement/reporting |
 | 21 | `jokerconfig` | Joker | Joker device group-assignment UI |
-| 22 | `akmsensor` | AKM | AKM bus sensor input |
-| 23 | `akminput` | AKM | AKM bus digital input |
-| 24 | `akmdelay` | AKM | AKM input delay configurable |
+| 22 | `akmsensor` | Binary Input | Selection of SensorFunction for binary inputs |
+| 23 | `akminput` | AKM | Selection of adjustments for AKM's binary inputs (e.g. standard, inverted, rising edge on, falling edge off...) **NOT supported for TCP/IP VDC** (hardware specific) |
+| 24 | `akmdelay` | AKM | Delay timing settings for AKM's binary inputs **NOT supported for TCP/IP VDC** (hardware specific) |
 | 25 | `twowayconfig` | Config | Two-way/bidirectional operation configurable. **NOT supported for TCP/IP VDC** — same reason as `pushbcombined`; `buttonType` is read-only and hardware-specific. |
 | 26 | `outputchannels` | Output | Multiple output channels supported (RGB, dimmer+relay) |
 | 27 | `heatinggroup` | Heating | Heating application group assignment UI |

@@ -24,12 +24,12 @@ different zone/group.
 
 ## What Does NOT Require Splitting
 
-| Component | Per vdSD | Why |
-|---|---|---|
-| Button inputs | 0 to many | Stored as array; each has its own group/function setting |
-| Binary inputs | 0 to many | Stored as array with individual group settings |
-| Sensors | 0 to many | Stored as array |
-| Output channels | 1 to many (on the single output) | Parameters of one output function |
+| Component | Allowed Per vdSD | Recommendation | Why? |
+|---|---|---|---|
+| Button inputs | 0 to many | Single Pushbutton or Pushbuttongroup only | Even though buttons are stored as array with its own group/function setting, configurator UI only allows config for first Button/Buttongroup |
+| Binary inputs | 0 to many | Single Binary input per vdsd only | Even though binary inputs are stored as array with individual group settings configurator UI only allows config for first binary input |
+| Sensors | 0 to many | 0 to many |Stored as array, no individual sensor settings available |
+| Output channels | 1 to many (on the single output) | # of channels normally directly related to outputFunction | setting of outputFunction expects specific number and types for specific outputFunctions  |
 
 A paired up/down rocker (2 buttons) is one vdSD with 2 button inputs at
 index 0 and 1.
@@ -54,9 +54,12 @@ to 0,1 and 2,3).
 
 ## Quick Decision Checklist
 
-1. Count independent outputs → one vdSD per output.
-2. Can functional units end up in different zones? → separate vdSDs.
-3. Do functional units belong to different dS classes (colors)? → separate vdSDs.
-4. Multiple buttons/sensors/inputs on the same functional unit → keep in one vdSD.
-5. Is the hardware permanently integrated? → use `derive_subdevice()` enumeration.
-6. Are parts physically separable? → use fully distinct dSUIDs.
+1. Try to bring together capabilities of a physical device in as less vdsds as possible.
+2. Are parts physically separable? → use fully distinct dSUIDs.
+3. Does the (sub-)device contain several sensors → keep as on vdsd
+4. Does the (sub-)device contain different kinds of capabilities (Button, binary Input, Sensors, Output) → keep as one vdsd
+5. Do functional units belong to different dS classes (colors)? → separate vdSDs.
+6. Can functional units end up in different zones? → separate vdSDs.
+7. Does the device contain several different outputs (not channels!) → one vdSD per output.
+8. Are there multiple buttons/ binary inputs on the same functional unit that shall be configurable via ds configurator?→ separate vdSDs.
+9. Is the hardware permanently integrated? → use `derive_subdevice()` enumeration.

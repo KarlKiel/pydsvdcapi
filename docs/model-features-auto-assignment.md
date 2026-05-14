@@ -202,6 +202,8 @@ API interaction.
 | `ftwdisplaysettings` | **(B)** FTW display panel settings (brightness, contrast) — hardware-specific to physical SK204/FTW display panels; no VDC equivalent |
 | `ftwbacklighttimeout` | **(B)** FTW display panel backlight timeout — same hardware-specific reason |
 | `grkl387workaround` | **(B)** Hardware workaround for specific KL 0x387 firmware bug — injected by dSS firmware for physical KL devices; meaningless for VDC |
+| `akminput` | **(B)** "Input" dropdown to configure sensor behaviour (standard / inverted...) — hardware specific, no handlers / properties in vdc-API |
+| `akmdelay` | **(B)** "Turn-on / Turn-off delay" timings dropdowns for delayed sensor response — hardware specific, no handlers / properties in vdc-API |
 
 ---
 

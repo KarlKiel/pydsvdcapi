@@ -6,7 +6,10 @@ vDC API protocol, derived from the official documentation:
 - ds-basics.pdf (v1.6, May 2020)
 - vDC API specification
 - vDC API properties specification
-- genericVDC.proto
+- vdcapi.proto
+- vdc_messages.proto
+- re-engineering of dss-mainline-master  
+- live testing against dss (1.19.12)
 """
 
 from enum import IntEnum, unique
@@ -114,10 +117,10 @@ class ColorGroup(IntEnum):
     Identifies the colour / functional category of the device as a whole.
     This value is sent in the ``primaryGroup`` field of the vdSD announcement.
 
-    For TCP/IP VDC (this library) **only values 1–9 are valid**.  The extended
+    For primaryGroup **only values 1–9 are valid**.  The extended
     Blue sub-types 10 (Ventilation), 11 (Window), and 12 (Recirculation) exist
-    in the dSS data model but are only set via the backend-VDC path and cannot
-    be declared by a TCP/IP VDC.  Use ``BLUE = 3`` for all climate sub-types
+    partly for groups[] (only values <64 are supported) and defaultGroup and active Group (full colorClass see below). 
+    Use ``BLUE = 3`` for all climate sub-types
     (heating, cooling, ventilation, window openers, fan-coil units).
 
     **Do NOT use for output fields** (``Output.default_group``,
@@ -170,6 +173,7 @@ class ColorClass(IntEnum):
     +===============+=========+==============================+==============+
     | YELLOW (1)    |    1    | LIGHTS (1)                   | Lights       |
     | GREY (2)      |    2    | BLINDS (2)                   | Shades       |
+    | GREY (2)      |    2    | AWNINGS (65) (outside)       | AWNING       |
     | BLUE (3)      |    3    | HEATING (3)                  | Heating      |
     | BLUE (3)      |    3    | COOLING (9)                  | Cooling      |
     | BLUE (3)      |    3    | VENTILATION (10)             | Ventilation  |
@@ -177,6 +181,7 @@ class ColorClass(IntEnum):
     | BLUE (3)      |    3    | RECIRCULATION (12)           | Fan-coil     |
     | BLUE (3)      |    3    | TEMPERATURE_CONTROL (48)     | Temp control |
     | BLUE (3)      |    3    | APARTMENT_VENTILATION (64)   | Apt. vent.   |
+    | BLUE (3)      |    3    | APARTEMENT_RECICULATION (69) | Apt. recirc. |
     | CYAN (4)      |    4    | AUDIO (4)                    | Audio        |
     | MAGENTA (5)   |    5    | VIDEO (5)                    | Video        |
     | RED (6)       |    6    | SECURITY (6)  [deprecated]   | Alarms       |
@@ -200,9 +205,7 @@ class ColorClass(IntEnum):
     WINDOW = 11  # Window openers
     RECIRCULATION = 12  # Recirculation / fan-coil units → airFlowIntensity
     TEMPERATURE_CONTROL = 48  # Single-room temperature control (valid in groups)
-    APARTMENT_VENTILATION = (
-        64  # Apartment-wide ventilation system (NOT valid in groups)
-    )
+    APARTMENT_VENTILATION = 64  # Apartment-wide ventilation system (NOT valid in groups)
     AWNINGS = 65  # Awnings global app group (NOT valid in groups)
     APARTMENT_RECIRCULATION = 69  # Apartment-wide recirculation (NOT valid in groups)
 
