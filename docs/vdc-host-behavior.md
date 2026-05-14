@@ -71,6 +71,26 @@ No intervention from user code is required for reconnect.  Every vDC
 and device declared before `host.start()` is automatically presented
 to each new session.
 
+### 2.6 On-demand re-announcement (`scanDevices`)
+
+When a user clicks **"Re-register devices"** in the dSS configurator, the
+vdSM sends a `scanDevices` GenericRequest to the vDC host.  The request
+targets a specific vDC dSUID and asks the vDC to re-send its full
+announcement.
+
+pydsvdcapi handles this automatically:
+
+1. Resets the announcement flags for the addressed vDC and all its devices.
+2. Re-sends `VDC_SEND_ANNOUNCE_VDC` for the vDC.
+3. Re-sends `VDC_SEND_ANNOUNCE_DEVICE` for every device in the vDC.
+
+If the dSUID in the request matches the **vDC host** dSUID (rather than a
+specific vDC), all registered vDCs and their devices are re-announced.
+
+> **Version suffix:** The vdSM may send `scanDevices/6` (or another
+> version number) rather than the bare `scanDevices`.  pydsvdcapi strips
+> the suffix before dispatch, so all firmware versions are supported.
+
 ---
 
 ## 3. Vdc — one logical connector per integration type

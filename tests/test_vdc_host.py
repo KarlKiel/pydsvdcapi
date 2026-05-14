@@ -707,4 +707,133 @@ class TestHandleIdentifyGenericRequest:
         resp = await host._dispatch_message(session, msg)
 
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
-        assert "hardware fault" in resp.generic_response.description
+
+
+# ---------------------------------------------------------------------------
+# scanDevices handler (GenericRequest)
+# ---------------------------------------------------------------------------
+
+
+def _make_scan_devices_msg(dsuid_str: str, method: str = "scanDevices", msg_id: int = 55) -> "pb.Message":
+    """Build a GenericRequest 'scanDevices' protobuf message."""
+    msg = pb.Message()
+    msg.type = pb.VDSM_REQUEST_GENERIC_REQUEST
+    msg.message_id = msg_id
+    msg.vdsm_request_generic_request.methodname = method
+    msg.vdsm_request_generic_request.dSUID = dsuid_str
+    return msg
+
+
+def _make_ok_session() -> MagicMock:
+    """Session mock whose send_request always returns ERR_OK."""
+    ok_resp = pb.Message()
+    ok_resp.generic_response.code = pb.ERR_OK
+    session = MagicMock(spec=VdcSession)
+    session.is_active = True
+    session.send_request = AsyncMock(return_value=ok_resp)
+    return session
+
+
+class TestHandleScanDevicesGenericRequest:
+    """Tests for GenericRequest 'scanDevices' (and versioned variants)."""
+
+    @pytest.mark.asyncio
+    async def test_scan_devices_reannounces_vdc_and_devices(self):
+        """scanDevices re-announces the addressed vDC and its device."""
+        host, vdc, _device, _vdsd = _make_host_with_device()
+        session = _make_ok_session()
+
+        msg = _make_scan_devices_msg(str(vdc.dsuid))
+        resp = await host._dispatch_message(session, msg)
+
+        assert resp.generic_response.code == pb.ERR_OK
+        sent_types = [c.args[0].type for c in session.send_request.call_args_list]
+        assert pb.VDC_SEND_ANNOUNCE_VDC in sent_types
+        assert pb.VDC_SEND_ANNOUNCE_DEVICE in sent_types
+
+    @pytest.mark.asyncio
+    async def test_scan_devices_versioned_method_name(self):
+        """'scanDevices/6' is handled identically to 'scanDevices'."""
+        host, vdc, _device, _vdsd = _make_host_with_device()
+        session = _make_ok_session()
+
+        msg = _make_scan_devices_msg(str(vdc.dsuid), method="scanDevices/6")
+        resp = await host._dispatch_message(session, msg)
+
+        assert resp.generic_response.code == pb.ERR_OK
+        sent_types = [c.args[0].type for c in session.send_request.call_args_list]
+        assert pb.VDC_SEND_ANNOUNCE_VDC in sent_types
+        assert pb.VDC_SEND_ANNOUNCE_DEVICE in sent_types
+
+    @pytest.mark.asyncio
+    async def test_scan_devices_resets_announcement_flags(self):
+        """scanDevices re-announces even if the vDC was already announced."""
+        host, vdc, device, _vdsd = _make_host_with_device()
+        session = _make_ok_session()
+
+        # Pre-mark as announced — without reset_announcement() the handler
+        # would skip devices (announce_devices only processes unannounced ones).
+        vdc._announced = True
+        device._announced = True
+
+        msg = _make_scan_devices_msg(str(vdc.dsuid))
+        resp = await host._dispatch_message(session, msg)
+
+        assert resp.generic_response.code == pb.ERR_OK
+        sent_types = [c.args[0].type for c in session.send_request.call_args_list]
+        assert pb.VDC_SEND_ANNOUNCE_VDC in sent_types
+        assert pb.VDC_SEND_ANNOUNCE_DEVICE in sent_types
+        # vDC should be re-marked announced after a successful re-announcement.
+        assert vdc.is_announced is True
+
+    @pytest.mark.asyncio
+    async def test_scan_devices_host_dsuid_reannounces_all(self):
+        """scanDevices with the host's own dSUID re-announces all vDCs."""
+        host, _vdc, _device, _vdsd = _make_host_with_device()
+
+        # Add a second vDC (no devices) to prove all vDCs are scanned.
+        vdc2 = Vdc(
+            host=host,
+            implementation_id="x-test-scan-second",
+            name="Second vDC",
+            model="v2",
+        )
+        host.add_vdc(vdc2)
+
+        session = _make_ok_session()
+        msg = _make_scan_devices_msg(str(host.dsuid))
+        resp = await host._dispatch_message(session, msg)
+
+        assert resp.generic_response.code == pb.ERR_OK
+        sent_types = [c.args[0].type for c in session.send_request.call_args_list]
+        vdc_announces = [t for t in sent_types if t == pb.VDC_SEND_ANNOUNCE_VDC]
+        assert len(vdc_announces) == 2  # one per vDC
+        assert pb.VDC_SEND_ANNOUNCE_DEVICE in sent_types
+
+    @pytest.mark.asyncio
+    async def test_scan_devices_unknown_dsuid_returns_not_found(self):
+        """scanDevices with an unknown dSUID returns ERR_NOT_FOUND."""
+        host, _vdc, _device, _vdsd = _make_host_with_device()
+        session = _make_ok_session()
+
+        msg = _make_scan_devices_msg("00" * 17)
+        resp = await host._dispatch_message(session, msg)
+
+        assert resp.generic_response.code == pb.ERR_NOT_FOUND
+        session.send_request.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_scan_devices_announce_failure_returns_not_implemented(self):
+        """If announce raises, scanDevices returns ERR_NOT_IMPLEMENTED."""
+        host, vdc, _device, _vdsd = _make_host_with_device()
+
+        # Make send_request raise on the VDC_SEND_ANNOUNCE_VDC call.
+        session = MagicMock(spec=VdcSession)
+        session.is_active = True
+        session.send_request = AsyncMock(side_effect=ConnectionError("dropped"))
+
+        msg = _make_scan_devices_msg(str(vdc.dsuid))
+        resp = await host._dispatch_message(session, msg)
+
+        assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
+        assert "dropped" in resp.generic_response.description

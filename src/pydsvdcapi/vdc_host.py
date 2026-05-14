@@ -1364,13 +1364,24 @@ class VdcHost:
         * ``authenticate`` (§7.4.2) — authentication process.
         * ``firmwareUpgrade`` (§7.4.3) — firmware upgrade process.
         * ``setConfiguration`` (§7.4.4) — change device configuration.
+        * ``scanDevices`` — re-announce the addressed vDC and all its
+          devices (triggered by "re-register devices" in the dSS
+          configurator).  Version-suffixed variants such as
+          ``scanDevices/6`` are accepted; the suffix is stripped before
+          dispatch.
+
+        The vdSM may append a ``/<version>`` suffix to any method name
+        (e.g. ``scanDevices/6``).  The handler strips the suffix before
+        matching, so all version variants are dispatched to the same
+        branch.
 
         All other method names are delegated to the user-supplied
         ``on_message`` callback. If no callback handles them, an
         ``ERR_NOT_IMPLEMENTED`` response is returned.
         """
         req = msg.vdsm_request_generic_request
-        method = req.methodname
+        # Strip optional API-version suffix, e.g. "scanDevices/6" → "scanDevices".
+        method = req.methodname.split("/", 1)[0]
         dsuid_str = req.dSUID
 
         # Parse params PropertyElements into a flat dict.
@@ -1555,6 +1566,37 @@ class VdcHost:
                 resp.generic_response.description = (
                     "setConfiguration: no callback registered"
                 )
+            return resp
+
+        if method == "scanDevices":
+            # Re-announce the addressed vDC and all its devices.
+            # Matches "scanDevices" and versioned variants (version stripped above).
+            dsuid_upper = dsuid_str.upper()
+            if dsuid_upper in self._vdcs:
+                vdcs_to_scan: list[Vdc] = [self._vdcs[dsuid_upper]]
+            elif dsuid_upper == str(self._dsuid).upper():
+                vdcs_to_scan = list(self._vdcs.values())
+            else:
+                resp.generic_response.code = pb.ERR_NOT_FOUND
+                resp.generic_response.description = (
+                    f"scanDevices: vDC {dsuid_str} not found"
+                )
+                return resp
+            try:
+                for vdc in vdcs_to_scan:
+                    logger.info(
+                        "scanDevices: re-announcing vDC '%s' (%s)",
+                        vdc.name,
+                        vdc.dsuid,
+                    )
+                    vdc.reset_announcement()
+                    await vdc.announce(session)
+                    await vdc.announce_devices(session)
+                resp.generic_response.code = pb.ERR_OK
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("scanDevices failed for %s", dsuid_str)
+                resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
+                resp.generic_response.description = str(exc)
             return resp
 
         # Unknown generic request — delegate to user callback.
