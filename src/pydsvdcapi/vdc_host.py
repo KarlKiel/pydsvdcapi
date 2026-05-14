@@ -1381,7 +1381,7 @@ class VdcHost:
         """
         req = msg.vdsm_request_generic_request
         # Strip optional API-version suffix, e.g. "scanDevices/6" → "scanDevices".
-        method = req.methodname.split("/")[0]
+        method = req.methodname.split("/", 1)[0]
         dsuid_str = req.dSUID
 
         # Parse params PropertyElements into a flat dict.
@@ -1573,7 +1573,7 @@ class VdcHost:
             # Matches "scanDevices" and versioned variants (version stripped above).
             dsuid_upper = dsuid_str.upper()
             if dsuid_upper in self._vdcs:
-                vdcs_to_scan: list[Any] = [self._vdcs[dsuid_upper]]
+                vdcs_to_scan: list[Vdc] = [self._vdcs[dsuid_upper]]
             elif dsuid_upper == str(self._dsuid).upper():
                 vdcs_to_scan = list(self._vdcs.values())
             else:
