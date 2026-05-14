@@ -216,16 +216,9 @@ directly to the firmware's `ApplicationType` enum (`modelconst.h`):
 > `SHADE_POSITION_OUTSIDE` (channel 7) for roller shutters.  There is no
 > separate group for indoor shade in the firmware.
 >
-> **Awnings** are a distinct application group (65), completely independent
-> from blinds group (2).  A zone can contain blinds OR awnings, but mixing
-> both in the same zone causes unpredictable behaviour (see firmware comment:
-> "The installation must not have shades and legacy awnings devices").
->
 > **`WHITE = 9`** — setting `primaryGroup = 9` on a VDC device causes the
 > dSS to treat it as a white / Single Device (Einzelgerät), confirmed on
-> real hardware.  The firmware source defines both `ApplicationType::cooling`
-> and `ColorIDWhite` as the integer 9; for VDC devices the dSS resolves this
-> as white, not cooling.
+> real hardware. (Do not confuse with colorClass=9, Cooling)
 
 **Relation to output group fields** — `primaryGroup` is a device-level property
 (type classification).  The output-level fields `default_group`, `active_group`,
