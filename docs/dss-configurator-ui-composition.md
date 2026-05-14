@@ -217,7 +217,7 @@ All 65 features defined in `src/model/modelconst.h` (enum class `ModelFeatureId`
 | 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable |
 | 17 | `optypeconfig` | Output | Output type configurable (switch/dimmer selector) |
 | 18 | `shadebladeang` | Shade | Venetian blind blade angle configurable |
-| 19 | `highlevel` | Joker | High-level scene/application control |
+| 19 | `highlevel` | Joker | Selection to configure App-Button within pushbutton |
 | 20 | `consumption` | Joker | Power consumption measurement/reporting |
 | 21 | `jokerconfig` | Joker | Joker device group-assignment UI |
 | 22 | `akmsensor` | Binary Input | Selection of SensorFunction for binary inputs |
