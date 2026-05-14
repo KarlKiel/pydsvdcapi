@@ -724,8 +724,7 @@ class Vdsd:
 
         **Binary input rules**
 
-        * Any binary input present → ``"akmsensor"`` +
-          ``"akminput"`` + ``"akmdelay"``
+        * Any binary input present → ``"akmsensor"``
 
         **Button rules**
 
