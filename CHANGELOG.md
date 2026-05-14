@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-05-14
+
+### Fixed
+- AKM (Aktor-Kontakt-Modul) input handling: `AKMINPUT` and `AKMDELAY` model
+  features are now correctly marked as unsupported in device announcements.
+- AKM input behavior adjustments for proper integration with dSS firmware.
+- `zoneId = NULL` behavior correction in device address handling.
+- Code formatting to comply with ruff linter standards (line length, imports).
+- Minor enum documentation clarifications.
+
+### Changed
+- Updated enum documentation for button input modes and AKM-related features.
+- Enhanced dSS Configurator UI composition documentation.
+
 ## [0.8.0] - 2026-05-04
 
 ### Changed
@@ -40,5 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DsUid` — dSUID encoding/decoding with multiple creation strategies.
 - Property handling helpers (`build_get_property_response`, etc.).
 
+[0.8.1]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.1.0...v0.8.0
 [0.1.0]: https://github.com/KarlKiel/pyDSvDCAPI/releases/tag/v0.1.0
