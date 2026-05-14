@@ -205,7 +205,9 @@ class ColorClass(IntEnum):
     WINDOW = 11  # Window openers
     RECIRCULATION = 12  # Recirculation / fan-coil units → airFlowIntensity
     TEMPERATURE_CONTROL = 48  # Single-room temperature control (valid in groups)
-    APARTMENT_VENTILATION = 64  # Apartment-wide ventilation system (NOT valid in groups)
+    APARTMENT_VENTILATION = (
+        64  # Apartment-wide ventilation system (NOT valid in groups)
+    )
     AWNINGS = 65  # Awnings global app group (NOT valid in groups)
     APARTMENT_RECIRCULATION = 69  # Apartment-wide recirculation (NOT valid in groups)
 
