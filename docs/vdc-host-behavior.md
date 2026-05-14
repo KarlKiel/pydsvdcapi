@@ -227,7 +227,7 @@ space (1–12, 48, 64, 65, 69).  For most devices all four values carry the same
 They diverge for joker devices: a joker device can declare `primaryGroup=8` while having
 its output `active_group=1` (LIGHTS) — making the joker output participate in light
 scene calls.  They also diverge for apartment-level outputs (e.g. an apartment
-ventilation device uses `primaryGroup=9` / WHITE with `active_group=64` /
+ventilation device uses `primaryGroup=3` / BLUE with `active_group=64` /
 APARTMENT_VENTILATION, since 64 is not valid in `primaryGroup` for TCP/IP VDC).
 See §6.2 for details on how these three output fields differ and how the dSS
 processes each one.
