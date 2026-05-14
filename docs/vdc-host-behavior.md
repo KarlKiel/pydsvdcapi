@@ -306,21 +306,21 @@ dS485 bus protocol.  When the dSS backend-VDC REST path is used instead, the dSS
 |---|---|---|---|
 | YELLOW (1) | `LIGHTS` | 1 | Dimmable light, switched light, RGB light |
 | GREY (2) | `BLINDS` | 2 | Outdoor roller shutter, venetian blind, indoor curtain, awning |
+| GREY (2) | `AWNINGS` | 65 | Awnings (global app group; NOT in `groups`) |
 | BLUE (3) | `HEATING` | 3 | Heating radiator valve, floor heating actuator |
 | BLUE (3) | `COOLING` | 9 | Active cooling device |
 | BLUE (3) | `VENTILATION` | 10 | Room ventilation unit (HRV, AHU, exhaust fan) |
 | BLUE (3) | `WINDOW` | 11 | Motorised window opener |
 | BLUE (3) | `RECIRCULATION` | 12 | Fan-coil unit, split AC, recirculation unit |
 | BLUE (3) | `TEMPERATURE_CONTROL` | 48 | Room temperature controller (thermostat head) |
+| BLUE (3) | `APARTMENT_VENTILATION` | 64 | Apartment-level ventilation unit (global app group; NOT in `groups`) |
+| BLUE (3) | `APARTMENT_RECIRCULATION` | 69 | Apartment-level recirculation unit (global app group; NOT in `groups`) |
 | CYAN (4) | `AUDIO` | 4 | Audio speaker / player instance |
 | MAGENTA (5) | `VIDEO` | 5 | Video / TV device |
 | RED (6) | `SECURITY` | 6 | Security / alarm output *(deprecated)* |
 | GREEN (7) | `ACCESS` | 7 | Door lock, gate opener *(deprecated)* |
 | BLACK (8) | `JOKER` | 8 | Generic joker / configurable device |
 | WHITE (9) | `NONE` | 0 | Complex single device (no color logic) |
-| WHITE (9) | `APARTMENT_VENTILATION` | 64 | Apartment-level ventilation unit (global app group; NOT in `groups`) |
-| WHITE (9) | `AWNINGS` | 65 | Awnings (global app group; NOT in `groups`) |
-| WHITE (9) | `APARTMENT_RECIRCULATION` | 69 | Apartment-level recirculation unit (global app group; NOT in `groups`) |
 
 ### 6.3 Output channels
 
