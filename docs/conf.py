@@ -3,10 +3,12 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../src"))
 
+from pydsvdcapi import __version__
+
 project = "pydsvdcapi"
 copyright = "2024, KarlKiel"
 author = "KarlKiel"
-release = "0.8.0"
+release = __version__
 
 extensions = [
     "sphinx.ext.autodoc",
