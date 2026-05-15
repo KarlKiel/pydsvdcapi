@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_pydsvdcapi.py::test_version -v)",
+      "Bash(python -m pytest tests/test_pydsvdcapi.py::test_version -q)"
+    ]
+  }
+}
