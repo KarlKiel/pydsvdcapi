@@ -91,6 +91,31 @@ specific vDC), all registered vDCs and their devices are re-announced.
 > version number) rather than the bare `scanDevices`.  pydsvdcapi strips
 > the suffix before dispatch, so all firmware versions are supported.
 
+### 2.7 Offline deletions and `pendingVanish`
+
+The vdSM requires an explicit `VDC_SEND_VANISH` to remove a device or vDC
+from its database — it does **not** reconcile on re-announcement.  This
+means a device deleted while the vDC host is offline must still receive a
+vanish message on the next reconnect.
+
+pydsvdcapi handles this automatically via a persistent `pendingVanish` list:
+
+1. When `host.remove_vdc(dsuid)` is called, the vDC dSUID and all its
+   devices' Vdsd dSUIDs are added to `_pending_vanish`.
+2. When `vdc.remove_device(dsuid)` is called, all Vdsd dSUIDs of that
+   device are added to `_pending_vanish`.
+3. The set is persisted in the YAML state file under `pendingVanish` so a
+   process restart does not lose it.
+4. When a new session is established, `_on_session_ready()` calls
+   `_flush_pending_vanish()` **before** re-announcing surviving vDCs.
+   This sends `VDC_SEND_VANISH` for every entry, then clears the set and
+   saves.
+
+> **vdSM-initiated removals:** When the vdSM itself sends
+> `VDSM_SEND_REMOVE`, pydsvdcapi removes the device from its registry but
+> does **not** add it to `pendingVanish` — the vdSM already removed it
+> from its own database.
+
 ---
 
 ## 3. Vdc — one logical connector per integration type
