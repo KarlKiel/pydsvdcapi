@@ -483,8 +483,11 @@ class VdcHost:
         vdc = self._vdcs.pop(key, None)
         if vdc is not None:
             logger.info("Removed vDC '%s' (dSUID %s)", vdc.name, key)
-            if self._auto_save_enabled:
-                self._schedule_auto_save()
+            dsuids: set[str] = {key}
+            for device in vdc.devices.values():
+                for vdsd in device.vdsds.values():
+                    dsuids.add(str(vdsd.dsuid))
+            self._add_pending_vanish(dsuids)  # also schedules auto-save
         return vdc
 
     def get_vdc(self, dsuid: DsUid) -> Vdc | None:
@@ -1706,7 +1709,9 @@ class VdcHost:
                 return resp
 
         # Remove the device from the vDC.
-        owning_vdc.remove_device(dsuid)
+        # track_vanish=False: the vdSM initiated this removal and has
+        # already deleted the device from its own database.
+        owning_vdc.remove_device(dsuid, track_vanish=False)
         logger.info(
             "remove: device %s removed from vDC '%s'",
             dsuid_str,

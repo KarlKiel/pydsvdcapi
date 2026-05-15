@@ -406,15 +406,24 @@ class Vdc:
         if getattr(self, "_auto_save_enabled", False):
             self._host._schedule_auto_save()
 
-    def remove_device(self, dsuid: DsUid) -> Device | None:
+    def remove_device(self, dsuid: DsUid, track_vanish: bool = True) -> Device | None:
         """Remove a device by its base dSUID.
 
         Returns the removed :class:`Device` or ``None``.
+
+        Set ``track_vanish=False`` when the removal was initiated by the
+        vdSM (VDSM_SEND_REMOVE) — in that case the vdSM already removed
+        the device from its own database and no vanish is needed.
         """
         key = str(dsuid.device_base())
         device = self._devices.pop(key, None)
         if device is not None:
             logger.info("Removed device %s from vDC '%s'", key, self.name)
+            if track_vanish:
+                dsuids = {str(vdsd.dsuid) for vdsd in device.vdsds.values()}
+                if dsuids:
+                    self._host._add_pending_vanish(dsuids)  # also schedules save
+                    return device
             if getattr(self, "_auto_save_enabled", False):
                 self._host._schedule_auto_save()
         return device

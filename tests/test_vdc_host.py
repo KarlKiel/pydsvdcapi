@@ -945,3 +945,47 @@ class TestPendingVanishInfrastructure:
         }
         assert "stale-dsuid" in vanished
         assert host._pending_vanish == set()
+
+
+# ---------------------------------------------------------------------------
+# _pending_vanish — wiring through remove_vdc / remove_device
+# ---------------------------------------------------------------------------
+
+
+class TestPendingVanishWiring:
+    """Tests that remove_vdc and remove_device populate _pending_vanish."""
+
+    def test_remove_vdc_adds_vdc_dsuid_to_pending_vanish(self):
+        host, vdc, _device, _vdsd = _make_host_with_device()
+        vdc_dsuid = str(vdc.dsuid)
+
+        host.remove_vdc(vdc.dsuid)
+
+        assert vdc_dsuid in host._pending_vanish
+
+    def test_remove_vdc_adds_vdsd_dsuids_to_pending_vanish(self):
+        host, vdc, _device, vdsd = _make_host_with_device()
+        vdsd_dsuid = str(vdsd.dsuid)
+
+        host.remove_vdc(vdc.dsuid)
+
+        assert vdsd_dsuid in host._pending_vanish
+
+    def test_remove_device_adds_vdsd_dsuids_to_pending_vanish(self):
+        host, vdc, device, vdsd = _make_host_with_device()
+        vdsd_dsuid = str(vdsd.dsuid)
+
+        vdc.remove_device(device.dsuid)
+
+        assert vdsd_dsuid in host._pending_vanish
+
+    @pytest.mark.asyncio
+    async def test_handle_remove_does_not_add_to_pending_vanish(self):
+        """vdSM-initiated removal must NOT populate _pending_vanish."""
+        host, _vdc, _device, vdsd = _make_host_with_device()
+        dsuid_str = str(vdsd.dsuid)
+        msg = _make_remove_msg(dsuid_str)
+
+        await host._handle_remove(msg)
+
+        assert host._pending_vanish == set()
