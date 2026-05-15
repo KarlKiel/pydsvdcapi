@@ -839,3 +839,109 @@ class TestHandleScanDevicesGenericRequest:
 
         assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
         assert "dropped" in resp.generic_response.description
+
+
+# ---------------------------------------------------------------------------
+# _pending_vanish — persistence and flush infrastructure
+# ---------------------------------------------------------------------------
+
+
+class TestPendingVanishInfrastructure:
+    """Tests for VdcHost._pending_vanish init, persistence, and flush."""
+
+    def test_pending_vanish_empty_by_default(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        assert host._pending_vanish == set()
+
+    def test_add_pending_vanish_updates_set(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        host._add_pending_vanish({"aabbcc", "ddeeff"})
+        assert host._pending_vanish == {"aabbcc", "ddeeff"}
+
+    def test_pending_vanish_serialised_in_property_tree(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        host._pending_vanish = {"aabbcc"}
+        tree = host.get_property_tree()
+        assert "pendingVanish" in tree["vdcHost"]
+        assert "aabbcc" in tree["vdcHost"]["pendingVanish"]
+
+    def test_pending_vanish_omitted_when_empty(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        tree = host.get_property_tree()
+        assert "pendingVanish" not in tree["vdcHost"]
+
+    def test_apply_state_restores_pending_vanish(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        host._apply_state({"pendingVanish": ["aabbcc", "ddeeff"]})
+        assert "aabbcc" in host._pending_vanish
+        assert "ddeeff" in host._pending_vanish
+
+    @pytest.mark.asyncio
+    async def test_flush_sends_vanish_for_each_dsuid(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        host._pending_vanish = {"aaaa", "bbbb"}
+
+        session = MagicMock(spec=VdcSession)
+        session.send_notification = AsyncMock()
+
+        await host._flush_pending_vanish(session)
+
+        sent = {
+            call.args[0].vdc_send_vanish.dSUID
+            for call in session.send_notification.call_args_list
+        }
+        assert sent == {"aaaa", "bbbb"}
+
+    @pytest.mark.asyncio
+    async def test_flush_clears_pending_vanish(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        host._pending_vanish = {"cccc"}
+
+        session = MagicMock(spec=VdcSession)
+        session.send_notification = AsyncMock()
+
+        await host._flush_pending_vanish(session)
+
+        assert host._pending_vanish == set()
+
+    @pytest.mark.asyncio
+    async def test_flush_noop_when_empty(self):
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+
+        session = MagicMock(spec=VdcSession)
+        session.send_notification = AsyncMock()
+
+        await host._flush_pending_vanish(session)
+
+        session.send_notification.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_on_session_ready_flushes_pending_vanish(self):
+        """_on_session_ready must send pending vanishes before announcing."""
+        host, vdc, _device, _vdsd = _make_host_with_device()
+        host._pending_vanish = {"stale-dsuid"}
+
+        ok_resp = pb.Message()
+        ok_resp.generic_response.code = pb.ERR_OK
+        session = MagicMock(spec=VdcSession)
+        session.is_active = True
+        session.send_notification = AsyncMock()
+        session.send_request = AsyncMock(return_value=ok_resp)
+
+        await host._on_session_ready(session)
+
+        vanished = {
+            call.args[0].vdc_send_vanish.dSUID
+            for call in session.send_notification.call_args_list
+            if call.args[0].type == pb.VDC_SEND_VANISH
+        }
+        assert "stale-dsuid" in vanished
+        assert host._pending_vanish == set()

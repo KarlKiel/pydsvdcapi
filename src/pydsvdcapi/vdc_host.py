@@ -336,6 +336,9 @@ class VdcHost:
         # --- vDC registry ---------------------------------------------
         self._vdcs: dict[str, Vdc] = {}  # keyed by dSUID string
 
+        # --- pending vanish -------------------------------------------
+        self._pending_vanish: set[str] = set()
+
         # --- auto-save ------------------------------------------------
         self._save_timer: threading.Timer | None = None
         self._auto_save_enabled: bool = self._store is not None
@@ -573,9 +576,22 @@ class VdcHost:
         if self._vdcs:
             host_node["vdcs"] = [vdc.get_property_tree() for vdc in self._vdcs.values()]
 
+        if self._pending_vanish:
+            host_node["pendingVanish"] = sorted(self._pending_vanish)
+
         return {"vdcHost": host_node}
 
     # ---- persistence -------------------------------------------------
+
+    def _add_pending_vanish(self, dsuids: set[str]) -> None:
+        """Track dSUIDs that must be vanished on the next session.
+
+        Called when a vDC or device is removed while no session is active.
+        The set is persisted in YAML so a restart does not lose the list.
+        """
+        self._pending_vanish.update(dsuids)
+        if self._auto_save_enabled:
+            self._schedule_auto_save()
 
     def save(self) -> None:
         """Persist the current property tree to the YAML state file.
@@ -698,6 +714,9 @@ class VdcHost:
             self.config_url = state["configURL"]
         if "deviceIconName" in state:
             self.device_icon_name = state["deviceIconName"]
+
+        if "pendingVanish" in state:
+            self._pending_vanish.update(state["pendingVanish"])
 
         # Restore vDC properties from persisted state.
         if "vdcs" in state:
@@ -977,6 +996,28 @@ class VdcHost:
             self._session = None
             self._session_task = None
 
+    async def _flush_pending_vanish(self, session: VdcSession) -> None:
+        """Send VDC_SEND_VANISH for every dSUID in _pending_vanish, then clear.
+
+        Runs at the start of _on_session_ready() so the vdSM processes
+        offline deletions before receiving re-announcement of survivors.
+        """
+        if not self._pending_vanish:
+            return
+        logger.info("Flushing %d pending vanish(es)", len(self._pending_vanish))
+        for dsuid_str in list(self._pending_vanish):
+            msg = pb.Message()
+            msg.type = pb.VDC_SEND_VANISH
+            msg.vdc_send_vanish.dSUID = dsuid_str
+            try:
+                await session.send_notification(msg)
+                logger.debug("Sent pending vanish for %s", dsuid_str)
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to send pending vanish for %s", dsuid_str)
+        self._pending_vanish.clear()
+        if self._auto_save_enabled:
+            self._schedule_auto_save()
+
     async def _on_session_ready(self, session: VdcSession) -> None:
         """Auto-announce all registered vDCs and devices on *session*.
 
@@ -986,6 +1027,7 @@ class VdcHost:
         the new session — without requiring the caller to re-drive
         the announcement manually.
         """
+        await self._flush_pending_vanish(session)
         logger.info(
             "Session ready — auto-announcing %d vDC(s)",
             len(self._vdcs),
