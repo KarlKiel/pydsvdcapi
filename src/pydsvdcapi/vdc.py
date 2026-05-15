@@ -422,7 +422,10 @@ class Vdc:
             if track_vanish:
                 dsuids = {str(vdsd.dsuid) for vdsd in device.vdsds.values()}
                 if dsuids:
-                    self._host._add_pending_vanish(dsuids)  # also schedules save
+                    # _add_pending_vanish also schedules auto-save, so return
+                    # early here — the fallback _schedule_auto_save below is
+                    # not needed.
+                    self._host._add_pending_vanish(dsuids)
                     return device
             if getattr(self, "_auto_save_enabled", False):
                 self._host._schedule_auto_save()

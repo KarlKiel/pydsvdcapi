@@ -483,6 +483,9 @@ class VdcHost:
         vdc = self._vdcs.pop(key, None)
         if vdc is not None:
             logger.info("Removed vDC '%s' (dSUID %s)", vdc.name, key)
+            # Collect the vDC dSUID and all Vdsd dSUIDs.  Device base
+            # dSUIDs are not tracked by the vdSM as separate addressable
+            # entities, so only Vdsd dSUIDs need an explicit vanish.
             dsuids: set[str] = {key}
             for device in vdc.devices.values():
                 for vdsd in device.vdsds.values():

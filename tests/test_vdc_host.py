@@ -989,3 +989,18 @@ class TestPendingVanishWiring:
         await host._handle_remove(msg)
 
         assert host._pending_vanish == set()
+
+    def test_remove_device_no_vdsds_does_not_add_to_pending_vanish(self):
+        """Device with no vdsds: remove_device must not crash or pollute pending_vanish."""
+        host = VdcHost(mac=TEST_MAC, name="PV Host")
+        host._cancel_auto_save()
+        vdc = Vdc(host=host, implementation_id="x-empty", name="Empty vDC", model="m")
+        base = DsUid.from_name_in_space("empty-dev", DsUidNamespace.VDC)
+        device = Device(vdc=vdc, dsuid=base)
+        vdc.add_device(device)
+        host.add_vdc(vdc)
+
+        vdc.remove_device(device.dsuid)  # track_vanish=True, but device has no vdsds
+
+        assert host._pending_vanish == set()
+        assert vdc.get_device(device.dsuid) is None
