@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest tests/test_pydsvdcapi.py::test_version -v)",
-      "Bash(python -m pytest tests/test_pydsvdcapi.py::test_version -q)"
+      "Bash(python -m pytest tests/test_pydsvdcapi.py::test_version -q)",
+      "Bash(python -c \"import docs.conf\")",
+      "Bash(python -c \"exec\\(open\\('docs/conf.py'\\).read\\(\\)\\); print\\('release =', release\\)\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

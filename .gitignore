@@ -211,3 +211,4 @@ Documentation/
 
 # Examples pycache
 examples/__pycache__/
+.claude/settings.json
