@@ -33,7 +33,7 @@ import logging
 import platform
 import socket
 import threading
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -583,7 +583,7 @@ class VdcHost:
 
     # ---- persistence -------------------------------------------------
 
-    def _add_pending_vanish(self, dsuids: set[str]) -> None:
+    def _add_pending_vanish(self, dsuids: Iterable[str]) -> None:
         """Track dSUIDs that must be vanished on the next session.
 
         Called when a vDC or device is removed while no session is active.
@@ -1001,6 +1001,8 @@ class VdcHost:
 
         Runs at the start of _on_session_ready() so the vdSM processes
         offline deletions before receiving re-announcement of survivors.
+        Failed sends are logged but do not prevent the set from being
+        cleared; the flush is best-effort to avoid blocking session start.
         """
         if not self._pending_vanish:
             return
