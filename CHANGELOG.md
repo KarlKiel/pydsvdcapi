@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-05-16
+
+### Added
+- Persistent `pendingVanish` list in `VdcHost`: dSUIDs of devices and vDCs
+  removed while the session is offline are stored in YAML and flushed as
+  `VDC_SEND_VANISH` messages to the vdSM on the next session connect, before
+  re-announcing surviving vDCs.  vdSM-initiated removals (`VDSM_SEND_REMOVE`)
+  are correctly excluded from the list.
+
+### Fixed
+- `examples/full_showcase.py`: removed erroneous `add_model_feature()` calls
+  for `akminput`, `akmdelay` (both raise `ValueError` since 0.8.1), and an
+  incorrectly placed `akmsensor` on D04 (which has only `SensorInput`s, not
+  `BinaryInput`s).
+
 ## [0.8.3] - 2026-05-15
 
 ### Added
@@ -66,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DsUid` — dSUID encoding/decoding with multiple creation strategies.
 - Property handling helpers (`build_get_property_response`, etc.).
 
+[0.8.4]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.1...v0.8.3
 [0.8.1]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.1.0...v0.8.0
