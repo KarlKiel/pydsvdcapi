@@ -446,9 +446,10 @@ def build_d03_joker_binary_motion(vdc: Vdc, idx: int) -> DevInfo:
     v.add_binary_input(bi)
 
     v.add_model_feature("jokerconfig")
-    v.add_model_feature("akmsensor")  # dropdown to choose binary input sensor type
-    v.add_model_feature("akminput")  # inversion / input adjustment dropdowns
-    v.add_model_feature("akmdelay")  # turn-on / turn-off delay timing dropdowns
+    # derive_model_features() adds "akmsensor" automatically for any binary input.
+    # "akminput" and "akmdelay" are NOT supported for TCP/IP VDC devices —
+    # they configure behaviour via DS485 bus only and are never forwarded to
+    # the VDC. Attempting to add them raises ValueError.
     v.derive_model_features()
     return DevInfo(idx=idx, name=name, device=device, vdsd=v, binary_inputs=[bi])
 
@@ -483,9 +484,9 @@ def build_d04_joker_co_sensors(vdc: Vdc, idx: int) -> DevInfo:
     v.add_sensor_input(si_co2)
 
     v.add_model_feature("jokerconfig")
-    v.add_model_feature("akmsensor")  # same as D03: dropdown to reclassify sensor type
-    v.add_model_feature("akminput")  # same as D03: input polarity / adjustment
-    v.add_model_feature("akmdelay")  # same as D03: debounce / delay timing
+    # D04 has only SensorInputs (not BinaryInputs), so "akmsensor" does not
+    # apply here. "akminput" and "akmdelay" are not supported for TCP/IP VDC
+    # devices regardless.
     v.derive_model_features()
     return DevInfo(idx=idx, name=name, device=device, vdsd=v, sensors=[si_co, si_co2])
 
