@@ -1154,12 +1154,14 @@ class BinaryInputGroup(IntEnum):
 
     LIGHT = 1  # gelb/Licht — lighting
     SHADOW = 2  # grau/Schatten — shading / blinds
-    CLIMATE = 3  # blau/Klima — heating / climate
+    HEATING = 3  # blau/Klima — heating / climate
     AUDIO = 4  # cyan/Audio — audio
     VIDEO = 5  # magenta/Video — video
-    SECURITY = 6  # rot/Sicherheit — security
-    ACCESS = 7  # grün/Zugang — access control
+    SECURITY = 6  # rot/Sicherheit — security (deprecated - displayed as "reserved")
+    ACCESS = 7  # grün/Zugang — access control (deprecated - displayed as "reserved")
     JOKER = 8  # schwarz/Joker — generic / configurable
+    VENTILATION = 10 # blau/Klima - room ventilatio / climate (added manually to match UI component)
+    RECIRCULATION = 12  # Recirculation / fan-coil units (added manually to match UI component)
 
 
 @unique
@@ -1171,15 +1173,16 @@ class ButtonGroup(IntEnum):
 
     LIGHT = 1  # gelb/hell — lighting
     SHADOW = 2  # grau/Schatten — shading / blinds
-    CLIMATE = 3  # blau/Heizung — heating / climate
+    HEATING = 3  # blau/Heizung — heating / climate
     AUDIO = 4  # cyan/Audio — audio
     VIDEO = 5  # magenta/Video — video
-    SECURITY = 6  # rot/Sicherheit — security
-    ACCESS = 7  # grün/Zugang — access control
+    SECURITY = 6  # rot/Sicherheit — security (deprecated - displayed as "reserved")
+    ACCESS = 7  # grün/Zugang — access control (deprecated - displayed as "reserved")
     JOKER = 8  # schwarz/variabel — joker / configurable
-    COOLING = 9  # blau/Kühlung — cooling
+    COOLING = 9  # blau/Kühlung — cooling (not visible in UI Component)
     VENTILATION = 10  # blau/Lüftung — ventilation
     WINDOW = 11  # blau/Fenster — window openers
+    RECIRCULATION = 12  # Recirculation / fan-coil units (added manually to match UI component)
     TEMPERATURE = 48  # Raumtemperaturregelung — room temperature control
 
 
