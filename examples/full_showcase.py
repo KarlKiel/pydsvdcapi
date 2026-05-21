@@ -549,7 +549,7 @@ def build_d07_light_dimmed_cct(vdc: Vdc, idx: int) -> DevInfo:
     device.add_vdsd(v)
 
     # DIMMER_COLOR_TEMP: mode=GRADUAL required (same reason as D06).
-    # Auto-creates brightness (dsIndex=0) + colortemp (dsIndex=1).
+    # Auto-creates brightness (dsIndex=0, name="brightness") + colortemp (dsIndex=1, name="colortemp").
     out = _output(
         v,
         OutputFunction.DIMMER_COLOR_TEMP,
@@ -577,9 +577,10 @@ def build_d08_light_rgbw(vdc: Vdc, idx: int) -> DevInfo:
     device.add_vdsd(v)
 
     # FULL_COLOR_DIMMER: mode=GRADUAL required (empirically verified working config).
-    # Auto-creates 6 channels in the order verified against real dSS hardware:
-    # brightness(0), colortemp(1), hue(2), saturation(3), cieX(4), cieY(5).
-    # colortemp MUST be dsIndex=1 for the configurator to render the CT slider.
+    # Auto-creates 6 channels keyed by name in the property tree:
+    # "brightness"(dsIndex=0), "colortemp"(dsIndex=1), "hue"(dsIndex=2),
+    # "saturation"(dsIndex=3), "cieX"(dsIndex=4), "cieY"(dsIndex=5).
+    # colortemp at dsIndex=1 is required for the configurator CT slider.
     # modelFeatures match the empirically verified working set.
     out = _output(
         v,

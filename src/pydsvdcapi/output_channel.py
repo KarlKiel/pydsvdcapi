@@ -57,7 +57,9 @@ yet confirmed by the hardware.
 Property exposure
 ~~~~~~~~~~~~~~~~~
 
-Three IndexedPropertyElement lists at the vdSD level (§4.1.3):
+Three property sub-trees at the vdSD level (§4.1.3), each represented
+as a **single** ``PropertyElement`` whose children are keyed by the
+channel's **name** (e.g. ``"brightness"``, ``"colortemp"``):
 
 * **channelDescriptions** — read-only metadata (name, channelType,
   dsIndex, min, max, resolution).
@@ -65,6 +67,14 @@ Three IndexedPropertyElement lists at the vdSD level (§4.1.3):
   defined in the spec).
 * **channelStates** — ``value`` and ``age``.  Must **not** be written
   via ``setProperty``; use ``setOutputChannelValue`` instead.
+
+.. important::
+
+   dSS identifies channels by their **name**, not by their numeric
+   ``dsIndex``.  All three property sub-trees must therefore use the
+   channel name as the element key.  The ``setOutputChannelValue``
+   notification from dSS also carries the name in the ``channelId``
+   field (API v3 onwards).
 
 Persistence
 ~~~~~~~~~~~
@@ -610,9 +620,11 @@ class OutputChannel:
     # ==================================================================
 
     def get_description_properties(self) -> dict[str, Any]:
-        """Return the ``channelDescriptions[N]`` property dict.
+        """Return this channel's ``channelDescriptions`` value dict.
 
-        Keys match the vDC API property names (§4.9.1).
+        The returned dict is used as the *value* of the element keyed by
+        :attr:`name` inside the ``channelDescriptions`` property sub-tree
+        (§4.9.1).  Keys match the vDC API property names.
         """
         return {
             "name": self._name,
@@ -624,16 +636,20 @@ class OutputChannel:
         }
 
     def get_settings_properties(self) -> dict[str, Any]:
-        """Return the ``channelSettings[N]`` property dict.
+        """Return this channel's ``channelSettings`` value dict.
 
-        Currently no per-channel settings are defined (§4.9.2).
+        The returned dict is used as the *value* of the element keyed by
+        :attr:`name` inside the ``channelSettings`` property sub-tree
+        (§4.9.2).  Currently no per-channel settings are defined.
         """
         return {}
 
     def get_state_properties(self) -> dict[str, Any]:
-        """Return the ``channelStates[N]`` property dict.
+        """Return this channel's ``channelStates`` value dict.
 
-        Keys match the vDC API property names (§4.9.3).
+        The returned dict is used as the *value* of the element keyed by
+        :attr:`name` inside the ``channelStates`` property sub-tree
+        (§4.9.3).  Keys match the vDC API property names.
         """
         return {
             "value": self._value,  # may be None (NULL)

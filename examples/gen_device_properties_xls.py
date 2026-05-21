@@ -709,12 +709,15 @@ def build_vdsd_sheet(
     ch_state = props.get("channelStates", {})
     if ch_desc or ch_set or ch_state:
         row = _write_section_header(ws, row, "CHANNELS")
-        all_idx = sorted(set(list(ch_desc) + list(ch_set) + list(ch_state)), key=int)
-        for idx_str in all_idx:
-            cname = ch_desc.get(idx_str, {}).get("name", idx_str)
-            row = _write_index_banner(ws, row, f"Channel [{idx_str}]  —  {cname}")
+        # Channel keys are names (e.g. "brightness"); sort by dsIndex for display.
+        all_names = sorted(
+            set(list(ch_desc) + list(ch_set) + list(ch_state)),
+            key=lambda n: ch_desc.get(n, {}).get("dsIndex", 0),
+        )
+        for ch_name in all_names:
+            row = _write_index_banner(ws, row, f"Channel  —  {ch_name}")
             row = _write_nested_schema_rows(
-                ws, row, "  description", SCHEMA_CHANNEL_DESC, ch_desc.get(idx_str, {})
+                ws, row, "  description", SCHEMA_CHANNEL_DESC, ch_desc.get(ch_name, {})
             )
             if SCHEMA_CHANNEL_SETTINGS:
                 row = _write_nested_schema_rows(
@@ -722,10 +725,10 @@ def build_vdsd_sheet(
                     row,
                     "  settings",
                     SCHEMA_CHANNEL_SETTINGS,
-                    ch_set.get(idx_str, {}),
+                    ch_set.get(ch_name, {}),
                 )
             row = _write_nested_schema_rows(
-                ws, row, "  state", SCHEMA_CHANNEL_STATE, ch_state.get(idx_str, {})
+                ws, row, "  state", SCHEMA_CHANNEL_STATE, ch_state.get(ch_name, {})
             )
         row += 1
 
