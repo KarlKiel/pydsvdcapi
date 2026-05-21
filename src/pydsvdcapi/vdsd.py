@@ -1719,6 +1719,8 @@ class Vdsd:
             props["outputState"] = self._output.get_state_properties()
 
             # Channel properties (§4.9 / §4.1.3).
+            # Each sub-tree is a single PropertyElement whose children are
+            # keyed by channel name (e.g. "brightness", "colortemp").
             ch_desc = self._output.get_channel_descriptions()
             if ch_desc:
                 props["channelDescriptions"] = ch_desc

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-05-22
+
+### Fixed
+- `channelDescriptions`, `channelSettings`, and `channelStates` property trees
+  now use the channel **name** (e.g. `"brightness"`, `"colortemp"`) as the
+  element key instead of the numeric `dsIndex` string (`"0"`, `"1"`).  This
+  matches what dSS expects and resolves `deviceOutputIndex:255` errors caused
+  by dSS not recognising channels it had registered under integer-string keys.
+- Push notifications for channel state changes use the channel name as the
+  `channelStates` key, consistent with the above fix.
+- `setOutputChannelValue` handler in `VdcHost` no longer attempts a numeric
+  `dsIndex` lookup when resolving `channelId`; it looks up channels by name
+  only (with the legacy integer-type fallback still in place).
+
 ## [0.8.4] - 2026-05-16
 
 ### Added
@@ -81,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DsUid` — dSUID encoding/decoding with multiple creation strategies.
 - Property handling helpers (`build_get_property_response`, etc.).
 
+[0.8.6]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.4...v0.8.6
 [0.8.4]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.1...v0.8.3
 [0.8.1]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.0...v0.8.1

@@ -619,17 +619,19 @@ class TestOutputChannelProperties:
         out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
         desc = out.get_channel_descriptions()
         assert len(desc) == 2
-        assert "0" in desc
-        assert "1" in desc
-        assert desc["0"]["channelType"] == int(OutputChannelType.BRIGHTNESS)
-        assert desc["1"]["channelType"] == int(OutputChannelType.COLOR_TEMPERATURE)
+        assert "brightness" in desc
+        assert "colortemp" in desc
+        assert desc["brightness"]["channelType"] == int(OutputChannelType.BRIGHTNESS)
+        assert desc["colortemp"]["channelType"] == int(
+            OutputChannelType.COLOR_TEMPERATURE
+        )
 
     def test_channel_settings(self):
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         settings = out.get_channel_settings()
         assert len(settings) == 1
-        assert settings["0"] == {}
+        assert settings["brightness"] == {}
 
     @pytest.mark.asyncio
     async def test_channel_states(self):
@@ -638,8 +640,8 @@ class TestOutputChannelProperties:
         ch = out.get_channel(0)
         await ch.update_value(60.0)
         states = out.get_channel_states()
-        assert states["0"]["value"] == 60.0
-        assert states["0"]["age"] is not None
+        assert states["brightness"]["value"] == 60.0
+        assert states["brightness"]["age"] is not None
 
 
 # ===========================================================================
@@ -964,8 +966,8 @@ class TestVdsdChannelProperties:
 
         props = vdsd.get_properties()
         assert "channelDescriptions" in props
-        assert "0" in props["channelDescriptions"]
-        assert props["channelDescriptions"]["0"]["name"] == "brightness"
+        assert "brightness" in props["channelDescriptions"]
+        assert props["channelDescriptions"]["brightness"]["name"] == "brightness"
 
     def test_properties_include_channel_states(self):
         _, _, _, vdsd = _make_stack()
@@ -974,8 +976,8 @@ class TestVdsdChannelProperties:
 
         props = vdsd.get_properties()
         assert "channelStates" in props
-        assert "0" in props["channelStates"]
-        assert props["channelStates"]["0"]["value"] is None
+        assert "brightness" in props["channelStates"]
+        assert props["channelStates"]["brightness"]["value"] is None
 
     def test_properties_include_channel_settings(self):
         _, _, _, vdsd = _make_stack()
@@ -984,7 +986,7 @@ class TestVdsdChannelProperties:
 
         props = vdsd.get_properties()
         assert "channelSettings" in props
-        assert "0" in props["channelSettings"]
+        assert "brightness" in props["channelSettings"]
 
     def test_no_channels_no_properties(self):
         _, _, _, vdsd = _make_stack()

@@ -929,6 +929,8 @@ Writable, persistently stored. The dSS firmware reads `heatingSystemType` from t
 
 An output has zero or more channels. Each channel controls one independent physical dimension of the output (brightness, color, shade position, etc.). Channel index 0 is the primary/default channel.
 
+> **Key format — critical:** `channelDescriptions`, `channelSettings`, and `channelStates` are each transmitted as a **single** `PropertyElement` whose child elements are keyed by the channel's **name string** (e.g. `"brightness"`, `"colortemp"`), **not** by the numeric `dsIndex`.  dSS registers channels by name internally; using integer-string keys (e.g. `"0"`, `"1"`) causes `deviceOutputIndex:255` errors on every channel lookup and sets the wrong output channel in scenes.  The `channelId` field in `setOutputChannelValue` notifications also carries the name string.
+
 #### 4.4.1 Channel Description (`channelDescriptions`)
 
 | Property | acc | Type | Description | dSS handling |

@@ -913,7 +913,11 @@ From `jsonhelper.cpp::toJSON(DeviceReference)`:
 
 ### 7.3 Output Channel Types
 
-`channelDescriptions` response structure controls which output UI is shown. All 27 standard channel types from `src/model/modelconst.h` (ChannelType, DS_REFLECTED_ENUM, IDs 0–26):
+`channelDescriptions` response structure controls which output UI is shown.
+
+> **Key format — critical:** `channelDescriptions`, `channelSettings`, and `channelStates` must each be a **single** `PropertyElement` with children keyed by the channel's **name string** (e.g. `"brightness"`, `"colortemp"`).  Using numeric `dsIndex` strings (e.g. `"0"`, `"1"`) prevents dSS from recognising channels, causing `deviceOutputIndex:255` errors.  The `channelId` field in `setOutputChannelValue` notifications also contains the name string.
+
+All 27 standard channel types from `src/model/modelconst.h` (ChannelType, DS_REFLECTED_ENUM, IDs 0–26):
 
 | ID | Firmware name | Python `OutputChannelType` | Typical UI |
 |---|---|---|---|
@@ -947,14 +951,15 @@ From `jsonhelper.cpp::toJSON(DeviceReference)`:
 
 Channel IDs 192–239 are reserved for proprietary / device-specific channels.
 
-For enum/dropdown channels, add `values` sub-elements:
+For enum/dropdown channels, add `values` sub-elements.  Note that the channel **name** is the element key, not the `dsIndex`:
 ```
-channelDescriptions.myChannel:
-  dsIndex:     0
-  channelType: <type>
-  values:
-    "0": "Option A"    ← element name = key, v_string = display label
-    "1": "Option B"
+channelDescriptions:
+  "<channelName>":        ← e.g. "brightness", "colortemp" — NOT the dsIndex
+    dsIndex:     0
+    channelType: <type>
+    values:
+      "0": "Option A"    ← element name = key, v_string = display label
+      "1": "Option B"
 ```
 
 ### 7.4 Binary Inputs
@@ -1060,7 +1065,7 @@ VdSD must handle `getProperty` / `setProperty` for scene values:
 scenes:
   "<sceneNum>":            ← 0–63 standard, 64–127 apartment
     channels:
-      "<channelId>":
+      "<channelName>":     ← channel name string, e.g. "brightness" (same key as in channelDescriptions)
         value:    50.0
         dontCare: false
         command:  ""         ← for action-type channels
