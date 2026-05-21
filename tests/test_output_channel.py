@@ -622,7 +622,9 @@ class TestOutputChannelProperties:
         assert "brightness" in desc
         assert "colortemp" in desc
         assert desc["brightness"]["channelType"] == int(OutputChannelType.BRIGHTNESS)
-        assert desc["colortemp"]["channelType"] == int(OutputChannelType.COLOR_TEMPERATURE)
+        assert desc["colortemp"]["channelType"] == int(
+            OutputChannelType.COLOR_TEMPERATURE
+        )
 
     def test_channel_settings(self):
         _, _, _, vdsd = _make_stack()

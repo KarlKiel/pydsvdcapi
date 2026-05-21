@@ -1467,8 +1467,7 @@ class Output:
         would cause ``deviceOutputIndex:255`` errors on every channel lookup.
         """
         return {
-            ch.name: ch.get_description_properties()
-            for ch in self._channels.values()
+            ch.name: ch.get_description_properties() for ch in self._channels.values()
         }
 
     def get_channel_settings(self) -> dict[str, Any]:
@@ -1477,20 +1476,14 @@ class Output:
         Keys are channel names, consistent with :meth:`get_channel_descriptions`.
         Currently all channels return an empty settings dict (§4.9.2).
         """
-        return {
-            ch.name: ch.get_settings_properties()
-            for ch in self._channels.values()
-        }
+        return {ch.name: ch.get_settings_properties() for ch in self._channels.values()}
 
     def get_channel_states(self) -> dict[str, Any]:
         """Return the ``channelStates`` sub-tree keyed by channel name.
 
         Keys are channel names, consistent with :meth:`get_channel_descriptions`.
         """
-        return {
-            ch.name: ch.get_state_properties()
-            for ch in self._channels.values()
-        }
+        return {ch.name: ch.get_state_properties() for ch in self._channels.values()}
 
     # ==================================================================
     # Property dicts (for getProperty responses)

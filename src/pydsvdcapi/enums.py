@@ -1160,8 +1160,10 @@ class BinaryInputGroup(IntEnum):
     SECURITY = 6  # rot/Sicherheit — security (deprecated - displayed as "reserved")
     ACCESS = 7  # grün/Zugang — access control (deprecated - displayed as "reserved")
     JOKER = 8  # schwarz/Joker — generic / configurable
-    VENTILATION = 10 # blau/Klima - room ventilatio / climate (added manually to match UI component)
-    RECIRCULATION = 12  # Recirculation / fan-coil units (added manually to match UI component)
+    VENTILATION = 10  # blau/Klima - room ventilatio / climate (added manually to match UI component)
+    RECIRCULATION = (
+        12  # Recirculation / fan-coil units (added manually to match UI component)
+    )
 
 
 @unique
@@ -1182,7 +1184,9 @@ class ButtonGroup(IntEnum):
     COOLING = 9  # blau/Kühlung — cooling (not visible in UI Component)
     VENTILATION = 10  # blau/Lüftung — ventilation
     WINDOW = 11  # blau/Fenster — window openers
-    RECIRCULATION = 12  # Recirculation / fan-coil units (added manually to match UI component)
+    RECIRCULATION = (
+        12  # Recirculation / fan-coil units (added manually to match UI component)
+    )
     TEMPERATURE = 48  # Raumtemperaturregelung — room temperature control
 
 
