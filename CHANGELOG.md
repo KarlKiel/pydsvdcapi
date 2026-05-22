@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-05-22
+
+### Fixed
+- `gen_device_properties_xls.py`: corrected `OutputUsage` schema annotation —
+  values were documented as `0=ROOM 1=USER 2=OTHER`; correct mapping is
+  `0=UNDEFINED 1=ROOM 2=OUTDOORS`, matching the `OutputUsage` enum.
+
 ## [0.8.6] - 2026-05-22
 
 ### Fixed
