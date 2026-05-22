@@ -473,8 +473,9 @@ def build_device_3(vdc: Vdc) -> Device:
       ``output.add_channel()`` (not auto-created)
 
     **Derived model features:**
-    ``dontcare``, ``shade``, ``transt``, ``shadeprops``,
-    ``shadeposition``, ``locationconfig``, ``windprotectionconfig``
+    ``dontcare``, ``blink``, ``shadeposition``, ``locationconfig``,
+    ``windprotectionconfigawning``
+    (``shadeprops`` is NOT supported for TCP/IP VDC devices)
 
     Note: ``BinaryInputType.GARAGE_DOOR_OPEN`` (16) is not in the
     ``presence`` set {1,3,5,6} nor the ``window`` set {13,14,15},

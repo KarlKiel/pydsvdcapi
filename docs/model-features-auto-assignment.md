@@ -35,7 +35,7 @@ configured components.  All have a confirmed data path back to the vdSD.
 |---|---|---|
 | Any output present | `dontcare` | Per-scene "retain current value" checkbox |
 | Any output present | `blink` | Per-scene "blink effect" checkbox |
-| Channel type in {1–12, 14–18, 22–24} | `transt` | Per-scene transition-time radio button (standard / slow) |
+| Channel type in {1–12, 14–18, 22–24} **and** `function ≠ POSITIONAL` | `transt` | Per-scene transition-time radio button (standard / slow). Not derived for POSITIONAL outputs — those use hardware motor timing. |
 | `primaryGroup ≠ 2` (non-shade) | `outvalue8` | 8-bit "Edit Output Value" slider/input |
 | `function == ON_OFF` | `outconfigswitch` | Switch output threshold configuration UI |
 | `function == ON_OFF` | `impulseconfig` | "Impulse" tab in Device Properties for binary-output devices |
@@ -46,11 +46,17 @@ configured components.  All have a confirmed data path back to the vdSD.
 
 ### Grey / Shade Rules (primaryGroup == 2)
 
+> **`shadeprops` and `motiontimefins` are NOT supported for VDC devices.**
+> Both features open the "Device Properties Shade" panel which writes motor
+> travel/timing values via DS485 `setMaxMotionTime()` / `setMotionTime()`.
+> Those values are stored on the dSS side only — the VDC receives no
+> write-back and cannot react to the configuration.  Attempting to add either
+> feature with `add_model_feature()` raises `ValueError`.
+
 | Trigger | Features added | Configurator UI |
 |---|---|---|
-| `primaryGroup == 2` + any output | `shadeprops` | "Device Properties Shade" pop-up for positional timing |
 | `primaryGroup == 2` + `function == POSITIONAL` | `shadeposition` | 16-bit position slider/input and up/down/increment/decrement buttons |
-| POSITIONAL + channel type 9 or 10 (blade/slat) | `shadebladeang`, `motiontimefins` | Blade angle input/slider; blade motion timing in shade pop-up |
+| POSITIONAL + channel type 9 or 10 (blade/slat) | `shadebladeang` | Blade angle input/slider |
 | `primaryGroup == 2` + any output | `locationconfig` | Direction/orientation dropdown in Device Properties |
 | `primaryGroup == 2` + any output | `operationlock` | "Ignore operation lock for weather alarms" radio button (Advanced Settings) |
 | `primaryGroup == 2` + output + channel type 9 or 10 | `windprotectionconfigblind` | Wind protection class for jalousie/blind (stored on dSS) |
@@ -169,7 +175,7 @@ the dSS configurator.
 The following features are **rejected with `ValueError`** when passed to
 `add_model_feature()`. They will also never be auto-derived.
 
-Two root causes explain why they cannot work on TCP/IP VDC devices:
+Three root causes explain why they cannot work on TCP/IP VDC devices:
 
 **A — Output-mode selectors write via DS485, not via VDC:**  
 The configurator UI calls `setDeviceConfig(CfgClassFunction, CfgFunction_Mode, value)`
@@ -182,6 +188,12 @@ on it.
 These features control physical hardware capabilities (LED indicators, dimmer
 hardware type, TKM button hardware) that have no corresponding VDC property or
 API interaction.
+
+**C — Shade motion-timing configuration writes via DS485, not via VDC:**  
+The shade properties panel calls `setMaxMotionTime()` and `setMotionTime()` over
+the DS485 bus to store travel and slat-rotation times in the dSS device model.
+**No `setVdcProperty()` call is made.** The VDC neither receives the values nor
+can react to or store them.
 
 | Feature | Why not supported |
 |---|---|
@@ -204,6 +216,8 @@ API interaction.
 | `grkl387workaround` | **(B)** Hardware workaround for specific KL 0x387 firmware bug — injected by dSS firmware for physical KL devices; meaningless for VDC |
 | `akminput` | **(B)** "Input" dropdown to configure sensor behaviour (standard / inverted...) — hardware specific, no handlers / properties in vdc-API |
 | `akmdelay` | **(B)** "Turn-on / Turn-off delay" timings dropdowns for delayed sensor response — hardware specific, no handlers / properties in vdc-API |
+| `shadeprops` | **(C)** "Device Properties Shade" panel — writes motor travel time via DS485 `setMaxMotionTime()`; stored on dSS only, VDC receives no write-back |
+| `motiontimefins` | **(C)** Slat/fin rotation timing in the shade properties panel — writes via DS485 `setMotionTime()`; same DS485-only path as `shadeprops` |
 
 ---
 
@@ -247,9 +261,9 @@ output = Output(default_group=ColorClass.BLINDS, active_group=ColorClass.BLINDS,
 output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
 output.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
 device.set_output(output)
-# Auto-derived: dontcare, blink, shadeprops, shadeposition, shadebladeang,
-#               motiontimefins, locationconfig, operationlock,
-#               windprotectionconfigblind
+# Auto-derived: dontcare, blink, shadeposition, shadebladeang,
+#               locationconfig, operationlock, windprotectionconfigblind
+# NOT derived:  shadeprops, motiontimefins (unsupported for TCP/IP VDC)
 ```
 
 ### Grey — Roller Shutter / Awning
@@ -260,8 +274,9 @@ output = Output(default_group=ColorClass.BLINDS, active_group=ColorClass.BLINDS,
                 groups={ColorClass.BLINDS}, function=OutputFunction.POSITIONAL)
 output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
 device.set_output(output)
-# Auto-derived: dontcare, blink, shadeprops, shadeposition, locationconfig,
+# Auto-derived: dontcare, blink, shadeposition, locationconfig,
 #               operationlock, windprotectionconfigawning
+# NOT derived:  shadeprops (unsupported for TCP/IP VDC)
 ```
 
 ### Blue — Heating Valve (ON/OFF)

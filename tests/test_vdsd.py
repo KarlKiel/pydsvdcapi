@@ -296,15 +296,15 @@ class TestVdsdGetProperties:
             device,
             primary_group=ColorGroup.GREY,
             zone_id=42,
-            model_features={"shadeprops", "shadeposition"},
+            model_features={"blink", "shadeposition"},
         )
 
         props = vdsd.get_properties()
         assert props["primaryGroup"] == int(ColorGroup.GREY)
         assert props["zoneID"] == 42
         assert props["modelFeatures"] == {
+            "blink": True,
             "shadeposition": True,
-            "shadeprops": True,
         }
 
     def test_empty_model_features(self):
@@ -367,14 +367,14 @@ class TestVdsdApplyState:
             "name": "Restored Name",
             "zoneID": 99,
             "primaryGroup": int(ColorGroup.GREY),
-            "modelFeatures": ["blink", "shadeprops"],
+            "modelFeatures": ["blink", "shadeposition"],
         }
         vdsd._apply_state(state)
 
         assert vdsd.name == "Restored Name"
         assert vdsd.zone_id == 99
         assert vdsd.primary_group == ColorGroup.GREY
-        assert vdsd.model_features == {"blink", "shadeprops"}
+        assert vdsd.model_features == {"blink", "shadeposition"}
 
     def test_restore_dsuid(self):
         host = _make_host()
@@ -1600,6 +1600,22 @@ class TestDeriveModelFeatures:
         vdsd.derive_model_features()
         assert "transt" not in vdsd.model_features
 
+    def test_no_transt_for_positional_output(self):
+        # POSITIONAL outputs use hardware motor timing, not software transition time.
+        vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            name="output",
+            default_group=16,
+            active_group=16,
+            groups={16},
+        )
+        output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        vdsd.set_output(output)
+        vdsd.derive_model_features()
+        assert "transt" not in vdsd.model_features
+
     # ---- button rules ----------------------------------------------------
 
     def test_button_basic_features(self):
@@ -1687,7 +1703,7 @@ class TestDeriveModelFeatures:
 
     # ---- shade / outvalue8 rules ----------------------------------------
 
-    def test_shade_primarygroup_grey_adds_shadeprops(self):
+    def test_shade_primarygroup_grey_no_shadeprops(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
         vdsd.set_output(
             Output(
@@ -1700,7 +1716,7 @@ class TestDeriveModelFeatures:
             )
         )
         vdsd.derive_model_features()
-        assert "shadeprops" in vdsd.model_features
+        assert "shadeprops" not in vdsd.model_features
 
     def test_shade_primarygroup_grey_function_positional_adds_shadeposition(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
@@ -1732,7 +1748,7 @@ class TestDeriveModelFeatures:
         vdsd.set_output(output)
         vdsd.derive_model_features()
         assert "shadebladeang" in vdsd.model_features
-        assert "motiontimefins" in vdsd.model_features
+        assert "motiontimefins" not in vdsd.model_features
 
     def test_shade_position_without_blade_channels_no_shadebladeang(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
@@ -1748,7 +1764,9 @@ class TestDeriveModelFeatures:
         )
         vdsd.derive_model_features()
         assert "shadebladeang" not in vdsd.model_features
-        assert "motiontimefins" not in vdsd.model_features
+        assert (
+            "motiontimefins" not in vdsd.model_features
+        )  # never derived — unsupported
 
     def test_non_shade_output_adds_outvalue8(self):
         vdsd, _ = self._setup()
@@ -2432,6 +2450,16 @@ class TestDeriveModelFeatures:
         vdsd, _ = self._setup()
         with pytest.raises(ValueError, match="consumptioneventled"):
             vdsd.add_model_feature("consumptioneventled")
+
+    def test_add_unsupported_shadeprops_raises(self):
+        vdsd, _ = self._setup()
+        with pytest.raises(ValueError, match="shadeprops"):
+            vdsd.add_model_feature("shadeprops")
+
+    def test_add_unsupported_motiontimefins_raises(self):
+        vdsd, _ = self._setup()
+        with pytest.raises(ValueError, match="motiontimefins"):
+            vdsd.add_model_feature("motiontimefins")
 
     def test_add_supported_blink_does_not_raise(self):
         # Verify that a legitimate optional feature can still be added manually

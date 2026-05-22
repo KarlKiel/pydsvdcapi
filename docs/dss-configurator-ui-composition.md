@@ -212,9 +212,9 @@ All 65 features defined in `src/model/modelconst.h` (enum class `ModelFeatureId`
 | 11 | `pushbarea` | Button | Push-button can be routed to area level |
 | 12 | `pushbadvanced` | Button | Advanced push-button configuration available |
 | 13 | `pushbcombined` | Button | Combined push-button modes (SDS20/22 2-button). **NOT supported for TCP/IP VDC** — `ButtonDescription/buttonType` is **read-only** in the VDC protocol and hardware-specific to physical TKM/SDS devices; the value does not align with the UI options. |
-| 14 | `shadeprops` | Shade | Shade/blind movement properties configurable |
+| 14 | `shadeprops` | Shade | Shade/blind movement properties configurable. **NOT supported for TCP/IP VDC** — writes motor timing via DS485 `setMaxMotionTime()`; VDC receives no write-back. |
 | 15 | `shadeposition` | Shade | Shade/blind position tracking supported |
-| 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable |
+| 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable. **NOT supported for TCP/IP VDC** — writes via DS485 `setMotionTime()`; VDC receives no write-back. |
 | 17 | `optypeconfig` | Output | Output type configurable (switch/dimmer selector) |
 | 18 | `shadebladeang` | Shade | Venetian blind blade angle configurable |
 | 19 | `highlevel` | Joker | Selection to configure App-Button within pushbutton |
@@ -475,9 +475,10 @@ pushbutton, pushbarea, pushbadvanced
 ```
 
 **Key Grey features for VDC shade device:**
-Roller blind: `dontcare, shadeprops, shadeposition, identification`
-Venetian blind: add `motiontimefins, shadebladeang`
+Roller blind: `dontcare, shadeposition, identification`
+Venetian blind: add `shadebladeang`
 With wind protection: add `locationconfig, windprotectionconfigblind` or `windprotectionconfigawning`
+(`shadeprops` and `motiontimefins` are **NOT supported** for TCP/IP VDC devices)
 
 ---
 
@@ -688,9 +689,9 @@ These enable various push-button configuration UI panels. Typically co-occur in 
 
 | Feature | ID | Meaning |
 |---|---|---|
-| `shadeprops` | 14 | Shade/blind movement properties (travel time, motor inertia) are configurable. |
+| `shadeprops` | 14 | Shade/blind movement properties (travel time, motor inertia) are configurable. **NOT supported for TCP/IP VDC** — DS485-only path, VDC receives no write-back. |
 | `shadeposition` | 15 | Shade/blind position can be tracked and reported. |
-| `motiontimefins` | 16 | Venetian blind fin/slat rotation time configurable (separate from main travel time). |
+| `motiontimefins` | 16 | Venetian blind fin/slat rotation time configurable (separate from main travel time). **NOT supported for TCP/IP VDC** — DS485-only path, VDC receives no write-back. |
 | `shadebladeang` | 18 | Venetian blind blade angle can be set and tracked. Enables angle control UI. |
 | `optypeconfig` | 17 | Output type (e.g., blind vs. awning) is user-configurable (Black devices). |
 | `locationconfig` | 36 | Shade installation location configurable (affects auto-sun-protection behavior). |
@@ -799,13 +800,15 @@ features = ["dontcare", "blink", "outvalue8", "transt", "outputchannels", "dimti
 ```python
 # Roller blind / awning (OutputFunction.POSITIONAL, no slat channel)
 # derive_model_features() produces:
-features = ["dontcare", "blink", "shadeprops", "shadeposition",
+features = ["dontcare", "blink", "shadeposition",
             "locationconfig", "operationlock", "windprotectionconfigawning", "identification"]
+# NOTE: shadeprops and motiontimefins are NOT supported for TCP/IP VDC devices.
 
 # Venetian blind (POSITIONAL + channelType 9 or 10)
-features = ["dontcare", "blink", "shadeprops", "shadeposition",
-            "motiontimefins", "shadebladeang",
+features = ["dontcare", "blink", "shadeposition",
+            "shadebladeang",
             "locationconfig", "operationlock", "windprotectionconfigblind", "identification"]
+# NOTE: shadeprops and motiontimefins are NOT supported for TCP/IP VDC devices.
 ```
 
 **Blue (primaryGroup=3) — Heating valve VDC device:**

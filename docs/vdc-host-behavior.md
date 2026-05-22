@@ -552,7 +552,8 @@ the device is announced.  Key auto-derivation rules:
 - Any output → `dontcare`, `blink`
 - ON_OFF function → `outconfigswitch`, `impulseconfig`
 - DIMMER / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER function → `dimtimeconfig`
-- Grey shade output with slat channel → `shadebladeang`, `motiontimefins`
+- Grey shade output with slat channel → `shadebladeang`
+  (`shadeprops` and `motiontimefins` are NOT supported for TCP/IP VDC — DS485-only path)
 - Any binary input → `akmsensor` (`akminput` and `akmdelay` are not supported for VDC devices)
 - Any button → `pushbutton`, `pushbadvanced`, `pushbdisabled`
 
