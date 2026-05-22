@@ -158,7 +158,7 @@ SCHEMA_OUTPUT_DESC = [
         "Required",
         "OutputFunction: 0=ON_OFF 1=POSITIONAL 2=DIMMER 3=DIMMER_COLOR_TEMP 4=FULL_COLOR_DIMMER 5=INTERNALLY_CONTROLLED 6=BIPOLAR 255=CUSTOM",
     ),
-    ("outputUsage", "Required", "OutputUsage: 0=ROOM 1=USER 2=OTHER"),
+    ("outputUsage", "Required", "OutputUsage: 0=UNDEFINED 1=ROOM 2=OUTDOORS"),
     ("name", "Optional", "Output name string"),
     ("defaultGroup", "Required", "Default scene group ID"),
     ("variableRamp", "Optional", "True if ramp time is configurable (default: false)"),
