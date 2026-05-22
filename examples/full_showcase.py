@@ -615,7 +615,6 @@ def build_d09_blinds_positional(vdc: Vdc, idx: int) -> DevInfo:
     out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
     out.on_channel_applied = _channel_callback(name)
 
-    v.add_model_feature("shadeprops")
     v.add_model_feature("shadeposition")
     v.add_model_feature("shadebladeang")
     v.add_model_feature("ledauto")
@@ -636,7 +635,6 @@ def build_d10_awnings(vdc: Vdc, idx: int) -> DevInfo:
     out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
     out.on_channel_applied = _channel_callback(name)
 
-    v.add_model_feature("shadeprops")
     v.add_model_feature("shadeposition")
     v.add_model_feature("locationconfig")  # orientation dropdown
     v.add_model_feature(
@@ -831,7 +829,6 @@ def build_d19_motorised_window(vdc: Vdc, idx: int) -> DevInfo:
     out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
     out.on_channel_applied = _channel_callback(name)
 
-    v.add_model_feature("shadeprops")
     v.add_model_feature("shadeposition")
     v.add_model_feature("ledauto")
     v.derive_model_features()

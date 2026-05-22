@@ -624,7 +624,7 @@ class Vdsd:
     _VENTILATION_CHANNEL_TYPES: frozenset = frozenset({12, 13, 14, 15, 20, 21})
 
     # Features that cannot be used with TCP/IP VDC devices and must never be
-    # declared.  Three root causes:
+    # declared.  Four root causes:
     #   1. Output-mode selectors (outmode, outmodeswitch, …) write to the dSS
     #      m_OutputMode field via DS485 CfgFunction_Mode.  The written value is
     #      never forwarded to the VDC, so VDC devices cannot observe or react
@@ -634,6 +634,9 @@ class Vdsd:
     #   3. AKM input configuration (akminput, akmdelay) writes to DS485 bus
     #      registers via setAKMInputProperty() / setAKMInputTimeouts(); the
     #      written values are never forwarded to the VDC.
+    #   4. Shade properties configuration (shadeprops, motiontimefins) triggers
+    #      setMaxMotionTime() / setMotionTime() DS485 calls whose results are
+    #      stored on the dSS side only; the VDC receives no write-back.
     _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset(
         {
             # LED indicators — not API-controlled on VDC devices
@@ -662,6 +665,11 @@ class Vdsd:
             # AKM input/delay config — DS485 bus only, never reaches VDC
             "akminput",
             "akmdelay",
+            # Shade properties / motion timing — triggers setMaxMotionTime() /
+            # setMotionTime() DS485 calls; values stored on dSS only, VDC
+            # receives no write-back and cannot react to the configuration.
+            "shadeprops",
+            "motiontimefins",
         }
     )
 
@@ -693,12 +701,15 @@ class Vdsd:
         **Output / channel rules**
 
         * Any output present → ``"dontcare"``, ``"blink"``
-        * Any channel with ``channelType`` in 1–12, 14–18, or 22–24 →
-          ``"transt"``
-        * ``primaryGroup`` 2 (GREY / outdoor shade) → ``"shadeprops"``
-        * ``primaryGroup`` 2 + ``function`` POSITIONAL (2) →
-          ``"shadeposition"``; additionally ``channelType`` 9 or 10
-          present → ``"shadebladeang"`` + ``"motiontimefins"``
+        * Any channel with ``channelType`` in 1–12, 14–18, or 22–24
+          AND ``function`` ≠ POSITIONAL(2) → ``"transt"``
+          (positional outputs use hardware motor timing, not transition
+          time, so ``"transt"`` is never derived for them)
+        * ``primaryGroup`` 2 (GREY / outdoor shade) + ``function``
+          POSITIONAL (2) → ``"shadeposition"``; additionally
+          ``channelType`` 9 or 10 present → ``"shadebladeang"``
+          (``"shadeprops"`` and ``"motiontimefins"`` are **not**
+          auto-derived — they are unsupported for TCP/IP VDC devices)
         * ``primaryGroup`` ≠ 2 → ``"outvalue8"``
         * Both ``channelType`` 2 (HUE) and 3 (SATURATION) present, or
           both 1 (BRIGHTNESS) and 4 (COLOR_TEMPERATURE) present →
@@ -754,10 +765,11 @@ class Vdsd:
 
         Note: features in :attr:`_UNSUPPORTED_MODEL_FEATURES` are
         **never** auto-derived and will raise :exc:`ValueError` if
-        passed to :meth:`add_model_feature`.  These are features whose
-        configuration is written to the dSS hardware register via DS485
-        and never forwarded to VDC devices, or features tied to physical
-        hardware capabilities with no VDC write-back path.  See
+        passed to :meth:`add_model_feature`.  This includes
+        ``"shadeprops"`` and ``"motiontimefins"`` — the shade properties
+        panel writes motor timing via DS485 ``setMaxMotionTime()`` /
+        ``setMotionTime()``; the VDC receives no write-back and cannot
+        react to those settings.  See
         ``docs/model-features-auto-assignment.md`` for the full list and
         rationale.
         """
@@ -774,18 +786,20 @@ class Vdsd:
             ch_types = {int(ch.channel_type) for ch in self._output.channels.values()}
             has_blade_channel = bool(ch_types & {9, 10})
 
-            # transt: channels with smooth transition support
-            if ch_types & self._TRANST_CHANNEL_TYPES:
+            # transt: smooth transition support — not for POSITIONAL outputs,
+            # which use hardware motor timing rather than software transition time.
+            if fn != 2 and ch_types & self._TRANST_CHANNEL_TYPES:
                 self._model_features.add("transt")
 
             # shade vs. normal output — determined by primaryGroup (ColorGroup.GREY=2)
+            # "shadeprops" and "motiontimefins" are NOT derived: they open the
+            # shade-properties panel which writes motor timing via DS485
+            # setMaxMotionTime()/setMotionTime(); the VDC receives no write-back.
             if pg == 2:  # ColorGroup.GREY — outdoor shade device
-                self._model_features.add("shadeprops")
                 if fn == 2:  # OutputFunction.POSITIONAL
                     self._model_features.add("shadeposition")
                     if has_blade_channel:
                         self._model_features.add("shadebladeang")
-                        self._model_features.add("motiontimefins")
             else:
                 self._model_features.add("outvalue8")
 

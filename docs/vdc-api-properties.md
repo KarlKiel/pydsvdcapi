@@ -229,19 +229,24 @@ Requires `primaryGroup=8` (Black) for `jokerconfig` and `jokertempcontrol` to ta
 
 ##### E — Shade / Blind Properties Panel (Grey / GR Group)
 
-Requires `primaryGroup=2` (GREY). `shadeprops` is the master gate.
+Requires `primaryGroup=2` (GREY).
+
+> **`shadeprops` and `motiontimefins` are NOT supported for TCP/IP VDC devices.**
+> Both write motor timing via DS485 `setMaxMotionTime()` / `setMotionTime()`;
+> the dSS stores the values internally without forwarding them to the VDC.
+> `add_model_feature()` raises `ValueError` for both.
 
 | ID | Feature | Effect | dSS API | Notes | Derivation |
 |---|---|---|---|---|---|
-| 14 | `shadeprops` | **Master gate.** Enables shade properties panel. | Shade properties tab | Required for all other shade features | `auto: primaryGroup=2 (GREY / outdoor shade)` |
-| 15 | `shadeposition` | Enables shade position control (0–100%) per scene. | Scene editor position field | Requires `shadeprops` | `auto: shade output + outputFunction=POSITIONAL` |
-| 18 | `shadebladeang` | Enables slat/blade angle control (0–100°) for venetian blinds. | Scene editor angle field | Requires `shadeprops`; jalousie hardware only | `auto: shade output + channelType 9 or 10 present` |
-| 16 | `motiontimefins` | Enables travel time calibration for slat movement. | `setMaxMotionTime()` / `setMotionTime()` | Requires `shadeprops`; jalousie/venetian blind only | `auto: shade output + channelType 9 or 10 present` |
+| 14 | `shadeprops` | **NOT SUPPORTED.** Would enable shade properties panel. | `setMaxMotionTime()` | DS485-only path; VDC receives no write-back | `not-supported-vdc` |
+| 15 | `shadeposition` | Enables shade position control (0–100%) per scene. | Scene editor position field | — | `auto: shade output + outputFunction=POSITIONAL` |
+| 18 | `shadebladeang` | Enables slat/blade angle control (0–100°) for venetian blinds. | Scene editor angle field | Jalousie hardware only | `auto: shade output + channelType 9 or 10 present` |
+| 16 | `motiontimefins` | **NOT SUPPORTED.** Would enable fin/slat rotation time calibration. | `setMotionTime()` | DS485-only path; VDC receives no write-back | `not-supported-vdc` |
 | 17 | `optypeconfig` | Output type selector (Switched / Swiped / PowerSafe). Selection changes dSS `m_OutputMode` via DS485 `CfgFunction_Mode` — these mode IDs have no VDC equivalent. **NOT supported for TCP/IP VDC.** | Output type selector | — | `not-supported-vdc` |
 
 ##### F — Location & Wind Protection (GR Group)
 
-Requires `primaryGroup=2` and `shadeprops`.
+Requires `primaryGroup=2`.
 
 | ID | Feature | Effect | dSS API | Notes | Derivation |
 |---|---|---|---|---|---|
@@ -324,8 +329,8 @@ All features in the "Auto-derived features" column are produced automatically by
 | Dimmable light (DIMMER function) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig` | — |
 | Switched light (ON_OFF function) | `dontcare`, `blink`, `outvalue8`, `transt`, `outconfigswitch`, `impulseconfig` | — |
 | Color light (FULL_COLOR_DIMMER) | `dontcare`, `blink`, `outvalue8`, `transt`, `outputchannels`, `dimtimeconfig` | — |
-| Roller shutter / awning | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `transt`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | — |
-| Venetian blind / jalousie | `dontcare`, `blink`, `shadeprops`, `shadeposition`, `shadebladeang`, `motiontimefins`, `transt`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | — |
+| Roller shutter / awning | `dontcare`, `blink`, `shadeposition`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | `shadeprops`, `motiontimefins` not supported |
+| Venetian blind / jalousie | `dontcare`, `blink`, `shadeposition`, `shadebladeang`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | `shadeprops`, `motiontimefins` not supported |
 | Heating valve (ON/OFF) | `dontcare`, `blink`, `outvalue8`, `transt`, `pwmvalue`, `outconfigswitch`, `impulseconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
 | Heating valve (continuous/PWM) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig`, `pwmvalue`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
 | Joker with group assignment | `jokerconfig` (pg=8), `highlevel` (when button with group=8 present) | — |
