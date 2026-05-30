@@ -1317,6 +1317,82 @@ class TestEdgeCases:
 
 
 # ===========================================================================
+# siunit / symbol in channel descriptions
+# ===========================================================================
+
+
+class TestChannelDescriptionSiunitSymbol:
+    """Tests for siunit and symbol fields in channelDescriptions."""
+
+    def test_channel_description_includes_siunit_and_symbol(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        ch = out.get_channel(0)
+        desc = ch.get_description_properties()
+        assert "siunit" in desc
+        assert "symbol" in desc
+        assert desc["siunit"] == "percent"
+        assert desc["symbol"] == "%"
+
+    def test_shade_channel_description_includes_siunit_percent(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        ch = out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE, ds_index=0)
+        desc = ch.get_description_properties()
+        assert desc["siunit"] == "percent"
+        assert desc["symbol"] == "%"
+
+    def test_colortemp_channel_siunit(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
+        ch = out.get_channel_by_type(OutputChannelType.COLOR_TEMPERATURE)
+        desc = ch.get_description_properties()
+        assert desc["siunit"] == "reciprocal megakelvin"
+        assert desc["symbol"] == "mired"
+
+    def test_hue_channel_siunit(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.FULL_COLOR_DIMMER)
+        ch = out.get_channel_by_type(OutputChannelType.HUE)
+        desc = ch.get_description_properties()
+        assert desc["siunit"] == "degree"
+        assert desc["symbol"] == "°"
+
+    def test_cie_x_channel_no_siunit(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.FULL_COLOR_DIMMER)
+        ch = out.get_channel_by_type(OutputChannelType.CIE_X)
+        desc = ch.get_description_properties()
+        assert "siunit" not in desc
+        assert "symbol" not in desc
+
+    def test_air_flow_direction_no_siunit(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        ch = out.add_channel(OutputChannelType.AIR_FLOW_DIRECTION, ds_index=0)
+        desc = ch.get_description_properties()
+        assert "siunit" not in desc
+        assert "symbol" not in desc
+
+    def test_shade_position_resolution_16bit(self):
+        """Shade channels must use 16-bit resolution (100/65536)."""
+        spec = CHANNEL_SPECS[OutputChannelType.SHADE_POSITION_OUTSIDE]
+        assert spec.resolution == pytest.approx(100 / 65536)
+
+    def test_shade_angle_resolution_16bit(self):
+        spec = CHANNEL_SPECS[OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE]
+        assert spec.resolution == pytest.approx(100 / 65536)
+
+    def test_shade_indoor_resolution_16bit(self):
+        spec = CHANNEL_SPECS[OutputChannelType.SHADE_POSITION_INDOOR]
+        assert spec.resolution == pytest.approx(100 / 65536)
+
+    def test_shade_angle_indoor_resolution_16bit(self):
+        spec = CHANNEL_SPECS[OutputChannelType.SHADE_OPENING_ANGLE_INDOOR]
+        assert spec.resolution == pytest.approx(100 / 65536)
+
+
+# ===========================================================================
 # __init__.py exports
 # ===========================================================================
 

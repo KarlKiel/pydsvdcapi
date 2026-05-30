@@ -124,12 +124,19 @@ class ChannelSpec:
         Maximum value in the channel's unit.
     resolution:
         Default resolution (smallest distinguishable step).
+    siunit:
+        SI unit name (e.g. ``"percent"``, ``"degree"``).  Empty string
+        for dimensionless / boolean channels.
+    symbol:
+        Unit symbol (e.g. ``"%"``, ``"°"``).  Empty string when no unit.
     """
 
     name: str
     min_value: float
     max_value: float
     resolution: float
+    siunit: str = ""
+    symbol: str = ""
 
 
 #: Metadata table for all standard channel types (vDC API §4.9.4).
@@ -137,53 +144,89 @@ class ChannelSpec:
 CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
     # -- Light channels ------------------------------------------------
     OutputChannelType.BRIGHTNESS: ChannelSpec(
-        name="brightness", min_value=0, max_value=100, resolution=100 / 255
+        name="brightness",
+        min_value=0,
+        max_value=100,
+        resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.HUE: ChannelSpec(
-        name="hue", min_value=0, max_value=360, resolution=360 / 255
+        name="hue",
+        min_value=0,
+        max_value=360,
+        resolution=360 / 255,
+        siunit="degree",
+        symbol="°",
     ),
     OutputChannelType.SATURATION: ChannelSpec(
-        name="saturation", min_value=0, max_value=100, resolution=100 / 255
+        name="saturation",
+        min_value=0,
+        max_value=100,
+        resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.COLOR_TEMPERATURE: ChannelSpec(
-        name="colortemp", min_value=100, max_value=1000, resolution=900 / 255
+        name="colortemp",
+        min_value=100,
+        max_value=1000,
+        resolution=900 / 255,
+        siunit="reciprocal megakelvin",
+        symbol="mired",
     ),
     OutputChannelType.CIE_X: ChannelSpec(
-        name="x", min_value=0, max_value=10000, resolution=10000 / 255
+        name="x",
+        min_value=0,
+        max_value=10000,
+        resolution=10000 / 255,
     ),
     OutputChannelType.CIE_Y: ChannelSpec(
-        name="y", min_value=0, max_value=10000, resolution=10000 / 255
+        name="y",
+        min_value=0,
+        max_value=10000,
+        resolution=10000 / 255,
     ),
     # -- Shade channels ------------------------------------------------
     OutputChannelType.SHADE_POSITION_OUTSIDE: ChannelSpec(
         name="shadePositionOutside",
         min_value=0,
         max_value=100,
-        resolution=100 / 255,
+        resolution=100 / 65536,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.SHADE_POSITION_INDOOR: ChannelSpec(
         name="shadePositionIndoor",
         min_value=0,
         max_value=100,
-        resolution=100 / 255,
+        resolution=100 / 65536,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE: ChannelSpec(
         name="shadeOpeningAngleOutside",
         min_value=0,
         max_value=100,
-        resolution=100 / 255,
+        resolution=100 / 65536,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.SHADE_OPENING_ANGLE_INDOOR: ChannelSpec(
         name="shadeOpeningAngleIndoor",
         min_value=0,
         max_value=100,
-        resolution=100 / 255,
+        resolution=100 / 65536,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.TRANSPARENCY: ChannelSpec(
         name="transparency",
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     # -- Climate channels ----------------------------------------------
     OutputChannelType.HEATING_POWER: ChannelSpec(
@@ -191,18 +234,24 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.COOLING_CAPACITY: ChannelSpec(
         name="coolingCapacity",
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.AIR_FLOW_INTENSITY: ChannelSpec(
         name="airFlowIntensity",
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.AIR_FLOW_DIRECTION: ChannelSpec(
         name="airFlowDirection",
@@ -215,12 +264,16 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.AIR_LOUVER_POSITION: ChannelSpec(
         name="airLouverPosition",
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     OutputChannelType.AIR_LOUVER_AUTO: ChannelSpec(
         name="airLouverAuto",
@@ -240,6 +293,8 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     # -- Misc channels -------------------------------------------------
     OutputChannelType.WATER_TEMPERATURE: ChannelSpec(
@@ -265,6 +320,8 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=100,
         resolution=100 / 255,
+        siunit="percent",
+        symbol="%",
     ),
     # -- Video channels ------------------------------------------------
     OutputChannelType.VIDEO_STATION: ChannelSpec(
@@ -626,7 +683,8 @@ class OutputChannel:
         :attr:`name` inside the ``channelDescriptions`` property sub-tree
         (§4.9.1).  Keys match the vDC API property names.
         """
-        return {
+        spec = get_channel_spec(self._channel_type)
+        props: dict[str, Any] = {
             "name": self._name,
             "channelType": int(self._channel_type),
             "dsIndex": self._ds_index,
@@ -634,6 +692,11 @@ class OutputChannel:
             "max": self._max_value,
             "resolution": self._resolution,
         }
+        if spec is not None and spec.siunit:
+            props["siunit"] = spec.siunit
+        if spec is not None and spec.symbol:
+            props["symbol"] = spec.symbol
+        return props
 
     def get_settings_properties(self) -> dict[str, Any]:
         """Return this channel's ``channelSettings`` value dict.
