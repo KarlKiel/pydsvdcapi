@@ -623,9 +623,7 @@ class TestOutputChannelProperties:
         assert "0" in desc
         assert "1" in desc
         assert desc["0"]["channelType"] == int(OutputChannelType.BRIGHTNESS)
-        assert desc["1"]["channelType"] == int(
-            OutputChannelType.COLOR_TEMPERATURE
-        )
+        assert desc["1"]["channelType"] == int(OutputChannelType.COLOR_TEMPERATURE)
         # Channel name is still present inside each element.
         assert desc["0"]["name"] == "brightness"
         assert desc["1"]["name"] == "colortemp"
@@ -1450,8 +1448,8 @@ class TestChannelContainerKeyedByDsIndex:
         out = self._make_dimmer()
         desc = out.get_channel_descriptions()
         ch = list(out.channels.values())[0]
-        assert str(ch.ds_index) in desc          # e.g. "0"
-        assert ch.name not in desc               # "brightness" must NOT be a key
+        assert str(ch.ds_index) in desc  # e.g. "0"
+        assert ch.name not in desc  # "brightness" must NOT be a key
 
     def test_channel_settings_keyed_by_dsindex(self):
         """channelSettings must be keyed by dsIndex string, not channel name."""
@@ -1497,5 +1495,5 @@ class TestChannelContainerKeyedByDsIndex:
         sent_msg = session.send_notification.call_args[0][0]
         props = elements_to_dict(sent_msg.vdc_send_push_notification.changedproperties)
         assert "channelStates" in props
-        assert str(ch.ds_index) in props["channelStates"]   # "0"
-        assert ch.name not in props["channelStates"]         # not "brightness"
+        assert str(ch.ds_index) in props["channelStates"]  # "0"
+        assert ch.name not in props["channelStates"]  # not "brightness"
