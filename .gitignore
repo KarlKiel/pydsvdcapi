@@ -209,6 +209,9 @@ __marimo__/
 # Documentation folder
 Documentation/
 
+# Local research / comparison documents (not for version control)
+docs/p44vdc-comparison.md
+
 # Examples pycache
 examples/__pycache__/
 .claude/settings.json

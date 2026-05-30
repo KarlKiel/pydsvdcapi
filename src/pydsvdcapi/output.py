@@ -12,7 +12,7 @@ The output owns three property groups visible to the vdSM:
   (function, outputUsage, variableRamp, maxPower, …).
 * **outputSettings** — writable configuration stored persistently
   (mode, groups, pushChanges, dimming parameters, …).
-* **outputState** — volatile runtime state (localPriority, error)
+* **outputState** — volatile runtime state (localPriority, transitionTime, error)
   that is **not** persisted.
 
 Channels
@@ -33,10 +33,9 @@ are auto-created on construction:
 The ``channelDescriptions``, ``channelSettings``, and
 ``channelStates`` property sub-trees each carry **all channels inside
 a single** ``PropertyElement``, with each channel identified by its
-**name** as the element key (e.g. ``"brightness"``, ``"colortemp"``).
-Using the numeric ``dsIndex`` as the key (the former behaviour) caused
-``deviceOutputIndex:255`` errors because dSS registers channels by name
-and cannot match integer-string keys.
+**dsIndex** as the element key (e.g. ``"0"``, ``"1"``), matching the
+p44vdc wire format.  The channel name is carried as the ``name`` field
+inside each element.
 
 See :mod:`pydsvdcapi.output_channel` for details on channel semantics,
 bidirectional value flow, ``apply_now`` buffering, and push behaviour.
@@ -46,7 +45,8 @@ State model
 
 The output's operational values (brightness level, valve position,
 colour values, etc.) live in the *channels*.  The output state itself
-only carries ``localPriority`` and ``error``.
+carries ``localPriority``, ``transitionTime``, ``movingState``, and
+``error``.
 
 When a channel value is changed locally (from the device side) and
 ``pushChanges`` is enabled, the output pushes the channel state to
@@ -57,7 +57,8 @@ Persistence
 
 Only description and settings properties are persisted (via the owning
 Vdsd's property tree → Device → Vdc → VdcHost YAML).  The runtime
-state (``localPriority``, ``error``) is transient.
+state (``localPriority``, ``transitionTime``, ``movingState``, ``error``)
+is transient.
 
 Usage::
 
@@ -153,6 +154,52 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
 }
 
 logger = logging.getLogger(__name__)
+
+#: All setting keys that :meth:`Output.apply_settings` handles explicitly.
+#: Any key arriving via ``setProperty`` that is **not** in this set is stored
+#: in :attr:`Output._extra_settings` and round-tripped through persistence.
+_KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
+    {
+        "mode",
+        "activeGroup",
+        "pushChanges",
+        "groups",
+        "onThreshold",
+        "minBrightness",
+        "dimTimeUp",
+        "dimTimeDown",
+        "dimTimeUpAlt1",
+        "dimTimeDownAlt1",
+        "dimTimeUpAlt2",
+        "dimTimeDownAlt2",
+        "heatingSystemCapability",
+        "heatingSystemType",
+        "openTime",
+        "closeTime",
+        "angleOpenTime",
+        "angleCloseTime",
+        "stopDelayTime",
+    }
+)
+
+#: All keys that appear in the persisted property tree dict.
+#: Used by :meth:`Output._apply_state` to identify which keys are
+#: firmware-specific extras that should be stored in :attr:`Output._extra_settings`.
+_KNOWN_TREE_KEYS: frozenset[str] = _KNOWN_SETTING_KEYS | frozenset(
+    {
+        # Description keys
+        "function",
+        "outputUsage",
+        "name",
+        "defaultGroup",
+        "variableRamp",
+        "maxPower",
+        "activeCoolingMode",
+        # Structural keys
+        "channels",
+        "scenes",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +485,17 @@ class Output:
     heating_system_type:
         Kind of valve / actuator attached.  ``None`` if not a climate
         device.
+    open_time:
+        Motor open travel time in seconds (ShadowBehaviour / p44vdc).
+        ``None`` if not a shadow device.
+    close_time:
+        Motor close travel time in seconds.  ``None`` if not configured.
+    angle_open_time:
+        Blade angle open time in seconds.  ``None`` if not configured.
+    angle_close_time:
+        Blade angle close time in seconds.  ``None`` if not configured.
+    stop_delay_time:
+        Stop delay time in seconds.  ``None`` if not configured.
     """
 
     def __init__(
@@ -466,6 +524,12 @@ class Output:
         dim_time_down_alt2: int | None = None,
         heating_system_capability: HeatingSystemCapability | int | None = None,
         heating_system_type: HeatingSystemType | int | None = None,
+        # Shadow motor timing settings (ShadowBehaviour / p44vdc)
+        open_time: float | None = None,
+        close_time: float | None = None,
+        angle_open_time: float | None = None,
+        angle_close_time: float | None = None,
+        stop_delay_time: float | None = None,
     ) -> None:
         # ---- parent reference ----------------------------------------
         self._vdsd: Vdsd = vdsd
@@ -519,9 +583,23 @@ class Output:
             else None
         )
 
+        # Shadow motor timing (ShadowBehaviour / p44vdc outputSettings)
+        self._open_time: float | None = open_time
+        self._close_time: float | None = close_time
+        self._angle_open_time: float | None = angle_open_time
+        self._angle_close_time: float | None = angle_close_time
+        self._stop_delay_time: float | None = stop_delay_time
+
+        # Extra settings: unknown keys received via setProperty are stored
+        # here so they can be round-tripped through persistence and returned
+        # by get_settings_properties().
+        self._extra_settings: dict[str, Any] = {}
+
         # ---- state properties (volatile, NOT persisted) --------------
         self._local_priority: bool = False
         self._error: OutputError = OutputError.OK
+        self._transition_time: float = 0.0
+        self._moving_state: int = 0
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
@@ -771,6 +849,56 @@ class Output:
         )
         self._schedule_auto_save()
 
+    @property
+    def open_time(self) -> float | None:
+        """Motor open travel time in seconds (``None`` = not configured)."""
+        return self._open_time
+
+    @open_time.setter
+    def open_time(self, value: float | None) -> None:
+        self._open_time = value
+        self._schedule_auto_save()
+
+    @property
+    def close_time(self) -> float | None:
+        """Motor close travel time in seconds (``None`` = not configured)."""
+        return self._close_time
+
+    @close_time.setter
+    def close_time(self, value: float | None) -> None:
+        self._close_time = value
+        self._schedule_auto_save()
+
+    @property
+    def angle_open_time(self) -> float | None:
+        """Blade angle open time in seconds (``None`` = not configured)."""
+        return self._angle_open_time
+
+    @angle_open_time.setter
+    def angle_open_time(self, value: float | None) -> None:
+        self._angle_open_time = value
+        self._schedule_auto_save()
+
+    @property
+    def angle_close_time(self) -> float | None:
+        """Blade angle close time in seconds (``None`` = not configured)."""
+        return self._angle_close_time
+
+    @angle_close_time.setter
+    def angle_close_time(self, value: float | None) -> None:
+        self._angle_close_time = value
+        self._schedule_auto_save()
+
+    @property
+    def stop_delay_time(self) -> float | None:
+        """Stop delay time in seconds (``None`` = not configured)."""
+        return self._stop_delay_time
+
+    @stop_delay_time.setter
+    def stop_delay_time(self, value: float | None) -> None:
+        self._stop_delay_time = value
+        self._schedule_auto_save()
+
     # ==================================================================
     # State accessors (volatile)
     # ==================================================================
@@ -792,6 +920,28 @@ class Output:
     @error.setter
     def error(self, value: OutputError | int) -> None:
         self._error = OutputError(int(value))
+
+    @property
+    def transition_time(self) -> float:
+        """Transition time in seconds (volatile, not persisted)."""
+        return self._transition_time
+
+    @transition_time.setter
+    def transition_time(self, value: float) -> None:
+        self._transition_time = float(value)
+
+    @property
+    def moving_state(self) -> int:
+        """Motor movement state for shade/blind outputs (volatile, not persisted).
+
+        ``0`` = idle, ``1`` = moving open/up, ``-1`` = moving closed/down.
+        Matches p44vdc ``ShadowBehaviour`` wire format.
+        """
+        return self._moving_state
+
+    @moving_state.setter
+    def moving_state(self, value: int) -> None:
+        self._moving_state = int(value)
 
     # ==================================================================
     # Channel management
@@ -1410,9 +1560,10 @@ class Output:
 
         Called by :meth:`OutputChannel.update_value` when ``pushChanges``
         is set on this output.  Sends a ``VDC_SEND_PUSH_NOTIFICATION``
-        with a ``channelStates`` payload keyed by the channel's **name**
-        (e.g. ``{"channelStates": {"brightness": {"value": 75.0, …}}}``),
-        matching the same keying used in ``getProperty`` responses.
+        with a ``channelStates`` payload keyed by the channel's **dsIndex**
+        string (e.g. ``{"channelStates": {"0": {"value": 75.0, …}}}``),
+        matching the p44vdc wire format and the same keying used in
+        ``getProperty`` responses.
         """
         session = self._session
         if session is None:
@@ -1426,7 +1577,7 @@ class Output:
         state_dict = channel.get_state_properties()
         push_tree: dict[str, Any] = {
             "channelStates": {
-                channel.name: state_dict,
+                str(channel.ds_index): state_dict,
             }
         }
 
@@ -1457,33 +1608,38 @@ class Output:
     # ==================================================================
 
     def get_channel_descriptions(self) -> dict[str, Any]:
-        """Return the ``channelDescriptions`` sub-tree keyed by channel name.
+        """Return the ``channelDescriptions`` sub-tree keyed by dsIndex string.
 
-        Each key is the channel's protocol name (e.g. ``"brightness"``,
-        ``"colortemp"``).  The value is the dict from
-        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`.
-
-        dSS registers channels by name; using ``dsIndex`` strings as keys
-        would cause ``deviceOutputIndex:255`` errors on every channel lookup.
+        Each key is the channel's ``dsIndex`` as a string (e.g. ``"0"``,
+        ``"1"``), matching the p44vdc wire format.  The value is the dict from
+        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`,
+        which carries the channel name as the ``name`` field inside each element.
         """
         return {
-            ch.name: ch.get_description_properties() for ch in self._channels.values()
+            str(ch.ds_index): ch.get_description_properties()
+            for ch in self._channels.values()
         }
 
     def get_channel_settings(self) -> dict[str, Any]:
-        """Return the ``channelSettings`` sub-tree keyed by channel name.
+        """Return the ``channelSettings`` sub-tree keyed by dsIndex string.
 
-        Keys are channel names, consistent with :meth:`get_channel_descriptions`.
+        Keys are dsIndex strings, consistent with :meth:`get_channel_descriptions`.
         Currently all channels return an empty settings dict (§4.9.2).
         """
-        return {ch.name: ch.get_settings_properties() for ch in self._channels.values()}
+        return {
+            str(ch.ds_index): ch.get_settings_properties()
+            for ch in self._channels.values()
+        }
 
     def get_channel_states(self) -> dict[str, Any]:
-        """Return the ``channelStates`` sub-tree keyed by channel name.
+        """Return the ``channelStates`` sub-tree keyed by dsIndex string.
 
-        Keys are channel names, consistent with :meth:`get_channel_descriptions`.
+        Keys are dsIndex strings, consistent with :meth:`get_channel_descriptions`.
         """
-        return {ch.name: ch.get_state_properties() for ch in self._channels.values()}
+        return {
+            str(ch.ds_index): ch.get_state_properties()
+            for ch in self._channels.values()
+        }
 
     # ==================================================================
     # Property dicts (for getProperty responses)
@@ -1511,6 +1667,10 @@ class Output:
         """Return the ``outputSettings`` property dict.
 
         Keys match the vDC API property names (§4.8.2).
+
+        Optional shadow motor timing fields (``openTime``, ``closeTime``,
+        ``angleOpenTime``, ``angleCloseTime``, ``stopDelayTime``) are only
+        included when they have been set to a non-``None`` value.
         """
         settings: dict[str, Any] = {
             "mode": int(self._mode),
@@ -1545,15 +1705,38 @@ class Output:
         if self._heating_system_type is not None:
             settings["heatingSystemType"] = int(self._heating_system_type)
 
+        # Optional shadow motor timing settings (ShadowBehaviour / p44vdc).
+        if self._open_time is not None:
+            settings["openTime"] = self._open_time
+        if self._close_time is not None:
+            settings["closeTime"] = self._close_time
+        if self._angle_open_time is not None:
+            settings["angleOpenTime"] = self._angle_open_time
+        if self._angle_close_time is not None:
+            settings["angleCloseTime"] = self._angle_close_time
+        if self._stop_delay_time is not None:
+            settings["stopDelayTime"] = self._stop_delay_time
+
+        # Include any extra (firmware-specific) settings that arrived via
+        # setProperty but are not in the standard known-key set.
+        settings.update(self._extra_settings)
+
         return settings
 
     def get_state_properties(self) -> dict[str, Any]:
         """Return the ``outputState`` property dict.
 
         Keys match the vDC API property names (§4.8.3).
+
+        Includes ``localPriority``, ``transitionTime`` (float, seconds),
+        ``movingState`` (integer, motor movement state for shade/blind
+        outputs), and ``error``.  All are volatile runtime state and are
+        not persisted to YAML.
         """
         return {
             "localPriority": self._local_priority,
+            "transitionTime": self._transition_time,
+            "movingState": self._moving_state,
             "error": int(self._error),
         }
 
@@ -1566,7 +1749,13 @@ class Output:
 
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for
-        ``outputSettings``.  Unknown keys are silently ignored.
+        ``outputSettings``.  Unknown keys are stored in
+        :attr:`_extra_settings` and returned by
+        :meth:`get_settings_properties`.
+
+        Recognised shadow motor timing keys: ``openTime``, ``closeTime``,
+        ``angleOpenTime``, ``angleCloseTime``, ``stopDelayTime``.
+        Pass ``None`` to clear a previously set value.
         """
         if "mode" in settings:
             self._mode = OutputMode(int(settings["mode"]))
@@ -1617,6 +1806,28 @@ class Output:
             self._heating_system_type = (
                 HeatingSystemType(int(val)) if val is not None else None
             )
+        if "openTime" in settings:
+            val = settings["openTime"]
+            self._open_time = float(val) if val is not None else None
+        if "closeTime" in settings:
+            val = settings["closeTime"]
+            self._close_time = float(val) if val is not None else None
+        if "angleOpenTime" in settings:
+            val = settings["angleOpenTime"]
+            self._angle_open_time = float(val) if val is not None else None
+        if "angleCloseTime" in settings:
+            val = settings["angleCloseTime"]
+            self._angle_close_time = float(val) if val is not None else None
+        if "stopDelayTime" in settings:
+            val = settings["stopDelayTime"]
+            self._stop_delay_time = float(val) if val is not None else None
+
+        # Collect any keys not handled above into _extra_settings so they
+        # can be round-tripped through persistence and returned by
+        # get_settings_properties().
+        for key, val in settings.items():
+            if key not in _KNOWN_SETTING_KEYS:
+                self._extra_settings[key] = val
 
         self._schedule_auto_save()
 
@@ -1625,9 +1836,18 @@ class Output:
 
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for ``outputState``.
+
+        Recognised keys: ``localPriority``, ``transitionTime``,
+        ``movingState``.  Unknown keys are silently ignored.
         """
         if "localPriority" in state:
             self._local_priority = bool(state["localPriority"])
+        if "transitionTime" in state:
+            val = state["transitionTime"]
+            self._transition_time = float(val) if val is not None else 0.0
+        if "movingState" in state:
+            val = state["movingState"]
+            self._moving_state = int(val) if val is not None else 0
 
     # ==================================================================
     # Persistence (property tree)
@@ -1685,6 +1905,22 @@ class Output:
             tree["heatingSystemCapability"] = int(self._heating_system_capability)
         if self._heating_system_type is not None:
             tree["heatingSystemType"] = int(self._heating_system_type)
+
+        # Optional shadow motor timing settings.
+        if self._open_time is not None:
+            tree["openTime"] = self._open_time
+        if self._close_time is not None:
+            tree["closeTime"] = self._close_time
+        if self._angle_open_time is not None:
+            tree["angleOpenTime"] = self._angle_open_time
+        if self._angle_close_time is not None:
+            tree["angleCloseTime"] = self._angle_close_time
+        if self._stop_delay_time is not None:
+            tree["stopDelayTime"] = self._stop_delay_time
+
+        # Extra (firmware-specific) settings — persisted alongside known keys.
+        if self._extra_settings:
+            tree.update(self._extra_settings)
 
         # Channels (description metadata only, not values).
         if self._channels:
@@ -1776,6 +2012,23 @@ class Output:
             self._heating_system_type = HeatingSystemType(
                 int(state["heatingSystemType"])
             )
+        if "openTime" in state:
+            self._open_time = float(state["openTime"])
+        if "closeTime" in state:
+            self._close_time = float(state["closeTime"])
+        if "angleOpenTime" in state:
+            self._angle_open_time = float(state["angleOpenTime"])
+        if "angleCloseTime" in state:
+            self._angle_close_time = float(state["angleCloseTime"])
+        if "stopDelayTime" in state:
+            self._stop_delay_time = float(state["stopDelayTime"])
+
+        # Restore extra (firmware-specific) settings: any key in the
+        # persisted tree that is not a known description, settings, or
+        # structural key is treated as an extra setting.
+        for key, val in state.items():
+            if key not in _KNOWN_TREE_KEYS:
+                self._extra_settings[key] = val
 
         # Restore channels.
         if "channels" in state:

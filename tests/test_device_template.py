@@ -405,16 +405,16 @@ class TestDeviceGetTemplateTree:
 
 
 class TestDeviceAnnounceCallbackGuard:
-    def test_no_guard_for_non_template_device(self):
+    async def test_no_guard_for_non_template_device(self):
         """Device created directly (not via template) must announce freely."""
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_simple_device(vdc)
         session = _make_session()
         # Should not raise — no _required_callbacks set
-        asyncio.get_event_loop().run_until_complete(device.announce(session))
+        await device.announce(session)
 
-    def test_raises_when_callbacks_missing(self):
+    async def test_raises_when_callbacks_missing(self):
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_simple_device(vdc)
@@ -422,10 +422,10 @@ class TestDeviceAnnounceCallbackGuard:
         device._required_callbacks = {"vdsds[0].on_identify": None}
         session = _make_session()
         with pytest.raises(AnnouncementNotReadyError) as exc_info:
-            asyncio.get_event_loop().run_until_complete(device.announce(session))
+            await device.announce(session)
         assert "vdsds[0].on_identify" in exc_info.value.missing_callbacks
 
-    def test_no_raise_when_callback_is_set(self):
+    async def test_no_raise_when_callback_is_set(self):
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_simple_device(vdc)
@@ -434,19 +434,19 @@ class TestDeviceAnnounceCallbackGuard:
         vdsd.on_identify = lambda v: None
         session = _make_session()
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(device.announce(session))
+        await device.announce(session)
 
-    def test_raises_when_output_callback_missing(self):
+    async def test_raises_when_output_callback_missing(self):
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_output_device(vdc)
         device._required_callbacks = {"vdsds[0].output.on_channel_applied": None}
         session = _make_session()
         with pytest.raises(AnnouncementNotReadyError) as exc_info:
-            asyncio.get_event_loop().run_until_complete(device.announce(session))
+            await device.announce(session)
         assert "vdsds[0].output.on_channel_applied" in exc_info.value.missing_callbacks
 
-    def test_no_raise_when_output_callback_set(self):
+    async def test_no_raise_when_output_callback_set(self):
         host = _make_host()
         vdc = _make_vdc(host)
         device = _make_output_device(vdc)
@@ -454,7 +454,7 @@ class TestDeviceAnnounceCallbackGuard:
         vdsd = list(device.vdsds.values())[0]
         vdsd._output.on_channel_applied = lambda o, u: None
         session = _make_session()
-        asyncio.get_event_loop().run_until_complete(device.announce(session))
+        await device.announce(session)
 
 
 # ---------------------------------------------------------------------------

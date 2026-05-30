@@ -603,6 +603,72 @@ class TestOutputStateProperties:
         assert state["localPriority"] is True
         assert state["error"] == int(OutputError.SHORT_CIRCUIT)
 
+    def test_output_state_includes_transition_time(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        state = out.get_state_properties()
+        assert "transitionTime" in state
+        assert isinstance(state["transitionTime"], float)
+        assert state["transitionTime"] == 0.0  # default
+
+    def test_apply_state_stores_transition_time(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_state({"transitionTime": 0.5})
+        assert out.get_state_properties()["transitionTime"] == 0.5
+
+    def test_transition_time_property_setter(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.transition_time = 2.5
+        assert out.get_state_properties()["transitionTime"] == 2.5
+
+    def test_apply_state_transition_time_none_falls_back_to_zero(self):
+        """Applying None value for transitionTime falls back to default."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        # Arrange: set to non-zero first
+        out.apply_state({"transitionTime": 1.5})
+        # Act: apply None value
+        out.apply_state({"transitionTime": None})
+        # Assert: falls back to default
+        assert out.get_state_properties()["transitionTime"] == 0.0
+
+    def test_output_state_includes_moving_state(self):
+        """movingState defaults to 0 (idle)."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        state = out.get_state_properties()
+        assert "movingState" in state
+        assert state["movingState"] == 0
+
+    def test_apply_state_stores_moving_state(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_state({"movingState": 1})
+        assert out.get_state_properties()["movingState"] == 1
+
+    def test_moving_state_property_setter(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.moving_state = -1
+        assert out.get_state_properties()["movingState"] == -1
+
+    def test_moving_state_not_in_property_tree(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.moving_state = 1
+        tree = out.get_property_tree()
+        # movingState must not appear in the property tree (it is volatile)
+        assert "movingState" not in tree
+
+    def test_apply_state_moving_state_none_falls_back_to_zero(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_state({"movingState": 1})
+        out.apply_state({"movingState": None})
+        assert out.get_state_properties()["movingState"] == 0
+
 
 # ===========================================================================
 # apply_settings
@@ -722,11 +788,70 @@ class TestOutputApplySettings:
         out.apply_settings({"heatingSystemType": None})
         assert out.heating_system_type is None
 
-    def test_apply_unknown_keys_ignored(self):
+    def test_apply_unknown_keys_now_stored(self):
+        """Unknown keys are now stored (not silently dropped) — known key still applied."""
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         out.apply_settings({"unknownKey": 42, "mode": 1})
         assert out.mode == OutputMode.BINARY
+        # Unknown key must now be accessible via get_settings_properties.
+        s = out.get_settings_properties()
+        assert s["unknownKey"] == 42
+
+    def test_apply_settings_stores_unknown_key(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"someUnknownKey": 42.0, "anotherKey": "hello"})
+        s = out.get_settings_properties()
+        assert s["someUnknownKey"] == 42.0
+        assert s["anotherKey"] == "hello"
+
+    def test_apply_settings_unknown_key_does_not_shadow_known(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"mode": 2, "someUnknownKey": 99})
+        s = out.get_settings_properties()
+        assert s["mode"] == 2  # known field handled normally
+        assert s["someUnknownKey"] == 99  # unknown field stored
+
+    def test_extra_settings_persisted_in_property_tree(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"customField": "value"})
+        tree = out.get_property_tree()
+        assert tree.get("customField") == "value"
+
+    def test_extra_settings_absent_when_empty(self):
+        """No extra keys appear in settings when nothing unknown was stored."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        s = out.get_settings_properties()
+        assert "someUnknownKey" not in s
+
+    def test_extra_settings_cumulative_across_calls(self):
+        """Successive apply_settings calls accumulate extra settings."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"firstKey": 1})
+        out.apply_settings({"secondKey": 2})
+        s = out.get_settings_properties()
+        assert s["firstKey"] == 1
+        assert s["secondKey"] == 2
+
+    def test_extra_settings_round_trip(self):
+        """Extra settings survive a get_property_tree / _apply_state round-trip."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"customField": "value", "numericExtra": 3.14})
+        tree = out.get_property_tree()
+
+        _, _, _, vdsd2 = _make_stack()
+        out2 = _make_output(vdsd2)
+        out2._apply_state(tree)
+
+        s = out2.get_settings_properties()
+        assert s["customField"] == "value"
+        assert s["numericExtra"] == pytest.approx(3.14)
 
     def test_apply_empty_dict(self):
         host, vdc, device, vdsd = _make_stack()
@@ -867,10 +992,14 @@ class TestOutputPropertyTree:
         out = _make_output(vdsd)
         out.local_priority = True
         out.error = OutputError.SHORT_CIRCUIT
+        out.transition_time = 1.5
+        out.moving_state = 1
         tree = out.get_property_tree()
 
         assert "localPriority" not in tree
         assert "error" not in tree
+        assert "transitionTime" not in tree
+        assert "movingState" not in tree
 
     def test_round_trip(self):
         """Serialize → _apply_state → verify all properties match."""
@@ -3212,3 +3341,170 @@ class TestMatchesZoneAndGroup:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.active_group = int(ColorGroup.YELLOW)
         assert host._matches_zone_and_group(vdsd, out, 42, 0) is True
+
+
+# ===========================================================================
+# Shadow motor timing fields
+# ===========================================================================
+
+
+class TestShadowTimingFields:
+    """Tests for shadow motor timing fields in outputSettings."""
+
+    def test_shadow_timing_fields_in_settings(self):
+        """Shadow timing fields appear in outputSettings when set."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out._open_time = 60.0
+        out._close_time = 55.0
+        out._angle_open_time = 1.5
+        out._angle_close_time = 1.5
+        out._stop_delay_time = 0.5
+        s = out.get_settings_properties()
+        assert s["openTime"] == 60.0
+        assert s["closeTime"] == 55.0
+        assert s["angleOpenTime"] == 1.5
+        assert s["angleCloseTime"] == 1.5
+        assert s["stopDelayTime"] == 0.5
+
+    def test_shadow_timing_absent_when_not_set(self):
+        """Shadow timing fields are absent when not configured."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        s = out.get_settings_properties()
+        assert "openTime" not in s
+        assert "closeTime" not in s
+        assert "angleOpenTime" not in s
+        assert "angleCloseTime" not in s
+        assert "stopDelayTime" not in s
+
+    def test_apply_settings_stores_shadow_timing(self):
+        """apply_settings stores shadow timing values correctly."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings(
+            {
+                "openTime": 45.0,
+                "closeTime": 40.0,
+                "angleOpenTime": 2.0,
+                "angleCloseTime": 2.0,
+                "stopDelayTime": 0.3,
+            }
+        )
+        s = out.get_settings_properties()
+        assert s["openTime"] == 45.0
+        assert s["closeTime"] == 40.0
+        assert s["angleOpenTime"] == 2.0
+        assert s["angleCloseTime"] == 2.0
+        assert s["stopDelayTime"] == 0.3
+
+    def test_shadow_timing_init_params(self):
+        """Shadow timing fields can be set at construction time."""
+        host, vdc, device, vdsd = _make_stack()
+        out = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            name="Blind Motor",
+            default_group=8,
+            active_group=8,
+            groups={8},
+            open_time=60.0,
+            close_time=55.0,
+            angle_open_time=1.5,
+            angle_close_time=1.5,
+            stop_delay_time=0.5,
+        )
+        assert out.open_time == 60.0
+        assert out.close_time == 55.0
+        assert out.angle_open_time == 1.5
+        assert out.angle_close_time == 1.5
+        assert out.stop_delay_time == 0.5
+
+    def test_shadow_timing_default_none(self):
+        """Shadow timing fields default to None."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        assert out.open_time is None
+        assert out.close_time is None
+        assert out.angle_open_time is None
+        assert out.angle_close_time is None
+        assert out.stop_delay_time is None
+
+    def test_shadow_timing_persisted_in_tree(self):
+        """Shadow timing fields appear in get_property_tree when set."""
+        host, vdc, device, vdsd = _make_stack()
+        out = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            name="Blind",
+            default_group=8,
+            active_group=8,
+            groups={8},
+            open_time=60.0,
+            close_time=55.0,
+            angle_open_time=1.5,
+            angle_close_time=1.5,
+            stop_delay_time=0.5,
+        )
+        tree = out.get_property_tree()
+        assert tree["openTime"] == 60.0
+        assert tree["closeTime"] == 55.0
+        assert tree["angleOpenTime"] == 1.5
+        assert tree["angleCloseTime"] == 1.5
+        assert tree["stopDelayTime"] == 0.5
+
+    def test_shadow_timing_absent_from_tree_when_not_set(self):
+        """Shadow timing fields are absent from property tree when None."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        tree = out.get_property_tree()
+        assert "openTime" not in tree
+        assert "closeTime" not in tree
+        assert "angleOpenTime" not in tree
+        assert "angleCloseTime" not in tree
+        assert "stopDelayTime" not in tree
+
+    def test_shadow_timing_round_trip(self):
+        """Shadow timing survives get_property_tree / _apply_state round-trip."""
+        host, vdc, device, vdsd = _make_stack()
+        original = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            name="Blind",
+            default_group=8,
+            active_group=8,
+            groups={8},
+            open_time=60.0,
+            close_time=55.0,
+            angle_open_time=1.5,
+            angle_close_time=1.5,
+            stop_delay_time=0.5,
+        )
+        tree = original.get_property_tree()
+
+        restored = Output(
+            vdsd=vdsd, name="restored", default_group=0, active_group=0, groups=set()
+        )
+        restored._apply_state(tree)
+
+        assert restored.open_time == 60.0
+        assert restored.close_time == 55.0
+        assert restored.angle_open_time == 1.5
+        assert restored.angle_close_time == 1.5
+        assert restored.stop_delay_time == 0.5
+
+    def test_apply_settings_none_resets_shadow_timing(self):
+        """apply_settings with None resets shadow timing fields."""
+        host, vdc, device, vdsd = _make_stack()
+        out = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            name="Blind",
+            default_group=8,
+            active_group=8,
+            groups={8},
+            open_time=60.0,
+        )
+        out.apply_settings({"openTime": None})
+        assert out.open_time is None
+        assert "openTime" not in out.get_settings_properties()
