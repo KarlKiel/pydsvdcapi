@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ChannelSpec` now carries `siunit` and `symbol` fields; all built-in channel specs are populated with the appropriate SI unit and symbol (e.g. `percent`/`%` for brightness/shade, `degree`/`°` for hue, `reciprocal megakelvin`/`mired` for color temperature). These are emitted in `channelDescriptions` responses to match the p44vdc wire format and fix grey-device validation errors on dSS.
 - Shadow motor timing fields `openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime` added to `outputSettings` for shade devices. dSS reads and writes these to configure motor travel timing.
 - `transitionTime` field (float, seconds) added to `outputState`, matching p44vdc's `outputStateProperties`.
+- `movingState` (integer) added to `outputState` for shade/blind outputs: `0` = idle, `1` = moving open/up, `-1` = moving closed/down. Matches p44vdc `ShadowBehaviour` wire format.
 - Unknown `setProperty outputSettings` keys are now stored in `Output._extra_settings` and returned in future `get_settings_properties()` responses instead of being silently dropped.
 
 ### Fixed

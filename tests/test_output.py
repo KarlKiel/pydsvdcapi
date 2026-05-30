@@ -634,6 +634,41 @@ class TestOutputStateProperties:
         # Assert: falls back to default
         assert out.get_state_properties()["transitionTime"] == 0.0
 
+    def test_output_state_includes_moving_state(self):
+        """movingState defaults to 0 (idle)."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        state = out.get_state_properties()
+        assert "movingState" in state
+        assert state["movingState"] == 0
+
+    def test_apply_state_stores_moving_state(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_state({"movingState": 1})
+        assert out.get_state_properties()["movingState"] == 1
+
+    def test_moving_state_property_setter(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.moving_state = -1
+        assert out.get_state_properties()["movingState"] == -1
+
+    def test_moving_state_not_in_property_tree(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.moving_state = 1
+        tree = out.get_property_tree()
+        # movingState must not appear in the property tree (it is volatile)
+        assert "movingState" not in tree
+
+    def test_apply_state_moving_state_none_falls_back_to_zero(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_state({"movingState": 1})
+        out.apply_state({"movingState": None})
+        assert out.get_state_properties()["movingState"] == 0
+
 
 # ===========================================================================
 # apply_settings
@@ -776,7 +811,7 @@ class TestOutputApplySettings:
         out = _make_output(vdsd)
         out.apply_settings({"mode": 2, "someUnknownKey": 99})
         s = out.get_settings_properties()
-        assert s["mode"] == 2          # known field handled normally
+        assert s["mode"] == 2  # known field handled normally
         assert s["someUnknownKey"] == 99  # unknown field stored
 
     def test_extra_settings_persisted_in_property_tree(self):
@@ -958,11 +993,13 @@ class TestOutputPropertyTree:
         out.local_priority = True
         out.error = OutputError.SHORT_CIRCUIT
         out.transition_time = 1.5
+        out.moving_state = 1
         tree = out.get_property_tree()
 
         assert "localPriority" not in tree
         assert "error" not in tree
         assert "transitionTime" not in tree
+        assert "movingState" not in tree
 
     def test_round_trip(self):
         """Serialize → _apply_state → verify all properties match."""

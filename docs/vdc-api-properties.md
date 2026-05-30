@@ -915,6 +915,8 @@ Writable, persistently stored. The dSS firmware reads `heatingSystemType` from t
 |---|---|---|---|---|
 | `localPriority` | r/w | boolean | When `true`, output ignores scene calls unless the scene has `ignoreLocalPriority` set or the call uses `force=true`. | Stored. Prevents remote scene calls from overriding local operation. |
 | `error` | r | integer enum | Output error status — see table below. | Shown in configurator as device error indicator. |
+| `transitionTime` | r/w | double | Time in seconds for the ongoing output transition. `0.0` when idle. | Not currently used by dSS firmware; carried for wire-format compatibility with p44vdc. |
+| `movingState` | r/w | integer | Motor movement state for shade/blind outputs: `0` = idle, `1` = moving open/up, `-1` = moving closed/down. | Not currently read by dSS firmware; carried for wire-format compatibility with p44vdc `ShadowBehaviour`. |
 
 **error values** (`OutputError`, Python):
 
@@ -934,7 +936,7 @@ Writable, persistently stored. The dSS firmware reads `heatingSystemType` from t
 
 An output has zero or more channels. Each channel controls one independent physical dimension of the output (brightness, color, shade position, etc.). Channel index 0 is the primary/default channel.
 
-> **Key format — critical:** `channelDescriptions`, `channelSettings`, and `channelStates` are each transmitted as a **single** `PropertyElement` whose child elements are keyed by the channel's **name string** (e.g. `"brightness"`, `"colortemp"`), **not** by the numeric `dsIndex`.  dSS registers channels by name internally; using integer-string keys (e.g. `"0"`, `"1"`) causes `deviceOutputIndex:255` errors on every channel lookup and sets the wrong output channel in scenes.  The `channelId` field in `setOutputChannelValue` notifications also carries the name string.
+> **Key format:** `channelDescriptions`, `channelSettings`, and `channelStates` are each transmitted as a **single** `PropertyElement` whose child elements are keyed by the channel's **dsIndex as a string** (e.g. `"0"`, `"1"`), matching the p44vdc wire format.  The channel name is carried as the `name` field *inside* each element.  The `channelId` field in `setOutputChannelValue` notifications carries the name string; `VdcHost` resolves channels by that name — this is independent of the property-tree key format.
 
 #### 4.4.1 Channel Description (`channelDescriptions`)
 
@@ -946,6 +948,8 @@ An output has zero or more channels. Each channel controls one independent physi
 | `min` | r | double | Minimum channel value. | Used as the "off" value in scenes and dim-to-minimum calls. |
 | `max` | r | double | Maximum channel value. | Used as the "on" / dim-to-maximum value. |
 | `resolution` | r | double | Value of the LSB (precision). | Used for value quantization. |
+| `siunit` | r | string | SI unit name (e.g. `"percent"`, `"degree"`, `"reciprocal megakelvin"`, `"celsius"`). Optional — absent for dimensionless channels. | Used by dSS firmware for channel value validation and unit display. |
+| `symbol` | r | string | Unit symbol string (e.g. `"%"`, `"°"`, `"mired"`, `"°C"`). Optional — absent for dimensionless channels. | Shown in the dSS configurator channel value displays. |
 
 **channelType values** — firmware-verified from `ChannelType` enum in `modelconst.h`:
 

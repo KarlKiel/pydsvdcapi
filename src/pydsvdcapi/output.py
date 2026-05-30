@@ -45,7 +45,8 @@ State model
 
 The output's operational values (brightness level, valve position,
 colour values, etc.) live in the *channels*.  The output state itself
-carries ``localPriority``, ``transitionTime``, and ``error``.
+carries ``localPriority``, ``transitionTime``, ``movingState``, and
+``error``.
 
 When a channel value is changed locally (from the device side) and
 ``pushChanges`` is enabled, the output pushes the channel state to
@@ -56,7 +57,8 @@ Persistence
 
 Only description and settings properties are persisted (via the owning
 Vdsd's property tree → Device → Vdc → VdcHost YAML).  The runtime
-state (``localPriority``, ``transitionTime``, ``error``) is transient.
+state (``localPriority``, ``transitionTime``, ``movingState``, ``error``)
+is transient.
 
 Usage::
 
@@ -183,23 +185,20 @@ _KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
 #: All keys that appear in the persisted property tree dict.
 #: Used by :meth:`Output._apply_state` to identify which keys are
 #: firmware-specific extras that should be stored in :attr:`Output._extra_settings`.
-_KNOWN_TREE_KEYS: frozenset[str] = (
-    _KNOWN_SETTING_KEYS
-    | frozenset(
-        {
-            # Description keys
-            "function",
-            "outputUsage",
-            "name",
-            "defaultGroup",
-            "variableRamp",
-            "maxPower",
-            "activeCoolingMode",
-            # Structural keys
-            "channels",
-            "scenes",
-        }
-    )
+_KNOWN_TREE_KEYS: frozenset[str] = _KNOWN_SETTING_KEYS | frozenset(
+    {
+        # Description keys
+        "function",
+        "outputUsage",
+        "name",
+        "defaultGroup",
+        "variableRamp",
+        "maxPower",
+        "activeCoolingMode",
+        # Structural keys
+        "channels",
+        "scenes",
+    }
 )
 
 
@@ -600,6 +599,7 @@ class Output:
         self._local_priority: bool = False
         self._error: OutputError = OutputError.OK
         self._transition_time: float = 0.0
+        self._moving_state: int = 0
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
@@ -929,6 +929,19 @@ class Output:
     @transition_time.setter
     def transition_time(self, value: float) -> None:
         self._transition_time = float(value)
+
+    @property
+    def moving_state(self) -> int:
+        """Motor movement state for shade/blind outputs (volatile, not persisted).
+
+        ``0`` = idle, ``1`` = moving open/up, ``-1`` = moving closed/down.
+        Matches p44vdc ``ShadowBehaviour`` wire format.
+        """
+        return self._moving_state
+
+    @moving_state.setter
+    def moving_state(self, value: int) -> None:
+        self._moving_state = int(value)
 
     # ==================================================================
     # Channel management
@@ -1716,12 +1729,14 @@ class Output:
         Keys match the vDC API property names (§4.8.3).
 
         Includes ``localPriority``, ``transitionTime`` (float, seconds),
-        and ``error``.  All three are volatile runtime state and are not
-        persisted to YAML.
+        ``movingState`` (integer, motor movement state for shade/blind
+        outputs), and ``error``.  All are volatile runtime state and are
+        not persisted to YAML.
         """
         return {
             "localPriority": self._local_priority,
             "transitionTime": self._transition_time,
+            "movingState": self._moving_state,
             "error": int(self._error),
         }
 
@@ -1822,14 +1837,17 @@ class Output:
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for ``outputState``.
 
-        Recognised keys: ``localPriority``, ``transitionTime``.
-        Unknown keys are silently ignored.
+        Recognised keys: ``localPriority``, ``transitionTime``,
+        ``movingState``.  Unknown keys are silently ignored.
         """
         if "localPriority" in state:
             self._local_priority = bool(state["localPriority"])
         if "transitionTime" in state:
             val = state["transitionTime"]
             self._transition_time = float(val) if val is not None else 0.0
+        if "movingState" in state:
+            val = state["movingState"]
+            self._moving_state = int(val) if val is not None else 0
 
     # ==================================================================
     # Persistence (property tree)
