@@ -59,7 +59,7 @@ Property exposure
 
 Three property sub-trees at the vdSD level (§4.1.3), each represented
 as a **single** ``PropertyElement`` whose children are keyed by the
-channel's **name** (e.g. ``"brightness"``, ``"colortemp"``):
+channel's **dsIndex** string (e.g. ``"0"``, ``"1"``):
 
 * **channelDescriptions** — read-only metadata (name, channelType,
   dsIndex, min, max, resolution).
@@ -70,11 +70,16 @@ channel's **name** (e.g. ``"brightness"``, ``"colortemp"``):
 
 .. important::
 
-   dSS identifies channels by their **name**, not by their numeric
-   ``dsIndex``.  All three property sub-trees must therefore use the
-   channel name as the element key.  The ``setOutputChannelValue``
-   notification from dSS also carries the name in the ``channelId``
-   field (API v3 onwards).
+   All three property sub-trees (``channelDescriptions``,
+   ``channelSettings``, ``channelStates``) and push notifications use
+   the channel's **dsIndex** as the element key (e.g. ``"0"``, ``"1"``),
+   matching the p44vdc wire format.  The channel name is carried as the
+   ``name`` field *inside* each element.
+
+   The ``setOutputChannelValue`` notification from dSS carries the
+   channel name in the ``channelId`` field (API v3+), which is resolved
+   by name-matching in :class:`~pydsvdcapi.vdc_host.VdcHost` — this
+   is independent of the property key format.
 
 Persistence
 ~~~~~~~~~~~
@@ -680,8 +685,9 @@ class OutputChannel:
         """Return this channel's ``channelDescriptions`` value dict.
 
         The returned dict is used as the *value* of the element keyed by
-        :attr:`name` inside the ``channelDescriptions`` property sub-tree
-        (§4.9.1).  Keys match the vDC API property names.
+        :attr:`dsIndex` (the channel's integer index as a string) inside the
+        ``channelDescriptions`` property sub-tree (§4.9.1).  Keys match the
+        vDC API property names.
         """
         spec = get_channel_spec(self._channel_type)
         props: dict[str, Any] = {
@@ -702,8 +708,9 @@ class OutputChannel:
         """Return this channel's ``channelSettings`` value dict.
 
         The returned dict is used as the *value* of the element keyed by
-        :attr:`name` inside the ``channelSettings`` property sub-tree
-        (§4.9.2).  Currently no per-channel settings are defined.
+        :attr:`dsIndex` (the channel's integer index as a string) inside the
+        ``channelSettings`` property sub-tree (§4.9.2).  Currently no
+        per-channel settings are defined.
         """
         return {}
 
@@ -711,8 +718,9 @@ class OutputChannel:
         """Return this channel's ``channelStates`` value dict.
 
         The returned dict is used as the *value* of the element keyed by
-        :attr:`name` inside the ``channelStates`` property sub-tree
-        (§4.9.3).  Keys match the vDC API property names.
+        :attr:`dsIndex` (the channel's integer index as a string) inside the
+        ``channelStates`` property sub-tree (§4.9.3).  Keys match the vDC API
+        property names.
         """
         return {
             "value": self._value,  # may be None (NULL)

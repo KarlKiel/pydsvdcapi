@@ -33,10 +33,9 @@ are auto-created on construction:
 The ``channelDescriptions``, ``channelSettings``, and
 ``channelStates`` property sub-trees each carry **all channels inside
 a single** ``PropertyElement``, with each channel identified by its
-**name** as the element key (e.g. ``"brightness"``, ``"colortemp"``).
-Using the numeric ``dsIndex`` as the key (the former behaviour) caused
-``deviceOutputIndex:255`` errors because dSS registers channels by name
-and cannot match integer-string keys.
+**dsIndex** as the element key (e.g. ``"0"``, ``"1"``), matching the
+p44vdc wire format.  The channel name is carried as the ``name`` field
+inside each element.
 
 See :mod:`pydsvdcapi.output_channel` for details on channel semantics,
 bidirectional value flow, ``apply_now`` buffering, and push behaviour.
@@ -1410,9 +1409,10 @@ class Output:
 
         Called by :meth:`OutputChannel.update_value` when ``pushChanges``
         is set on this output.  Sends a ``VDC_SEND_PUSH_NOTIFICATION``
-        with a ``channelStates`` payload keyed by the channel's **name**
-        (e.g. ``{"channelStates": {"brightness": {"value": 75.0, …}}}``),
-        matching the same keying used in ``getProperty`` responses.
+        with a ``channelStates`` payload keyed by the channel's **dsIndex**
+        string (e.g. ``{"channelStates": {"0": {"value": 75.0, …}}}``),
+        matching the p44vdc wire format and the same keying used in
+        ``getProperty`` responses.
         """
         session = self._session
         if session is None:
@@ -1426,7 +1426,7 @@ class Output:
         state_dict = channel.get_state_properties()
         push_tree: dict[str, Any] = {
             "channelStates": {
-                channel.name: state_dict,
+                str(channel.ds_index): state_dict,
             }
         }
 
@@ -1457,33 +1457,38 @@ class Output:
     # ==================================================================
 
     def get_channel_descriptions(self) -> dict[str, Any]:
-        """Return the ``channelDescriptions`` sub-tree keyed by channel name.
+        """Return the ``channelDescriptions`` sub-tree keyed by dsIndex string.
 
-        Each key is the channel's protocol name (e.g. ``"brightness"``,
-        ``"colortemp"``).  The value is the dict from
-        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`.
-
-        dSS registers channels by name; using ``dsIndex`` strings as keys
-        would cause ``deviceOutputIndex:255`` errors on every channel lookup.
+        Each key is the channel's ``dsIndex`` as a string (e.g. ``"0"``,
+        ``"1"``), matching the p44vdc wire format.  The value is the dict from
+        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`,
+        which carries the channel name as the ``name`` field inside each element.
         """
         return {
-            ch.name: ch.get_description_properties() for ch in self._channels.values()
+            str(ch.ds_index): ch.get_description_properties()
+            for ch in self._channels.values()
         }
 
     def get_channel_settings(self) -> dict[str, Any]:
-        """Return the ``channelSettings`` sub-tree keyed by channel name.
+        """Return the ``channelSettings`` sub-tree keyed by dsIndex string.
 
-        Keys are channel names, consistent with :meth:`get_channel_descriptions`.
+        Keys are dsIndex strings, consistent with :meth:`get_channel_descriptions`.
         Currently all channels return an empty settings dict (§4.9.2).
         """
-        return {ch.name: ch.get_settings_properties() for ch in self._channels.values()}
+        return {
+            str(ch.ds_index): ch.get_settings_properties()
+            for ch in self._channels.values()
+        }
 
     def get_channel_states(self) -> dict[str, Any]:
-        """Return the ``channelStates`` sub-tree keyed by channel name.
+        """Return the ``channelStates`` sub-tree keyed by dsIndex string.
 
-        Keys are channel names, consistent with :meth:`get_channel_descriptions`.
+        Keys are dsIndex strings, consistent with :meth:`get_channel_descriptions`.
         """
-        return {ch.name: ch.get_state_properties() for ch in self._channels.values()}
+        return {
+            str(ch.ds_index): ch.get_state_properties()
+            for ch in self._channels.values()
+        }
 
     # ==================================================================
     # Property dicts (for getProperty responses)
