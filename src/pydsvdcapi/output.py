@@ -437,6 +437,17 @@ class Output:
     heating_system_type:
         Kind of valve / actuator attached.  ``None`` if not a climate
         device.
+    open_time:
+        Motor open travel time in seconds (ShadowBehaviour / p44vdc).
+        ``None`` if not a shadow device.
+    close_time:
+        Motor close travel time in seconds.  ``None`` if not configured.
+    angle_open_time:
+        Blade angle open time in seconds.  ``None`` if not configured.
+    angle_close_time:
+        Blade angle close time in seconds.  ``None`` if not configured.
+    stop_delay_time:
+        Stop delay time in seconds.  ``None`` if not configured.
     """
 
     def __init__(
@@ -465,6 +476,12 @@ class Output:
         dim_time_down_alt2: int | None = None,
         heating_system_capability: HeatingSystemCapability | int | None = None,
         heating_system_type: HeatingSystemType | int | None = None,
+        # Shadow motor timing settings (ShadowBehaviour / p44vdc)
+        open_time: float | None = None,
+        close_time: float | None = None,
+        angle_open_time: float | None = None,
+        angle_close_time: float | None = None,
+        stop_delay_time: float | None = None,
     ) -> None:
         # ---- parent reference ----------------------------------------
         self._vdsd: Vdsd = vdsd
@@ -517,6 +534,13 @@ class Output:
             if heating_system_type is not None
             else None
         )
+
+        # Shadow motor timing (ShadowBehaviour / p44vdc outputSettings)
+        self._open_time: float | None = open_time
+        self._close_time: float | None = close_time
+        self._angle_open_time: float | None = angle_open_time
+        self._angle_close_time: float | None = angle_close_time
+        self._stop_delay_time: float | None = stop_delay_time
 
         # ---- state properties (volatile, NOT persisted) --------------
         self._local_priority: bool = False
@@ -768,6 +792,56 @@ class Output:
         self._heating_system_type = (
             HeatingSystemType(int(value)) if value is not None else None
         )
+        self._schedule_auto_save()
+
+    @property
+    def open_time(self) -> float | None:
+        """Motor open travel time in seconds (``None`` = not configured)."""
+        return self._open_time
+
+    @open_time.setter
+    def open_time(self, value: float | None) -> None:
+        self._open_time = value
+        self._schedule_auto_save()
+
+    @property
+    def close_time(self) -> float | None:
+        """Motor close travel time in seconds (``None`` = not configured)."""
+        return self._close_time
+
+    @close_time.setter
+    def close_time(self, value: float | None) -> None:
+        self._close_time = value
+        self._schedule_auto_save()
+
+    @property
+    def angle_open_time(self) -> float | None:
+        """Blade angle open time in seconds (``None`` = not configured)."""
+        return self._angle_open_time
+
+    @angle_open_time.setter
+    def angle_open_time(self, value: float | None) -> None:
+        self._angle_open_time = value
+        self._schedule_auto_save()
+
+    @property
+    def angle_close_time(self) -> float | None:
+        """Blade angle close time in seconds (``None`` = not configured)."""
+        return self._angle_close_time
+
+    @angle_close_time.setter
+    def angle_close_time(self, value: float | None) -> None:
+        self._angle_close_time = value
+        self._schedule_auto_save()
+
+    @property
+    def stop_delay_time(self) -> float | None:
+        """Stop delay time in seconds (``None`` = not configured)."""
+        return self._stop_delay_time
+
+    @stop_delay_time.setter
+    def stop_delay_time(self, value: float | None) -> None:
+        self._stop_delay_time = value
         self._schedule_auto_save()
 
     # ==================================================================
@@ -1516,6 +1590,10 @@ class Output:
         """Return the ``outputSettings`` property dict.
 
         Keys match the vDC API property names (§4.8.2).
+
+        Optional shadow motor timing fields (``openTime``, ``closeTime``,
+        ``angleOpenTime``, ``angleCloseTime``, ``stopDelayTime``) are only
+        included when they have been set to a non-``None`` value.
         """
         settings: dict[str, Any] = {
             "mode": int(self._mode),
@@ -1550,6 +1628,18 @@ class Output:
         if self._heating_system_type is not None:
             settings["heatingSystemType"] = int(self._heating_system_type)
 
+        # Optional shadow motor timing settings (ShadowBehaviour / p44vdc).
+        if self._open_time is not None:
+            settings["openTime"] = self._open_time
+        if self._close_time is not None:
+            settings["closeTime"] = self._close_time
+        if self._angle_open_time is not None:
+            settings["angleOpenTime"] = self._angle_open_time
+        if self._angle_close_time is not None:
+            settings["angleCloseTime"] = self._angle_close_time
+        if self._stop_delay_time is not None:
+            settings["stopDelayTime"] = self._stop_delay_time
+
         return settings
 
     def get_state_properties(self) -> dict[str, Any]:
@@ -1572,6 +1662,10 @@ class Output:
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for
         ``outputSettings``.  Unknown keys are silently ignored.
+
+        Recognised shadow motor timing keys: ``openTime``, ``closeTime``,
+        ``angleOpenTime``, ``angleCloseTime``, ``stopDelayTime``.
+        Pass ``None`` to clear a previously set value.
         """
         if "mode" in settings:
             self._mode = OutputMode(int(settings["mode"]))
@@ -1622,6 +1716,21 @@ class Output:
             self._heating_system_type = (
                 HeatingSystemType(int(val)) if val is not None else None
             )
+        if "openTime" in settings:
+            val = settings["openTime"]
+            self._open_time = float(val) if val is not None else None
+        if "closeTime" in settings:
+            val = settings["closeTime"]
+            self._close_time = float(val) if val is not None else None
+        if "angleOpenTime" in settings:
+            val = settings["angleOpenTime"]
+            self._angle_open_time = float(val) if val is not None else None
+        if "angleCloseTime" in settings:
+            val = settings["angleCloseTime"]
+            self._angle_close_time = float(val) if val is not None else None
+        if "stopDelayTime" in settings:
+            val = settings["stopDelayTime"]
+            self._stop_delay_time = float(val) if val is not None else None
 
         self._schedule_auto_save()
 
@@ -1690,6 +1799,18 @@ class Output:
             tree["heatingSystemCapability"] = int(self._heating_system_capability)
         if self._heating_system_type is not None:
             tree["heatingSystemType"] = int(self._heating_system_type)
+
+        # Optional shadow motor timing settings.
+        if self._open_time is not None:
+            tree["openTime"] = self._open_time
+        if self._close_time is not None:
+            tree["closeTime"] = self._close_time
+        if self._angle_open_time is not None:
+            tree["angleOpenTime"] = self._angle_open_time
+        if self._angle_close_time is not None:
+            tree["angleCloseTime"] = self._angle_close_time
+        if self._stop_delay_time is not None:
+            tree["stopDelayTime"] = self._stop_delay_time
 
         # Channels (description metadata only, not values).
         if self._channels:
@@ -1781,6 +1902,16 @@ class Output:
             self._heating_system_type = HeatingSystemType(
                 int(state["heatingSystemType"])
             )
+        if "openTime" in state:
+            self._open_time = float(state["openTime"])
+        if "closeTime" in state:
+            self._close_time = float(state["closeTime"])
+        if "angleOpenTime" in state:
+            self._angle_open_time = float(state["angleOpenTime"])
+        if "angleCloseTime" in state:
+            self._angle_close_time = float(state["angleCloseTime"])
+        if "stopDelayTime" in state:
+            self._stop_delay_time = float(state["stopDelayTime"])
 
         # Restore channels.
         if "channels" in state:
