@@ -12,7 +12,7 @@ The output owns three property groups visible to the vdSM:
   (function, outputUsage, variableRamp, maxPower, …).
 * **outputSettings** — writable configuration stored persistently
   (mode, groups, pushChanges, dimming parameters, …).
-* **outputState** — volatile runtime state (localPriority, error)
+* **outputState** — volatile runtime state (localPriority, transitionTime, error)
   that is **not** persisted.
 
 Channels
@@ -45,7 +45,7 @@ State model
 
 The output's operational values (brightness level, valve position,
 colour values, etc.) live in the *channels*.  The output state itself
-only carries ``localPriority`` and ``error``.
+carries ``localPriority``, ``transitionTime``, and ``error``.
 
 When a channel value is changed locally (from the device side) and
 ``pushChanges`` is enabled, the output pushes the channel state to
@@ -56,7 +56,7 @@ Persistence
 
 Only description and settings properties are persisted (via the owning
 Vdsd's property tree → Device → Vdc → VdcHost YAML).  The runtime
-state (``localPriority``, ``error``) is transient.
+state (``localPriority``, ``transitionTime``, ``error``) is transient.
 
 Usage::
 
@@ -545,6 +545,7 @@ class Output:
         # ---- state properties (volatile, NOT persisted) --------------
         self._local_priority: bool = False
         self._error: OutputError = OutputError.OK
+        self._transition_time: float = 0.0
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
@@ -865,6 +866,15 @@ class Output:
     @error.setter
     def error(self, value: OutputError | int) -> None:
         self._error = OutputError(int(value))
+
+    @property
+    def transition_time(self) -> float:
+        """Transition time in seconds (volatile, not persisted)."""
+        return self._transition_time
+
+    @transition_time.setter
+    def transition_time(self, value: float) -> None:
+        self._transition_time = float(value)
 
     # ==================================================================
     # Channel management
@@ -1646,9 +1656,14 @@ class Output:
         """Return the ``outputState`` property dict.
 
         Keys match the vDC API property names (§4.8.3).
+
+        Includes ``localPriority``, ``transitionTime`` (float, seconds),
+        and ``error``.  All three are volatile runtime state and are not
+        persisted to YAML.
         """
         return {
             "localPriority": self._local_priority,
+            "transitionTime": self._transition_time,
             "error": int(self._error),
         }
 
@@ -1739,9 +1754,15 @@ class Output:
 
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for ``outputState``.
+
+        Recognised keys: ``localPriority``, ``transitionTime``.
+        Unknown keys are silently ignored.
         """
         if "localPriority" in state:
             self._local_priority = bool(state["localPriority"])
+        if "transitionTime" in state:
+            val = state["transitionTime"]
+            self._transition_time = float(val) if val is not None else 0.0
 
     # ==================================================================
     # Persistence (property tree)

@@ -603,6 +603,37 @@ class TestOutputStateProperties:
         assert state["localPriority"] is True
         assert state["error"] == int(OutputError.SHORT_CIRCUIT)
 
+    def test_output_state_includes_transition_time(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        state = out.get_state_properties()
+        assert "transitionTime" in state
+        assert isinstance(state["transitionTime"], float)
+        assert state["transitionTime"] == 0.0  # default
+
+    def test_apply_state_stores_transition_time(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_state({"transitionTime": 0.5})
+        assert out.get_state_properties()["transitionTime"] == 0.5
+
+    def test_transition_time_property_setter(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.transition_time = 2.5
+        assert out.get_state_properties()["transitionTime"] == 2.5
+
+    def test_apply_state_transition_time_none_falls_back_to_zero(self):
+        """Applying None value for transitionTime falls back to default."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        # Arrange: set to non-zero first
+        out.apply_state({"transitionTime": 1.5})
+        # Act: apply None value
+        out.apply_state({"transitionTime": None})
+        # Assert: falls back to default
+        assert out.get_state_properties()["transitionTime"] == 0.0
+
 
 # ===========================================================================
 # apply_settings
@@ -867,10 +898,12 @@ class TestOutputPropertyTree:
         out = _make_output(vdsd)
         out.local_priority = True
         out.error = OutputError.SHORT_CIRCUIT
+        out.transition_time = 1.5
         tree = out.get_property_tree()
 
         assert "localPriority" not in tree
         assert "error" not in tree
+        assert "transitionTime" not in tree
 
     def test_round_trip(self):
         """Serialize → _apply_state → verify all properties match."""
