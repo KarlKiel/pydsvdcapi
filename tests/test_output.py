@@ -753,11 +753,70 @@ class TestOutputApplySettings:
         out.apply_settings({"heatingSystemType": None})
         assert out.heating_system_type is None
 
-    def test_apply_unknown_keys_ignored(self):
+    def test_apply_unknown_keys_now_stored(self):
+        """Unknown keys are now stored (not silently dropped) — known key still applied."""
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         out.apply_settings({"unknownKey": 42, "mode": 1})
         assert out.mode == OutputMode.BINARY
+        # Unknown key must now be accessible via get_settings_properties.
+        s = out.get_settings_properties()
+        assert s["unknownKey"] == 42
+
+    def test_apply_settings_stores_unknown_key(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"someUnknownKey": 42.0, "anotherKey": "hello"})
+        s = out.get_settings_properties()
+        assert s["someUnknownKey"] == 42.0
+        assert s["anotherKey"] == "hello"
+
+    def test_apply_settings_unknown_key_does_not_shadow_known(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"mode": 2, "someUnknownKey": 99})
+        s = out.get_settings_properties()
+        assert s["mode"] == 2          # known field handled normally
+        assert s["someUnknownKey"] == 99  # unknown field stored
+
+    def test_extra_settings_persisted_in_property_tree(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"customField": "value"})
+        tree = out.get_property_tree()
+        assert tree.get("customField") == "value"
+
+    def test_extra_settings_absent_when_empty(self):
+        """No extra keys appear in settings when nothing unknown was stored."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        s = out.get_settings_properties()
+        assert "someUnknownKey" not in s
+
+    def test_extra_settings_cumulative_across_calls(self):
+        """Successive apply_settings calls accumulate extra settings."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"firstKey": 1})
+        out.apply_settings({"secondKey": 2})
+        s = out.get_settings_properties()
+        assert s["firstKey"] == 1
+        assert s["secondKey"] == 2
+
+    def test_extra_settings_round_trip(self):
+        """Extra settings survive a get_property_tree / _apply_state round-trip."""
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        out.apply_settings({"customField": "value", "numericExtra": 3.14})
+        tree = out.get_property_tree()
+
+        _, _, _, vdsd2 = _make_stack()
+        out2 = _make_output(vdsd2)
+        out2._apply_state(tree)
+
+        s = out2.get_settings_properties()
+        assert s["customField"] == "value"
+        assert s["numericExtra"] == pytest.approx(3.14)
 
     def test_apply_empty_dict(self):
         host, vdc, device, vdsd = _make_stack()

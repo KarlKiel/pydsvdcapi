@@ -153,6 +153,55 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
 
 logger = logging.getLogger(__name__)
 
+#: All setting keys that :meth:`Output.apply_settings` handles explicitly.
+#: Any key arriving via ``setProperty`` that is **not** in this set is stored
+#: in :attr:`Output._extra_settings` and round-tripped through persistence.
+_KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
+    {
+        "mode",
+        "activeGroup",
+        "pushChanges",
+        "groups",
+        "onThreshold",
+        "minBrightness",
+        "dimTimeUp",
+        "dimTimeDown",
+        "dimTimeUpAlt1",
+        "dimTimeDownAlt1",
+        "dimTimeUpAlt2",
+        "dimTimeDownAlt2",
+        "heatingSystemCapability",
+        "heatingSystemType",
+        "openTime",
+        "closeTime",
+        "angleOpenTime",
+        "angleCloseTime",
+        "stopDelayTime",
+    }
+)
+
+#: All keys that appear in the persisted property tree dict.
+#: Used by :meth:`Output._apply_state` to identify which keys are
+#: firmware-specific extras that should be stored in :attr:`Output._extra_settings`.
+_KNOWN_TREE_KEYS: frozenset[str] = (
+    _KNOWN_SETTING_KEYS
+    | frozenset(
+        {
+            # Description keys
+            "function",
+            "outputUsage",
+            "name",
+            "defaultGroup",
+            "variableRamp",
+            "maxPower",
+            "activeCoolingMode",
+            # Structural keys
+            "channels",
+            "scenes",
+        }
+    )
+)
+
 
 # ---------------------------------------------------------------------------
 # Scene default helpers
@@ -541,6 +590,11 @@ class Output:
         self._angle_open_time: float | None = angle_open_time
         self._angle_close_time: float | None = angle_close_time
         self._stop_delay_time: float | None = stop_delay_time
+
+        # Extra settings: unknown keys received via setProperty are stored
+        # here so they can be round-tripped through persistence and returned
+        # by get_settings_properties().
+        self._extra_settings: dict[str, Any] = {}
 
         # ---- state properties (volatile, NOT persisted) --------------
         self._local_priority: bool = False
@@ -1650,6 +1704,10 @@ class Output:
         if self._stop_delay_time is not None:
             settings["stopDelayTime"] = self._stop_delay_time
 
+        # Include any extra (firmware-specific) settings that arrived via
+        # setProperty but are not in the standard known-key set.
+        settings.update(self._extra_settings)
+
         return settings
 
     def get_state_properties(self) -> dict[str, Any]:
@@ -1676,7 +1734,9 @@ class Output:
 
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for
-        ``outputSettings``.  Unknown keys are silently ignored.
+        ``outputSettings``.  Unknown keys are stored in
+        :attr:`_extra_settings` and returned by
+        :meth:`get_settings_properties`.
 
         Recognised shadow motor timing keys: ``openTime``, ``closeTime``,
         ``angleOpenTime``, ``angleCloseTime``, ``stopDelayTime``.
@@ -1746,6 +1806,13 @@ class Output:
         if "stopDelayTime" in settings:
             val = settings["stopDelayTime"]
             self._stop_delay_time = float(val) if val is not None else None
+
+        # Collect any keys not handled above into _extra_settings so they
+        # can be round-tripped through persistence and returned by
+        # get_settings_properties().
+        for key, val in settings.items():
+            if key not in _KNOWN_SETTING_KEYS:
+                self._extra_settings[key] = val
 
         self._schedule_auto_save()
 
@@ -1832,6 +1899,10 @@ class Output:
             tree["angleCloseTime"] = self._angle_close_time
         if self._stop_delay_time is not None:
             tree["stopDelayTime"] = self._stop_delay_time
+
+        # Extra (firmware-specific) settings — persisted alongside known keys.
+        if self._extra_settings:
+            tree.update(self._extra_settings)
 
         # Channels (description metadata only, not values).
         if self._channels:
@@ -1933,6 +2004,13 @@ class Output:
             self._angle_close_time = float(state["angleCloseTime"])
         if "stopDelayTime" in state:
             self._stop_delay_time = float(state["stopDelayTime"])
+
+        # Restore extra (firmware-specific) settings: any key in the
+        # persisted tree that is not a known description, settings, or
+        # structural key is treated as an extra setting.
+        for key, val in state.items():
+            if key not in _KNOWN_TREE_KEYS:
+                self._extra_settings[key] = val
 
         # Restore channels.
         if "channels" in state:
