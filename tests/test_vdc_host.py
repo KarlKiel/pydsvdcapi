@@ -1004,3 +1004,19 @@ class TestPendingVanishWiring:
 
         assert host._pending_vanish == set()
         assert vdc.get_device(device.dsuid) is None
+
+
+class TestDisconnectCallback:
+    """Tests for the on_disconnect callback mechanism."""
+
+    def test_disconnect_callback_type_exists(self):
+        from pydsvdcapi.vdc_host import DisconnectCallback
+        assert DisconnectCallback is not None
+
+    def test_stopping_flag_initially_false(self):
+        host = VdcHost(mac=TEST_MAC)
+        assert host._stopping is False
+
+    def test_on_disconnect_initially_none(self):
+        host = VdcHost(mac=TEST_MAC)
+        assert host._on_disconnect is None

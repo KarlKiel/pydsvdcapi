@@ -81,6 +81,12 @@ FirmwareUpgradeCallback = Callable[[str, bool, bool, dict[str, Any]], Awaitable[
 #: ``(dsuid, config_id, params) -> None``
 SetConfigurationCallback = Callable[[str, str, dict[str, Any]], Awaitable[None]]
 
+#: Callback invoked when the vdSM TCP connection is lost unexpectedly.
+#: Receives the :class:`VdcHost` instance and the exception that caused
+#: the disconnect (or ``None`` for a clean EOF / bye).
+#: Not called when :meth:`VdcHost.stop` initiated the disconnect.
+DisconnectCallback = Callable[["VdcHost", Exception | None], Awaitable[None]]
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -332,6 +338,8 @@ class VdcHost:
         self._on_authenticate: AuthenticateCallback | None = None
         self._on_firmware_upgrade: FirmwareUpgradeCallback | None = None
         self._on_set_configuration: SetConfigurationCallback | None = None
+        self._on_disconnect: DisconnectCallback | None = None
+        self._stopping: bool = False
 
         # --- vDC registry ---------------------------------------------
         self._vdcs: dict[str, Vdc] = {}  # keyed by dSUID string
