@@ -150,6 +150,8 @@ class VdcSession:
         # Ping/pong counter.
         self._ping_count: int = 0
 
+        self.disconnect_reason: Exception | None = None
+
     # ---- public properties -------------------------------------------
 
     @property
@@ -213,11 +215,12 @@ class VdcSession:
             while self._state is not SessionState.CLOSED:
                 try:
                     msg = await self._conn.receive()
-                except asyncio.IncompleteReadError:
+                except asyncio.IncompleteReadError as exc:
                     logger.info(
                         "Connection from %s closed (incomplete read)",
                         self._conn.peername,
                     )
+                    self.disconnect_reason = exc
                     break
                 except (ConnectionError, ValueError) as exc:
                     logger.warning(
@@ -225,6 +228,7 @@ class VdcSession:
                         self._conn.peername,
                         exc,
                     )
+                    self.disconnect_reason = exc
                     break
 
                 if msg is None:
