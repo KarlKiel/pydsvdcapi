@@ -125,8 +125,15 @@ def _get_default_mac() -> str:
 
 
 def _get_hostname() -> str:
-    """Return the hostname of this machine."""
-    return platform.node() or socket.gethostname()
+    """Return the short hostname (label only, no domain) of this machine.
+
+    ``platform.node()`` may return an FQDN such as ``raspberrypi.local`` on
+    some systems.  Appending ``.local.`` to such a value produces a doubled
+    suffix (``raspberrypi.local.local.``) that makes the mDNS record
+    unresolvable.  Taking only the first label is always safe for mDNS use.
+    """
+    raw = platform.node() or socket.gethostname()
+    return raw.split(".")[0]
 
 
 # ---------------------------------------------------------------------------
