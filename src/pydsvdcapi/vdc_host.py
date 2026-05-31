@@ -835,6 +835,7 @@ class VdcHost:
         on_authenticate: AuthenticateCallback | None = None,
         on_firmware_upgrade: FirmwareUpgradeCallback | None = None,
         on_set_configuration: SetConfigurationCallback | None = None,
+        on_disconnect: DisconnectCallback | None = None,
         announce: bool = True,
         bind_address: str = "0.0.0.0",
     ) -> None:
@@ -874,6 +875,12 @@ class VdcHost:
             Optional async callback for the ``setConfiguration``
             GenericRequest (§7.4.4).  Signature:
             ``(dsuid, config_id, params) -> None``.
+        on_disconnect:
+            Optional async callback invoked when the vdSM TCP connection
+            is lost unexpectedly (network drop, dSS restart, etc.).
+            Receives ``(host, reason)`` where *reason* is the exception
+            that caused the disconnect, or ``None`` for a clean EOF / bye.
+            **Not called** when :meth:`stop` initiated the disconnect.
         announce:
             If ``True`` (default) the DNS-SD service is announced
             automatically after the server starts listening.
@@ -892,6 +899,7 @@ class VdcHost:
         self._on_authenticate = on_authenticate
         self._on_firmware_upgrade = on_firmware_upgrade
         self._on_set_configuration = on_set_configuration
+        self._on_disconnect = on_disconnect
 
         self._server = await asyncio.start_server(
             self._handle_new_connection,
@@ -938,7 +946,11 @@ class VdcHost:
         await self.unannounce()
 
         # Close the active session.
-        await self._close_session()
+        self._stopping = True
+        try:
+            await self._close_session()
+        finally:
+            self._stopping = False
 
         # Shut down the TCP server.
         if self._server is not None:
@@ -1001,6 +1013,11 @@ class VdcHost:
             for vdc in self._vdcs.values():
                 vdc.reset_announcement()
             logger.info("Session with %s cleaned up", session.vdsm_dsuid)
+            if not self._stopping and self._on_disconnect is not None:
+                try:
+                    await self._on_disconnect(self, session.disconnect_reason)
+                except Exception:  # noqa: BLE001
+                    logger.exception("on_disconnect callback raised")
 
     async def _close_session(self) -> None:
         """Close the active session if there is one."""

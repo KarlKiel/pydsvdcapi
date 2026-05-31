@@ -1020,3 +1020,101 @@ class TestDisconnectCallback:
     def test_on_disconnect_initially_none(self):
         host = VdcHost(mac=TEST_MAC)
         assert host._on_disconnect is None
+
+    @pytest.mark.asyncio
+    async def test_start_accepts_on_disconnect(self):
+        """on_disconnect parameter is accepted and stored."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+
+        async def on_disc(h, exc):
+            pass
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            await host.stop()
+
+        assert host._on_disconnect is on_disc
+
+    @pytest.mark.asyncio
+    async def test_callback_fires_on_unexpected_disconnect(self):
+        """Callback fires when session ends without stop() being called."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+        fired: list[tuple] = []
+
+        async def on_disc(h, exc):
+            fired.append((h, exc))
+
+        err = ConnectionResetError("peer reset")
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = err
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            await host._run_session(mock_session)
+            await host.stop()
+
+        assert len(fired) == 1
+        assert fired[0][0] is host
+        assert fired[0][1] is err
+
+    @pytest.mark.asyncio
+    async def test_callback_not_fired_when_stopping(self):
+        """Callback must NOT fire when stop() initiated the disconnect."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+        fired: list[tuple] = []
+
+        async def on_disc(h, exc):
+            fired.append((h, exc))
+
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = ConnectionResetError("peer reset")
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            host._stopping = True
+            await host._run_session(mock_session)
+            host._stopping = False
+            await host.stop()
+
+        assert fired == []
+
+    @pytest.mark.asyncio
+    async def test_callback_not_fired_when_no_callback_set(self):
+        """No error when on_disconnect is None and session ends."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = ConnectionResetError("peer reset")
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(announce=False)
+            await host._run_session(mock_session)
+            await host.stop()
+
+    @pytest.mark.asyncio
+    async def test_callback_receives_none_reason_on_clean_close(self):
+        """Callback fires with None reason for clean EOF."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+        fired: list[tuple] = []
+
+        async def on_disc(h, exc):
+            fired.append((h, exc))
+
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = None
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            await host._run_session(mock_session)
+            await host.stop()
+
+        assert len(fired) == 1
+        assert fired[0][1] is None
