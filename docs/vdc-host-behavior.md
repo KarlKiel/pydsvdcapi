@@ -844,6 +844,7 @@ runtime
 
 vdSM disconnects (network drop / dSS restart)
   └─ session ends → announcement state reset
+  └─ on_disconnect(host, reason) called (if set)
   └─ vdSM reconnects → full re-announcement cycle (automatic)
 
 shutdown
@@ -875,6 +876,7 @@ announce time:
 
 | Constraint | Explanation |
 |---|---|
+| **Disconnect notification** | When the vdSM connection is lost unexpectedly, the optional `on_disconnect(host, reason)` callback is called. `reason` is the exception that caused the disconnect, or `None` for a clean close. Not called when `host.stop()` initiated the disconnect. |
 | **One session at a time** | The VdcHost accepts one vdSM connection. A new connection closes the previous one. |
 | **announce() is final for structure** | Once a device is announced, add/remove vdSDs only via `device.update()` (vanish + re-announce). |
 | **modelFeatures are auto-derived at announce time** | Call `derive_model_features()` explicitly if you need to add or remove features before announcing. Features set via `add_model_feature()` before the call are preserved. |
