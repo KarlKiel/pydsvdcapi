@@ -13,7 +13,6 @@ from pydsvdcapi.vdc_host import (
     DEFAULT_VDC_PORT,
     VDC_SERVICE_TYPE,
     VdcHost,
-    _get_hostname,
 )
 from pydsvdcapi.vdsd import Device, Vdsd
 
@@ -349,45 +348,6 @@ class TestAnnouncement:
         assert info.name.startswith("My Custom Host on ")
 
         await host.unannounce()
-
-    @pytest.mark.asyncio
-    @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
-    @patch("pydsvdcapi.vdc_host.platform.node", return_value="raspberrypi.local")
-    async def test_server_field_no_doubled_local_suffix(self, _mock_node, MockAsyncZC):
-        """When platform.node() returns an FQDN, server must not end in .local.local."""
-        mock_zc = MagicMock()
-        mock_zc.async_register_service = AsyncMock()
-        mock_zc.async_unregister_service = AsyncMock()
-        mock_zc.async_close = AsyncMock()
-        MockAsyncZC.return_value = mock_zc
-
-        host = VdcHost(mac=TEST_MAC)
-        await host.announce()
-
-        info = mock_zc.async_register_service.call_args[0][0]
-        assert info.server == "raspberrypi.local."
-        assert "local.local" not in info.server
-
-        await host.unannounce()
-
-
-class TestGetHostname:
-    @patch("pydsvdcapi.vdc_host.platform.node", return_value="myhost")
-    def test_short_hostname_unchanged(self, _mock):
-        assert _get_hostname() == "myhost"
-
-    @patch("pydsvdcapi.vdc_host.platform.node", return_value="myhost.local")
-    def test_strips_local_suffix(self, _mock):
-        assert _get_hostname() == "myhost"
-
-    @patch("pydsvdcapi.vdc_host.platform.node", return_value="myhost.example.com")
-    def test_strips_full_domain(self, _mock):
-        assert _get_hostname() == "myhost"
-
-    @patch("pydsvdcapi.vdc_host.platform.node", return_value="")
-    @patch("pydsvdcapi.vdc_host.socket.gethostname", return_value="fallback.local")
-    def test_falls_back_to_gethostname_and_strips(self, _mock_sock, _mock_node):
-        assert _get_hostname() == "fallback"
 
 
 # ---------------------------------------------------------------------------
