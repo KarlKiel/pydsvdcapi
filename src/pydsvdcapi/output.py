@@ -33,9 +33,9 @@ are auto-created on construction:
 The ``channelDescriptions``, ``channelSettings``, and
 ``channelStates`` property sub-trees each carry **all channels inside
 a single** ``PropertyElement``, with each channel identified by its
-**dsIndex** as the element key (e.g. ``"0"``, ``"1"``), matching the
-p44vdc wire format.  The channel name is carried as the ``name`` field
-inside each element.
+**channelType** integer as the element key (e.g. ``"1"`` for brightness,
+``"7"`` for shadePositionOutside).  The channel name is carried as the
+``name`` field inside each element.
 
 See :mod:`pydsvdcapi.output_channel` for details on channel semantics,
 bidirectional value flow, ``apply_now`` buffering, and push behaviour.
@@ -1560,10 +1560,10 @@ class Output:
 
         Called by :meth:`OutputChannel.update_value` when ``pushChanges``
         is set on this output.  Sends a ``VDC_SEND_PUSH_NOTIFICATION``
-        with a ``channelStates`` payload keyed by the channel's **dsIndex**
-        string (e.g. ``{"channelStates": {"0": {"value": 75.0, …}}}``),
-        matching the p44vdc wire format and the same keying used in
-        ``getProperty`` responses.
+        with a ``channelStates`` payload keyed by the channel's
+        **channelType** integer as a string
+        (e.g. ``{"channelStates": {"1": {"value": 75.0, …}}}`` for brightness),
+        consistent with the keying used in ``getProperty`` responses.
         """
         session = self._session
         if session is None:
@@ -1577,7 +1577,7 @@ class Output:
         state_dict = channel.get_state_properties()
         push_tree: dict[str, Any] = {
             "channelStates": {
-                str(channel.ds_index): state_dict,
+                str(int(channel.channel_type)): state_dict,
             }
         }
 
@@ -1608,36 +1608,36 @@ class Output:
     # ==================================================================
 
     def get_channel_descriptions(self) -> dict[str, Any]:
-        """Return the ``channelDescriptions`` sub-tree keyed by dsIndex string.
+        """Return the ``channelDescriptions`` sub-tree keyed by channelType.
 
-        Each key is the channel's ``dsIndex`` as a string (e.g. ``"0"``,
-        ``"1"``), matching the p44vdc wire format.  The value is the dict from
-        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`,
-        which carries the channel name as the ``name`` field inside each element.
+        Each key is the channel's ``channelType`` integer as a string
+        (e.g. ``"1"`` for brightness, ``"7"`` for shadePositionOutside).
+        The value is the dict from
+        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`.
         """
         return {
-            str(ch.ds_index): ch.get_description_properties()
+            str(int(ch.channel_type)): ch.get_description_properties()
             for ch in self._channels.values()
         }
 
     def get_channel_settings(self) -> dict[str, Any]:
-        """Return the ``channelSettings`` sub-tree keyed by dsIndex string.
+        """Return the ``channelSettings`` sub-tree keyed by channelType.
 
-        Keys are dsIndex strings, consistent with :meth:`get_channel_descriptions`.
+        Keys are channelType strings, consistent with :meth:`get_channel_descriptions`.
         Currently all channels return an empty settings dict (§4.9.2).
         """
         return {
-            str(ch.ds_index): ch.get_settings_properties()
+            str(int(ch.channel_type)): ch.get_settings_properties()
             for ch in self._channels.values()
         }
 
     def get_channel_states(self) -> dict[str, Any]:
-        """Return the ``channelStates`` sub-tree keyed by dsIndex string.
+        """Return the ``channelStates`` sub-tree keyed by channelType.
 
-        Keys are dsIndex strings, consistent with :meth:`get_channel_descriptions`.
+        Keys are channelType strings, consistent with :meth:`get_channel_descriptions`.
         """
         return {
-            str(ch.ds_index): ch.get_state_properties()
+            str(int(ch.channel_type)): ch.get_state_properties()
             for ch in self._channels.values()
         }
 

@@ -1734,7 +1734,7 @@ class Vdsd:
 
             # Channel properties (§4.9 / §4.1.3).
             # Each sub-tree is a single PropertyElement whose children are
-            # keyed by channel name (e.g. "brightness", "colortemp").
+            # keyed by channelType integer as string (e.g. "1", "7").
             ch_desc = self._output.get_channel_descriptions()
             if ch_desc:
                 props["channelDescriptions"] = ch_desc
