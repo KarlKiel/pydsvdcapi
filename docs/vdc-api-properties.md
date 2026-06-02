@@ -936,7 +936,7 @@ Writable, persistently stored. The dSS firmware reads `heatingSystemType` from t
 
 An output has zero or more channels. Each channel controls one independent physical dimension of the output (brightness, color, shade position, etc.). Channel index 0 is the primary/default channel.
 
-> **Key format:** `channelDescriptions`, `channelSettings`, and `channelStates` are each transmitted as a **single** `PropertyElement` whose child elements are keyed by the channel's **channelType integer as a string** (e.g. `"1"` for brightness, `"7"` for shadePositionOutside).  The channel name is carried as the `name` field *inside* each element.  The `channelId` field in `setOutputChannelValue` notifications carries the name string; `VdcHost` resolves channels by that name — this is independent of the property-tree key format.
+> **Key format:** `channelDescriptions`, `channelSettings`, and `channelStates` are each transmitted as a **single** `PropertyElement` whose child elements are keyed by the channel's **name string** (e.g. `"brightness"`, `"colortemp"`, `"shadePositionOutside"`).  This matches the `channelId` field that dSS sends in `setOutputChannelValue` notifications.
 
 #### 4.4.1 Channel Description (`channelDescriptions`)
 

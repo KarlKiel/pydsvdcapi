@@ -918,7 +918,7 @@ From `jsonhelper.cpp::toJSON(DeviceReference)`:
 
 `channelDescriptions` response structure controls which output UI is shown.
 
-> **Key format:** `channelDescriptions`, `channelSettings`, and `channelStates` must each be a **single** `PropertyElement` with children keyed by the channel's **channelType integer as a string** (e.g. `"1"` for brightness, `"7"` for shadePositionOutside).  The `channelId` field in `setOutputChannelValue` notifications carries the channel name string; `VdcHost` resolves channels by name — this is independent of the property-tree key format.
+> **Key format:** `channelDescriptions`, `channelSettings`, and `channelStates` must each be a **single** `PropertyElement` with children keyed by the channel's **name string** (e.g. `"brightness"`, `"colortemp"`, `"shadePositionOutside"`).  This matches the `channelId` field that dSS sends in `setOutputChannelValue` notifications.
 
 All 27 standard channel types from `src/model/modelconst.h` (ChannelType, DS_REFLECTED_ENUM, IDs 0–26):
 
@@ -954,11 +954,10 @@ All 27 standard channel types from `src/model/modelconst.h` (ChannelType, DS_REF
 
 Channel IDs 192–239 are reserved for proprietary / device-specific channels.
 
-For enum/dropdown channels, add `values` sub-elements.  The element key is the **channelType integer as a string**, not the name or dsIndex:
+For enum/dropdown channels, add `values` sub-elements.  The element key is the **channel name string**:
 ```
 channelDescriptions:
-  "<channelType>":        ← e.g. "1" for brightness, "7" for shadePositionOutside
-    name:        <name>
+  "<channelName>":        ← e.g. "brightness", "shadePositionOutside"
     dsIndex:     0
     channelType: <type>
     values:

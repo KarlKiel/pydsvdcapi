@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now use the channel's **channelType integer as a string** as the element key (e.g. `"1"` for brightness, `"7"` for shadePositionOutside). Using the positional `dsIndex` string (`"0"`, `"1"`) was incorrect and caused channel lookup failures on dSS.
+- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now use the channel's **name string** as the element key (e.g. `"brightness"`, `"shadePositionOutside"`). This matches the `channelId` field dSS uses in `setOutputChannelValue` notifications and is the only format dSS correctly recognises.
 
 ### Added
 - `on_disconnect` callback parameter on `VdcHost.start()`: an optional async callback fired when the vdSM TCP connection is lost unexpectedly (network drop, dSS restart, etc.). Receives `(host: VdcHost, reason: Exception | None)` — `reason` is the exception that caused the disconnect, or `None` for a clean EOF / bye. The callback is **not** called when `host.stop()` initiates the disconnect.
