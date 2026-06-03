@@ -1608,16 +1608,19 @@ class Output:
     def _channel_key(self, ch: "OutputChannel") -> str:
         """Return the dict key for *ch* in channel container properties.
 
-        dSS expects the key format to depend on the output function:
-        - ON_OFF (0), DIMMER (1), POSITIONAL (2): numeric dsIndex string
-          (e.g. ``"0"``, ``"1"``).
-        - DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4): channel name string
-          (e.g. ``"brightness"``, ``"colortemp"``).
+        Mirrors p44vdc ``getApiId()`` for API v3+:
+        - ON_OFF (0), DIMMER (1): numeric dsIndex string (``"0"``).
+          Single-channel outputs have dsIndex=0 and dSS addresses them as
+          ``class_:64 index:0``.
+        - POSITIONAL (2), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4):
+          channel name string (e.g. ``"shadePositionOutside"``,
+          ``"brightness"``, ``"colortemp"``).
         - BIPOLAR (5), INTERNALLY_CONTROLLED (6): numeric dsIndex string
-          (INTERNALLY_CONTROLLED has no channels; BIPOLAR behaves like
-          simple single-channel outputs).
+          (INTERNALLY_CONTROLLED has no channels; BIPOLAR behaves like a
+          simple single-channel output).
         """
         if int(self._function) in (
+            int(OutputFunction.POSITIONAL),
             int(OutputFunction.DIMMER_COLOR_TEMP),
             int(OutputFunction.FULL_COLOR_DIMMER),
         ):

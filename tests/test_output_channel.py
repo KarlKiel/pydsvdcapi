@@ -1437,8 +1437,9 @@ class TestExports:
 class TestChannelContainerKeyFormat:
     """Channel container keys depend on OutputFunction.
 
-    ON_OFF / DIMMER / POSITIONAL  → dsIndex string ("0", "1", …)
-    DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER → channel name ("brightness", …)
+    ON_OFF / DIMMER → dsIndex string ("0")
+    POSITIONAL / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER → channel name
+      (matches p44vdc API v3+ getApiId() format)
     """
 
     def test_dimmer_keyed_by_ds_index(self):
@@ -1459,14 +1460,17 @@ class TestChannelContainerKeyFormat:
         assert str(ch.ds_index) in desc
         assert ch.name not in desc
 
-    def test_positional_keyed_by_ds_index(self):
-        """POSITIONAL: all channels keyed by dsIndex string."""
+    def test_positional_keyed_by_name(self):
+        """POSITIONAL: all channels keyed by channel name (API v3+ format)."""
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
         desc = out.get_channel_descriptions()
-        for ch in out.channels.values():
-            assert str(ch.ds_index) in desc
-            assert ch.name not in desc
+        assert "shadePositionOutside" in desc
+        assert "shadeOpeningAngleOutside" in desc
+        assert "0" not in desc
+        assert "1" not in desc
 
     def test_dimmer_color_temp_keyed_by_name(self):
         """DIMMER_COLOR_TEMP: all channels keyed by channel name."""
