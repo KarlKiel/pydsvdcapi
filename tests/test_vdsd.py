@@ -1834,10 +1834,9 @@ class TestDeriveModelFeatures:
         vdsd.derive_model_features()
         assert "outputchannels" in vdsd.model_features
 
-    def test_outputchannels_for_dimmer_only(self):
+    def test_no_outputchannels_for_dimmer_only(self):
         vdsd, _ = self._setup()
-        # DIMMER has only BRIGHTNESS — outputchannels is required for dSS to
-        # resolve channelSettings by name; all outputs with channels get it.
+        # DIMMER has only BRIGHTNESS (no HUE/SAT, no COLOR_TEMPERATURE)
         vdsd.set_output(
             Output(
                 vdsd=vdsd,
@@ -1849,7 +1848,7 @@ class TestDeriveModelFeatures:
             )
         )
         vdsd.derive_model_features()
-        assert "outputchannels" in vdsd.model_features
+        assert "outputchannels" not in vdsd.model_features
 
     # ---- binary input AKM -----------------------------------------------
 

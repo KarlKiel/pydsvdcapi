@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- `derive_model_features()` now adds `"outputchannels"` for **any** output that has at least one channel, not only multi-channel colour outputs. Without this flag dSS falls back to a numeric index lookup for `channelSettings` (instead of name-based), causing "wrong parameter" errors when reading device values for plain dimmers and on/off outputs.
 - Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now use the channel's **name string** as the element key (e.g. `"brightness"`, `"shadePositionOutside"`). This matches the `channelId` field dSS uses in `setOutputChannelValue` notifications and is the only format dSS correctly recognises.
 
 ### Added
