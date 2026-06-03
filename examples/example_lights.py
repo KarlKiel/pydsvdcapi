@@ -141,7 +141,7 @@ def _notify(msg: str) -> None:
 
 
 def _dsuid(tag: str) -> DsUid:
-    return DsUid.from_name_in_space(f"example-lights-{tag}", DsUidNamespace.VDC)
+    return DsUid.from_name_in_space(f"example-lights-v2-{tag}", DsUidNamespace.VDC)
 
 
 def _vdsd(device: Device, name: str, model: str) -> Vdsd:
