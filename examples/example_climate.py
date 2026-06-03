@@ -598,7 +598,7 @@ async def main(port: int, debug: bool) -> bool:
 
     host = VdcHost(
         port=port,
-        model="pyDSvDCAPI Example Climate",
+        model="pydsvdcapi Example Climate",
         name="example-climate-host",
         vendor_name=VENDOR_NAME,
         state_path=STATE_FILE,
