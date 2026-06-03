@@ -1782,10 +1782,7 @@ class VdcHost:
             # fall back to channel type (int).
             channel_obj = None
             if notif.channelId:
-                for ch in output.channels.values():
-                    if ch.name == notif.channelId or str(ch.ds_index) == notif.channelId:
-                        channel_obj = ch
-                        break
+                channel_obj = output.channel_by_key(notif.channelId)
             if channel_obj is None and notif.channel:
                 from pydsvdcapi.enums import OutputChannelType
 
@@ -1921,13 +1918,10 @@ class VdcHost:
                 )
                 continue
 
-            # Find the channel by name or dsIndex string (channelId), fall back to int type.
+            # Find the channel by container key, name, or channel type.
             channel_obj = None
             if notif.channelId:
-                for ch in output.channels.values():
-                    if ch.name == notif.channelId or str(ch.ds_index) == notif.channelId:
-                        channel_obj = ch
-                        break
+                channel_obj = output.channel_by_key(notif.channelId)
             if channel_obj is None and notif.HasField("channel"):
                 # Look up by channel type (int).
                 from pydsvdcapi.enums import OutputChannelType

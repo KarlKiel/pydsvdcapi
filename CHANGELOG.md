@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now mirror p44vdc API v3 `getApiId()` behaviour: `ON_OFF` (0) and `DIMMER` (1) outputs use the dsIndex string as key (e.g. `"0"`); `POSITIONAL` (2), `DIMMER_COLOR_TEMP` (3), and `FULL_COLOR_DIMMER` (4) use the channel name string (e.g. `"shadePositionOutside"`, `"brightness"`). This resolves `DSMeter Error [1] wrong parameter` for single-channel outputs and `index:2`/`index:4` errors for shade outputs.
+- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) are now function-specific: `ON_OFF` (0) and `DIMMER` (1) use the dsIndex string (`"0"`); `POSITIONAL` (2) uses the fixed hardware-slot index per channel type (`"2"` for `shadePositionOutside`, `"3"` for `shadePositionIndoor`, `"4"` for `shadeOpeningAngleOutside`, `"5"` for `shadeOpeningAngleIndoor`) — these match the `index:N` values dSS passes to `getConfigWord class_:64`; `DIMMER_COLOR_TEMP` (3) and `FULL_COLOR_DIMMER` (4) use the channel name string (`"brightness"`, `"colortemp"`). Resolves `DSMeter Error [1] wrong parameter` errors for all three output categories.
 - `setOutputChannelValue` and `dimChannel` handlers in `VdcHost` now resolve `channelId` by both channel name **and** dsIndex string (e.g. `"0"`), so channels addressed by their numeric index are correctly dispatched regardless of the output function.
 
 ### Added

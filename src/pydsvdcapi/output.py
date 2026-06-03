@@ -153,6 +153,18 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
     # add_channel().
 }
 
+# dSS uses getConfigWord(class_:64, index:N) to read POSITIONAL channel values.
+# The index is a fixed per-channel-type hardware slot, confirmed from dSS error
+# messages (shade_position_outside → index 2, shade_angle_outside → index 4).
+# Indoor variants sit at the adjacent odd slots.
+_POSITIONAL_SLOT: dict[int, int] = {
+    int(OutputChannelType.SHADE_POSITION_OUTSIDE): 2,
+    int(OutputChannelType.SHADE_POSITION_INDOOR): 3,
+    int(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE): 4,
+    int(OutputChannelType.SHADE_OPENING_ANGLE_INDOOR): 5,
+    int(OutputChannelType.TRANSPARENCY): 6,
+}
+
 logger = logging.getLogger(__name__)
 
 #: All setting keys that :meth:`Output.apply_settings` handles explicitly.
@@ -1608,24 +1620,39 @@ class Output:
     def _channel_key(self, ch: "OutputChannel") -> str:
         """Return the dict key for *ch* in channel container properties.
 
-        Mirrors p44vdc ``getApiId()`` for API v3+:
-        - ON_OFF (0), DIMMER (1): numeric dsIndex string (``"0"``).
-          Single-channel outputs have dsIndex=0 and dSS addresses them as
-          ``class_:64 index:0``.
-        - POSITIONAL (2), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4):
-          channel name string (e.g. ``"shadePositionOutside"``,
-          ``"brightness"``, ``"colortemp"``).
-        - BIPOLAR (5), INTERNALLY_CONTROLLED (6): numeric dsIndex string
-          (INTERNALLY_CONTROLLED has no channels; BIPOLAR behaves like a
-          simple single-channel output).
+        dSS routes channel reads through different mechanisms per function:
+        - ON_OFF (0), DIMMER (1): dsIndex string (``"0"``).  dSS accesses
+          the single channel via ``getConfigWord class_:64 index:0``.
+        - POSITIONAL (2): fixed hardware-slot string from ``_POSITIONAL_SLOT``
+          (e.g. ``"2"`` for shade position outside, ``"4"`` for shade angle
+          outside).  dSS uses ``getConfigWord class_:64 index:N`` where N is
+          this slot; using any other key causes a "wrong parameter" error.
+          Falls back to dsIndex for channel types not in the slot table.
+        - DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4): channel name string
+          (e.g. ``"brightness"``, ``"colortemp"``).  dSS uses name-based VDC
+          property reads for these.
+        - BIPOLAR (5), INTERNALLY_CONTROLLED (6): dsIndex string (fallback).
         """
-        if int(self._function) in (
-            int(OutputFunction.POSITIONAL),
-            int(OutputFunction.DIMMER_COLOR_TEMP),
-            int(OutputFunction.FULL_COLOR_DIMMER),
-        ):
+        fn = int(self._function)
+        if fn == int(OutputFunction.POSITIONAL):
+            slot = _POSITIONAL_SLOT.get(int(ch.channel_type))
+            return str(slot) if slot is not None else str(ch.ds_index)
+        if fn in (int(OutputFunction.DIMMER_COLOR_TEMP), int(OutputFunction.FULL_COLOR_DIMMER)):
             return ch.name
         return str(ch.ds_index)
+
+    def channel_by_key(self, key: str) -> "OutputChannel | None":
+        """Return the channel whose container key or name matches *key*.
+
+        Used by ``VdcHost`` handlers to resolve the ``channelId`` field
+        in ``setOutputChannelValue`` and ``dimChannel`` notifications, which
+        dSS may send as a slot-index string, channel name, or dsIndex string
+        depending on the output function and API version.
+        """
+        for ch in self._channels.values():
+            if self._channel_key(ch) == key or ch.name == key:
+                return ch
+        return None
 
     def get_channel_descriptions(self) -> dict[str, Any]:
         """Return the ``channelDescriptions`` sub-tree.

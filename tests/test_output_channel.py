@@ -1460,15 +1460,17 @@ class TestChannelContainerKeyFormat:
         assert str(ch.ds_index) in desc
         assert ch.name not in desc
 
-    def test_positional_keyed_by_name(self):
-        """POSITIONAL: all channels keyed by channel name (API v3+ format)."""
+    def test_positional_keyed_by_slot_index(self):
+        """POSITIONAL: shade channels keyed by fixed hardware slot index."""
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
         out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
         desc = out.get_channel_descriptions()
-        assert "shadePositionOutside" in desc
-        assert "shadeOpeningAngleOutside" in desc
+        # dSS uses getConfigWord(class_:64, index:N) with these fixed slots.
+        assert "2" in desc   # SHADE_POSITION_OUTSIDE slot
+        assert "4" in desc   # SHADE_OPENING_ANGLE_OUTSIDE slot
+        assert "shadePositionOutside" not in desc
         assert "0" not in desc
         assert "1" not in desc
 
