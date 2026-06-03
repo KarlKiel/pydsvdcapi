@@ -553,7 +553,7 @@ the device is announced.  Key auto-derivation rules:
 - ON_OFF function → `outconfigswitch`, `impulseconfig`
 - DIMMER / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER function → `dimtimeconfig`
 - Grey shade output with slat channel → `shadebladeang`
-  (`shadeprops` and `motiontimefins` are NOT supported for TCP/IP VDC — DS485-only path)
+  (`shadeprops` and `motiontimefins` are not auto-derived — add manually if motor timing config needed)
 - Any binary input → `akmsensor` (`akminput` and `akmdelay` are not supported for VDC devices)
 - Any button → `pushbutton`, `pushbadvanced`, `pushbdisabled`
 
@@ -561,6 +561,8 @@ Some features are **not tested** (can be set manually, VDC behavior unconfirmed)
 
 | Feature | When to consider adding |
 |---|---|
+| `shadeprops` | Grey shade device with motor timing `outputSettings` fields |
+| `motiontimefins` | Venetian blind with blade/slat angle channel — add together with `shadeprops` |
 | `blinkconfig` | Blink pattern configuration (config may be stored on dSS/vdSM) |
 | `outmodegeneric` | Joker device with selectable output mode — VDC support unclear |
 | `customactivityconfig` | Custom activity/app configuration UI |

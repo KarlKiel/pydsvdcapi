@@ -231,17 +231,19 @@ Requires `primaryGroup=8` (Black) for `jokerconfig` and `jokertempcontrol` to ta
 
 Requires `primaryGroup=2` (GREY).
 
-> **`shadeprops` and `motiontimefins` are NOT supported for TCP/IP VDC devices.**
-> Both write motor timing via DS485 `setMaxMotionTime()` / `setMotionTime()`;
-> the dSS stores the values internally without forwarding them to the VDC.
-> `add_model_feature()` raises `ValueError` for both.
+> **`shadeprops` and `motiontimefins` are not auto-derived.**
+> Both open the "Device Properties Shade" panel which writes motor timing via
+> DS485 `setMaxMotionTime()` / `setMotionTime()`; the VDC receives no write-back
+> of those specific DS485 calls.  The features are **not blocked** — add them
+> manually via `add_model_feature()` for grey shade devices that expose motor
+> timing `outputSettings` fields.
 
 | ID | Feature | Effect | dSS API | Notes | Derivation |
 |---|---|---|---|---|---|
-| 14 | `shadeprops` | **NOT SUPPORTED.** Would enable shade properties panel. | `setMaxMotionTime()` | DS485-only path; VDC receives no write-back | `not-supported-vdc` |
+| 14 | `shadeprops` | Enables "Device Properties Shade" panel with motor travel time fields. | `setMaxMotionTime()` | Not auto-derived; add manually for devices with motor timing `outputSettings` | `not-tested` |
 | 15 | `shadeposition` | Enables shade position control (0–100%) per scene. | Scene editor position field | — | `auto: shade output + outputFunction=POSITIONAL` |
 | 18 | `shadebladeang` | Enables slat/blade angle control (0–100°) for venetian blinds. | Scene editor angle field | Jalousie hardware only | `auto: shade output + channelType 9 or 10 present` |
-| 16 | `motiontimefins` | **NOT SUPPORTED.** Would enable fin/slat rotation time calibration. | `setMotionTime()` | DS485-only path; VDC receives no write-back | `not-supported-vdc` |
+| 16 | `motiontimefins` | Enables fin/slat rotation time calibration in the shade properties panel. | `setMotionTime()` | Not auto-derived; add manually together with `shadeprops` when blade channel present | `not-tested` |
 | 17 | `optypeconfig` | Output type selector (Switched / Swiped / PowerSafe). Selection changes dSS `m_OutputMode` via DS485 `CfgFunction_Mode` — these mode IDs have no VDC equivalent. **NOT supported for TCP/IP VDC.** | Output type selector | — | `not-supported-vdc` |
 
 ##### F — Location & Wind Protection (GR Group)
@@ -329,8 +331,8 @@ All features in the "Auto-derived features" column are produced automatically by
 | Dimmable light (DIMMER function) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig` | — |
 | Switched light (ON_OFF function) | `dontcare`, `blink`, `outvalue8`, `transt`, `outconfigswitch`, `impulseconfig` | — |
 | Color light (FULL_COLOR_DIMMER) | `dontcare`, `blink`, `outvalue8`, `transt`, `outputchannels`, `dimtimeconfig` | — |
-| Roller shutter / awning | `dontcare`, `blink`, `shadeposition`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | `shadeprops`, `motiontimefins` not supported |
-| Venetian blind / jalousie | `dontcare`, `blink`, `shadeposition`, `shadebladeang`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | `shadeprops`, `motiontimefins` not supported |
+| Roller shutter / awning | `dontcare`, `blink`, `shadeposition`, `locationconfig`, `operationlock`, `windprotectionconfigawning` | `shadeprops` (motor timing config) |
+| Venetian blind / jalousie | `dontcare`, `blink`, `shadeposition`, `shadebladeang`, `locationconfig`, `operationlock`, `windprotectionconfigblind` | `shadeprops`, `motiontimefins` (motor timing config) |
 | Heating valve (ON/OFF) | `dontcare`, `blink`, `outvalue8`, `transt`, `pwmvalue`, `outconfigswitch`, `impulseconfig`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
 | Heating valve (continuous/PWM) | `dontcare`, `blink`, `outvalue8`, `transt`, `dimtimeconfig`, `pwmvalue`, `heatinggroup`, `heatingprops`, `valvetype`, `extendedvalvetypes` | — |
 | Joker with group assignment | `jokerconfig` (pg=8), `highlevel` (when button with group=8 present) | — |

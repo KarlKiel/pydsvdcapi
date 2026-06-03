@@ -212,9 +212,9 @@ All 65 features defined in `src/model/modelconst.h` (enum class `ModelFeatureId`
 | 11 | `pushbarea` | Button | Push-button can be routed to area level |
 | 12 | `pushbadvanced` | Button | Advanced push-button configuration available |
 | 13 | `pushbcombined` | Button | Combined push-button modes (SDS20/22 2-button). **NOT supported for TCP/IP VDC** — `ButtonDescription/buttonType` is **read-only** in the VDC protocol and hardware-specific to physical TKM/SDS devices; the value does not align with the UI options. |
-| 14 | `shadeprops` | Shade | Shade/blind movement properties configurable. **NOT supported for TCP/IP VDC** — writes motor timing via DS485 `setMaxMotionTime()`; VDC receives no write-back. |
+| 14 | `shadeprops` | Shade | Shade/blind movement properties configurable. Not auto-derived; add manually for grey shade devices that expose motor timing `outputSettings` fields. |
 | 15 | `shadeposition` | Shade | Shade/blind position tracking supported |
-| 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable. **NOT supported for TCP/IP VDC** — writes via DS485 `setMotionTime()`; VDC receives no write-back. |
+| 16 | `motiontimefins` | Shade | Venetian blind slat rotation time configurable. Not auto-derived; add manually together with `shadeprops` when blade/slat angle channel is present. |
 | 17 | `optypeconfig` | Output | Output type configurable (switch/dimmer selector) |
 | 18 | `shadebladeang` | Shade | Venetian blind blade angle configurable |
 | 19 | `highlevel` | Joker | Selection to configure App-Button within pushbutton |
@@ -478,7 +478,7 @@ pushbutton, pushbarea, pushbadvanced
 Roller blind: `dontcare, shadeposition, identification`
 Venetian blind: add `shadebladeang`
 With wind protection: add `locationconfig, windprotectionconfigblind` or `windprotectionconfigawning`
-(`shadeprops` and `motiontimefins` are **NOT supported** for TCP/IP VDC devices)
+(`shadeprops` and `motiontimefins` are not auto-derived; add manually if motor timing config is needed)
 
 ---
 
@@ -689,9 +689,9 @@ These enable various push-button configuration UI panels. Typically co-occur in 
 
 | Feature | ID | Meaning |
 |---|---|---|
-| `shadeprops` | 14 | Shade/blind movement properties (travel time, motor inertia) are configurable. **NOT supported for TCP/IP VDC** — DS485-only path, VDC receives no write-back. |
+| `shadeprops` | 14 | Shade/blind movement properties (travel time, motor inertia) are configurable. Not auto-derived; add manually for devices that expose motor timing `outputSettings` fields. |
 | `shadeposition` | 15 | Shade/blind position can be tracked and reported. |
-| `motiontimefins` | 16 | Venetian blind fin/slat rotation time configurable (separate from main travel time). **NOT supported for TCP/IP VDC** — DS485-only path, VDC receives no write-back. |
+| `motiontimefins` | 16 | Venetian blind fin/slat rotation time configurable (separate from main travel time). Not auto-derived; add manually together with `shadeprops` when blade/slat angle channel is present. |
 | `shadebladeang` | 18 | Venetian blind blade angle can be set and tracked. Enables angle control UI. |
 | `optypeconfig` | 17 | Output type (e.g., blind vs. awning) is user-configurable (Black devices). |
 | `locationconfig` | 36 | Shade installation location configurable (affects auto-sun-protection behavior). |
@@ -802,13 +802,13 @@ features = ["dontcare", "blink", "outvalue8", "transt", "outputchannels", "dimti
 # derive_model_features() produces:
 features = ["dontcare", "blink", "shadeposition",
             "locationconfig", "operationlock", "windprotectionconfigawning", "identification"]
-# NOTE: shadeprops and motiontimefins are NOT supported for TCP/IP VDC devices.
+# NOTE: shadeprops not auto-derived; add manually if motor timing config needed.
 
 # Venetian blind (POSITIONAL + channelType 9 or 10)
 features = ["dontcare", "blink", "shadeposition",
             "shadebladeang",
             "locationconfig", "operationlock", "windprotectionconfigblind", "identification"]
-# NOTE: shadeprops and motiontimefins are NOT supported for TCP/IP VDC devices.
+# NOTE: shadeprops, motiontimefins not auto-derived; add manually if motor timing config needed.
 ```
 
 **Blue (primaryGroup=3) — Heating valve VDC device:**

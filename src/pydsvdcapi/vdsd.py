@@ -624,7 +624,7 @@ class Vdsd:
     _VENTILATION_CHANNEL_TYPES: frozenset = frozenset({12, 13, 14, 15, 20, 21})
 
     # Features that cannot be used with TCP/IP VDC devices and must never be
-    # declared.  Four root causes:
+    # declared.  Three root causes:
     #   1. Output-mode selectors (outmode, outmodeswitch, …) write to the dSS
     #      m_OutputMode field via DS485 CfgFunction_Mode.  The written value is
     #      never forwarded to the VDC, so VDC devices cannot observe or react
@@ -634,9 +634,8 @@ class Vdsd:
     #   3. AKM input configuration (akminput, akmdelay) writes to DS485 bus
     #      registers via setAKMInputProperty() / setAKMInputTimeouts(); the
     #      written values are never forwarded to the VDC.
-    #   4. Shade properties configuration (shadeprops, motiontimefins) triggers
-    #      setMaxMotionTime() / setMotionTime() DS485 calls whose results are
-    #      stored on the dSS side only; the VDC receives no write-back.
+    # Note: "shadeprops" and "motiontimefins" are NOT in this set — they are
+    # not auto-derived but may be added manually via add_model_feature().
     _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset(
         {
             # LED indicators — not API-controlled on VDC devices
@@ -665,11 +664,6 @@ class Vdsd:
             # AKM input/delay config — DS485 bus only, never reaches VDC
             "akminput",
             "akmdelay",
-            # Shade properties / motion timing — triggers setMaxMotionTime() /
-            # setMotionTime() DS485 calls; values stored on dSS only, VDC
-            # receives no write-back and cannot react to the configuration.
-            "shadeprops",
-            "motiontimefins",
         }
     )
 
@@ -709,7 +703,8 @@ class Vdsd:
           POSITIONAL (2) → ``"shadeposition"``; additionally
           ``channelType`` 9 or 10 present → ``"shadebladeang"``
           (``"shadeprops"`` and ``"motiontimefins"`` are **not**
-          auto-derived — they are unsupported for TCP/IP VDC devices)
+          auto-derived — add them manually via :meth:`add_model_feature`
+          if the device supports motor timing configuration)
         * ``primaryGroup`` ≠ 2 → ``"outvalue8"``
         * Both ``channelType`` 2 (HUE) and 3 (SATURATION) present, or
           both 1 (BRIGHTNESS) and 4 (COLOR_TEMPERATURE) present →
@@ -765,11 +760,11 @@ class Vdsd:
 
         Note: features in :attr:`_UNSUPPORTED_MODEL_FEATURES` are
         **never** auto-derived and will raise :exc:`ValueError` if
-        passed to :meth:`add_model_feature`.  This includes
-        ``"shadeprops"`` and ``"motiontimefins"`` — the shade properties
-        panel writes motor timing via DS485 ``setMaxMotionTime()`` /
-        ``setMotionTime()``; the VDC receives no write-back and cannot
-        react to those settings.  See
+        passed to :meth:`add_model_feature`.  ``"shadeprops"`` and
+        ``"motiontimefins"`` are **not** in that blocked set — they are
+        not auto-derived but may be added manually when the device
+        supports motor timing configuration (e.g. grey shade devices
+        with ``outputSettings`` motor timing fields).  See
         ``docs/model-features-auto-assignment.md`` for the full list and
         rationale.
         """
@@ -792,9 +787,8 @@ class Vdsd:
                 self._model_features.add("transt")
 
             # shade vs. normal output — determined by primaryGroup (ColorGroup.GREY=2)
-            # "shadeprops" and "motiontimefins" are NOT derived: they open the
-            # shade-properties panel which writes motor timing via DS485
-            # setMaxMotionTime()/setMotionTime(); the VDC receives no write-back.
+            # "shadeprops" and "motiontimefins" are NOT auto-derived; add them
+            # manually via add_model_feature() when motor timing config is needed.
             if pg == 2:  # ColorGroup.GREY — outdoor shade device
                 if fn == 2:  # OutputFunction.POSITIONAL
                     self._model_features.add("shadeposition")

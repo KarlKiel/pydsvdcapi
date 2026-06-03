@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `on_disconnect` callback parameter on `VdcHost.start()`: an optional async callback fired when the vdSM TCP connection is lost unexpectedly (network drop, dSS restart, etc.). Receives `(host: VdcHost, reason: Exception | None)` — `reason` is the exception that caused the disconnect, or `None` for a clean EOF / bye. The callback is **not** called when `host.stop()` initiates the disconnect.
 - `VdcSession.disconnect_reason: Exception | None` attribute — exposed after `session.run()` returns so callers can inspect what ended the session.
+- `shadeprops` and `motiontimefins` model features are no longer blocked: they have been moved from the unsupported set to the "not tested / add manually" category. Add them via `add_model_feature()` on grey shade devices that expose motor timing `outputSettings` fields.
 
 ## [0.8.8] - 2026-05-30
 

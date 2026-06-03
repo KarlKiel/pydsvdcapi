@@ -2451,15 +2451,17 @@ class TestDeriveModelFeatures:
         with pytest.raises(ValueError, match="consumptioneventled"):
             vdsd.add_model_feature("consumptioneventled")
 
-    def test_add_unsupported_shadeprops_raises(self):
+    def test_add_shadeprops_manually_allowed(self):
+        # shadeprops is not auto-derived but may be added manually
         vdsd, _ = self._setup()
-        with pytest.raises(ValueError, match="shadeprops"):
-            vdsd.add_model_feature("shadeprops")
+        vdsd.add_model_feature("shadeprops")
+        assert "shadeprops" in vdsd.model_features
 
-    def test_add_unsupported_motiontimefins_raises(self):
+    def test_add_motiontimefins_manually_allowed(self):
+        # motiontimefins is not auto-derived but may be added manually
         vdsd, _ = self._setup()
-        with pytest.raises(ValueError, match="motiontimefins"):
-            vdsd.add_model_feature("motiontimefins")
+        vdsd.add_model_feature("motiontimefins")
+        assert "motiontimefins" in vdsd.model_features
 
     def test_add_supported_blink_does_not_raise(self):
         # Verify that a legitimate optional feature can still be added manually
