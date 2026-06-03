@@ -1783,7 +1783,7 @@ class VdcHost:
             channel_obj = None
             if notif.channelId:
                 for ch in output.channels.values():
-                    if ch.name == notif.channelId:
+                    if ch.name == notif.channelId or str(ch.ds_index) == notif.channelId:
                         channel_obj = ch
                         break
             if channel_obj is None and notif.channel:
@@ -1921,11 +1921,11 @@ class VdcHost:
                 )
                 continue
 
-            # Find the channel by name (channelId), fall back to int type.
+            # Find the channel by name or dsIndex string (channelId), fall back to int type.
             channel_obj = None
             if notif.channelId:
                 for ch in output.channels.values():
-                    if ch.name == notif.channelId:
+                    if ch.name == notif.channelId or str(ch.ds_index) == notif.channelId:
                         channel_obj = ch
                         break
             if channel_obj is None and notif.HasField("channel"):

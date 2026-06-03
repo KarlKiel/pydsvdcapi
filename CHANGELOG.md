@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now depend on the output `function` value: outputs with `function` 0 (`ON_OFF`), 1 (`DIMMER`), or 2 (`POSITIONAL`) use the **dsIndex string** as key (e.g. `"0"`, `"1"`); outputs with `function` 3 (`DIMMER_COLOR_TEMP`) or 4 (`FULL_COLOR_DIMMER`) use the **channel name string** (e.g. `"brightness"`, `"colortemp"`). This matches observed dSS behaviour and resolves `DSMeter Error [1] wrong parameter` errors for single-channel and positional outputs.
+- `setOutputChannelValue` and `dimChannel` handlers in `VdcHost` now resolve `channelId` by both channel name **and** dsIndex string (e.g. `"0"`), so channels addressed by their numeric index are correctly dispatched regardless of the output function.
 
 ### Added
 - `on_disconnect` callback parameter on `VdcHost.start()`: an optional async callback fired when the vdSM TCP connection is lost unexpectedly (network drop, dSS restart, etc.). Receives `(host: VdcHost, reason: Exception | None)` — `reason` is the exception that caused the disconnect, or `None` for a clean EOF / bye. The callback is **not** called when `host.stop()` initiates the disconnect.
