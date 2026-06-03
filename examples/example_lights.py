@@ -349,8 +349,8 @@ def _start_stdin_thread(loop: asyncio.AbstractEventLoop) -> None:
 def _print_menu(devices: list[DevInfo], connected: bool) -> None:
     status = _col(GREEN_C, "CONNECTED") if connected else _col(RED_C, "WAITING…")
     print(f"\n{BOLD}{'=' * 60}{RESET}")
-    print(f"  pyDSvDCAPI Example Lights VDC  |  {status}")
-    print(f"  {GREY_C}{len(devices)} devices announced{RESET}")
+    print(f"  pydsvdcapi Example — Lights  |  {status}")
+    print(f"  {GREY_C}{len(devices)} devices  (L1=on/off  L2=dimmer  L3=dim+CT  L4=RGBW){RESET}")
     print(f"{BOLD}{'=' * 60}{RESET}")
     print(f"  {BOLD}r{RESET}  Restart (vanish → wait 20 s → reconnect)")
     print(f"  {BOLD}q{RESET}  Quit clean (vanish + delete persistence files)")
@@ -449,7 +449,7 @@ async def main(port: int, debug: bool) -> bool:
 
     host = VdcHost(
         port=port,
-        model="pyDSvDCAPI Example Lights",
+        model="pydsvdcapi Example Lights",
         name="example-lights-host",
         vendor_name=VENDOR_NAME,
         state_path=STATE_FILE,
@@ -480,15 +480,15 @@ async def main(port: int, debug: bool) -> bool:
         return False
 
     session = host.session
-    print(f"{GREEN_C}Session established — announcing {len(devices)} devices…{RESET}")
+    print(f"{GREEN_C}Session established — setting initial output values…{RESET}")
 
+    await push_initial_output_values(devices)
+
+    print(f"{GREEN_C}Announcing {len(devices)} devices…{RESET}")
     for di in devices:
         await di.device.announce(session)
 
     print(f"{GREEN_C}All devices announced.{RESET}")
-
-    await push_initial_output_values(devices)
-    print(f"{GREEN_C}Initial output values pushed.{RESET}")
 
     mock_task = asyncio.create_task(mock_changes_loop(devices, host))
 

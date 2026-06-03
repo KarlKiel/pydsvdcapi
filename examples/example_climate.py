@@ -629,15 +629,15 @@ async def main(port: int, debug: bool) -> bool:
         return False
 
     session = host.session
-    print(f"{GREEN_C}Session established — announcing {len(devices)} devices…{RESET}")
+    print(f"{GREEN_C}Session established — setting initial output values…{RESET}")
 
+    await push_initial_output_values(devices)
+
+    print(f"{GREEN_C}Announcing {len(devices)} devices…{RESET}")
     for di in devices:
         await di.device.announce(session)
 
     print(f"{GREEN_C}All devices announced.{RESET}")
-
-    await push_initial_output_values(devices)
-    print(f"{GREEN_C}Initial output values pushed.{RESET}")
 
     mock_task = asyncio.create_task(mock_changes_loop(devices, host))
 
