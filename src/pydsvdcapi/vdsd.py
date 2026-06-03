@@ -706,9 +706,9 @@ class Vdsd:
           auto-derived — add them manually via :meth:`add_model_feature`
           if the device supports motor timing configuration)
         * ``primaryGroup`` ≠ 2 → ``"outvalue8"``
-        * Both ``channelType`` 2 (HUE) and 3 (SATURATION) present, or
-          both 1 (BRIGHTNESS) and 4 (COLOR_TEMPERATURE) present →
-          ``"outputchannels"``
+        * Any output channel present → ``"outputchannels"`` (required
+          for dSS to resolve channelSettings by name; without it dSS
+          uses numeric index lookup and returns "wrong parameter")
         * ``function`` DIMMER (1), DIMMER_COLOR_TEMP (3), or
           FULL_COLOR_DIMMER (4) → ``"dimtimeconfig"``
         * ``function`` ON_OFF (0) → ``"outconfigswitch"`` +
@@ -797,10 +797,11 @@ class Vdsd:
             else:
                 self._model_features.add("outvalue8")
 
-            # multi-channel colour output:
-            #   HUE (2) + SATURATION (3) → RGB/RGBW full-colour
-            #   BRIGHTNESS (1) + COLOR_TEMPERATURE (4) → tunable white
-            if {2, 3} <= ch_types or {1, 4} <= ch_types:
+            # outputchannels: required for dSS to resolve channelSettings by channel
+            # name (the format pydsvdcapi uses).  Any device with at least one output
+            # channel needs this — without it dSS falls back to numeric-index lookup
+            # and returns "wrong parameter" for getConfig class=64.
+            if ch_types:
                 self._model_features.add("outputchannels")
 
             # dimmer features: DIMMER (1), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4)
