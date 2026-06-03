@@ -153,18 +153,6 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
     # add_channel().
 }
 
-# dSS uses getConfigWord(class_:64, index:N) to read POSITIONAL channel values.
-# The index is a fixed per-channel-type hardware slot, confirmed from dSS error
-# messages (shade_position_outside → index 2, shade_angle_outside → index 4).
-# Indoor variants sit at the adjacent odd slots.
-_POSITIONAL_SLOT: dict[int, int] = {
-    int(OutputChannelType.SHADE_POSITION_OUTSIDE): 2,
-    int(OutputChannelType.SHADE_POSITION_INDOOR): 3,
-    int(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE): 4,
-    int(OutputChannelType.SHADE_OPENING_ANGLE_INDOOR): 5,
-    int(OutputChannelType.TRANSPARENCY): 6,
-}
-
 logger = logging.getLogger(__name__)
 
 #: All setting keys that :meth:`Output.apply_settings` handles explicitly.
@@ -1623,21 +1611,17 @@ class Output:
         dSS routes channel reads through different mechanisms per function:
         - ON_OFF (0), DIMMER (1): dsIndex string (``"0"``).  dSS accesses
           the single channel via ``getConfigWord class_:64 index:0``.
-        - POSITIONAL (2): fixed hardware-slot string from ``_POSITIONAL_SLOT``
-          (e.g. ``"2"`` for shade position outside, ``"4"`` for shade angle
-          outside).  dSS uses ``getConfigWord class_:64 index:N`` where N is
-          this slot; using any other key causes a "wrong parameter" error.
-          Falls back to dsIndex for channel types not in the slot table.
-        - DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4): channel name string
-          (e.g. ``"brightness"``, ``"colortemp"``).  dSS uses name-based VDC
-          property reads for these.
+        - POSITIONAL (2), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4):
+          channel name string (e.g. ``"shadePositionOutside"``,
+          ``"brightness"``, ``"colortemp"``).
         - BIPOLAR (5), INTERNALLY_CONTROLLED (6): dsIndex string (fallback).
         """
         fn = int(self._function)
-        if fn == int(OutputFunction.POSITIONAL):
-            slot = _POSITIONAL_SLOT.get(int(ch.channel_type))
-            return str(slot) if slot is not None else str(ch.ds_index)
-        if fn in (int(OutputFunction.DIMMER_COLOR_TEMP), int(OutputFunction.FULL_COLOR_DIMMER)):
+        if fn in (
+            int(OutputFunction.POSITIONAL),
+            int(OutputFunction.DIMMER_COLOR_TEMP),
+            int(OutputFunction.FULL_COLOR_DIMMER),
+        ):
             return ch.name
         return str(ch.ds_index)
 
@@ -1658,9 +1642,9 @@ class Output:
         """Return the ``channelDescriptions`` sub-tree.
 
         Keys are determined by :meth:`_channel_key` — numeric dsIndex strings
-        for simple output functions (ON_OFF, DIMMER, POSITIONAL) and channel
-        name strings for multi-channel colour functions (DIMMER_COLOR_TEMP,
-        FULL_COLOR_DIMMER).
+        for simple output functions (ON_OFF, DIMMER) and channel name strings
+        for positional and multi-channel colour functions (POSITIONAL,
+        DIMMER_COLOR_TEMP, FULL_COLOR_DIMMER).
         """
         return {
             self._channel_key(ch): ch.get_description_properties()
