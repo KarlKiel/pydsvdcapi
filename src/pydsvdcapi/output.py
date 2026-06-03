@@ -1560,8 +1560,7 @@ class Output:
 
         Called by :meth:`OutputChannel.update_value` when ``pushChanges``
         is set on this output.  Sends a ``VDC_SEND_PUSH_NOTIFICATION``
-        with a ``channelStates`` payload keyed by the channel's **name**
-        (e.g. ``{"channelStates": {"brightness": {"value": 75.0, …}}}``),
+        with a ``channelStates`` payload keyed by :meth:`_channel_key`,
         consistent with the keying used in ``getProperty`` responses.
         """
         session = self._session
@@ -1576,7 +1575,7 @@ class Output:
         state_dict = channel.get_state_properties()
         push_tree: dict[str, Any] = {
             "channelStates": {
-                channel.name: state_dict,
+                self._channel_key(channel): state_dict,
             }
         }
 
@@ -1606,37 +1605,55 @@ class Output:
     # Channel property dicts (for getProperty responses)
     # ==================================================================
 
-    def get_channel_descriptions(self) -> dict[str, Any]:
-        """Return the ``channelDescriptions`` sub-tree keyed by channel name.
+    def _channel_key(self, ch: "OutputChannel") -> str:
+        """Return the dict key for *ch* in channel container properties.
 
-        Each key is the channel's protocol name (e.g. ``"brightness"``,
-        ``"colortemp"``, ``"shadePositionOutside"``).  The value is the dict
-        from
-        :meth:`~pydsvdcapi.output_channel.OutputChannel.get_description_properties`.
+        dSS expects the key format to depend on the output function:
+        - ON_OFF (0), DIMMER (1), POSITIONAL (2): numeric dsIndex string
+          (e.g. ``"0"``, ``"1"``).
+        - DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4): channel name string
+          (e.g. ``"brightness"``, ``"colortemp"``).
+        - BIPOLAR (5), INTERNALLY_CONTROLLED (6): numeric dsIndex string
+          (INTERNALLY_CONTROLLED has no channels; BIPOLAR behaves like
+          simple single-channel outputs).
+        """
+        if int(self._function) in (
+            int(OutputFunction.DIMMER_COLOR_TEMP),
+            int(OutputFunction.FULL_COLOR_DIMMER),
+        ):
+            return ch.name
+        return str(ch.ds_index)
+
+    def get_channel_descriptions(self) -> dict[str, Any]:
+        """Return the ``channelDescriptions`` sub-tree.
+
+        Keys are determined by :meth:`_channel_key` — numeric dsIndex strings
+        for simple output functions (ON_OFF, DIMMER, POSITIONAL) and channel
+        name strings for multi-channel colour functions (DIMMER_COLOR_TEMP,
+        FULL_COLOR_DIMMER).
         """
         return {
-            ch.name: ch.get_description_properties()
+            self._channel_key(ch): ch.get_description_properties()
             for ch in self._channels.values()
         }
 
     def get_channel_settings(self) -> dict[str, Any]:
-        """Return the ``channelSettings`` sub-tree keyed by channel name.
+        """Return the ``channelSettings`` sub-tree.
 
-        Keys are channel names, consistent with :meth:`get_channel_descriptions`.
-        Currently all channels return an empty settings dict (§4.9.2).
+        Keys follow the same convention as :meth:`get_channel_descriptions`.
         """
         return {
-            ch.name: ch.get_settings_properties()
+            self._channel_key(ch): ch.get_settings_properties()
             for ch in self._channels.values()
         }
 
     def get_channel_states(self) -> dict[str, Any]:
-        """Return the ``channelStates`` sub-tree keyed by channel name.
+        """Return the ``channelStates`` sub-tree.
 
-        Keys are channel names, consistent with :meth:`get_channel_descriptions`.
+        Keys follow the same convention as :meth:`get_channel_descriptions`.
         """
         return {
-            ch.name: ch.get_state_properties()
+            self._channel_key(ch): ch.get_state_properties()
             for ch in self._channels.values()
         }
 
