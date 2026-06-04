@@ -217,7 +217,7 @@ def build_s2_awning(vdc: Vdc, idx: int) -> DevInfo:
     # AWNINGS(65) is a global app group (>=64) — cannot appear in groups set.
     # groups must contain BLINDS(2) so device participates in shade scenes.
     out = _shade_output(v, int(ColorClass.AWNINGS), {int(ColorClass.BLINDS)})
-    out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE, ds_index=0, name="0")
+    out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
     out.on_channel_applied = _channel_callback(name)
 
     v.add_model_feature("shadeposition")

@@ -1460,17 +1460,23 @@ class TestChannelContainerKeyFormat:
         assert str(ch.ds_index) in desc
         assert ch.name not in desc
 
-    def test_positional_keyed_by_name(self):
-        """POSITIONAL: shade channels keyed by channel name (like CT/RGB)."""
+    def test_positional_keyed_by_channel_type_id(self):
+        """POSITIONAL: shade channels keyed by ChannelType integer string.
+
+        The vdSM parses the outer key as a ChannelType integer to build the OPC
+        table.  Non-numeric keys are skipped → empty OPC → m_emulatedHardwareOutputs
+        = true for grey GR-class devices → bus errors.  Using the ChannelType value
+        ("7" for shadePositionOutside, "9" for shadeOpeningAngleOutside) fixes this.
+        """
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
         out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
         desc = out.get_channel_descriptions()
-        assert "shadePositionOutside" in desc
-        assert "shadeOpeningAngleOutside" in desc
-        assert "2" not in desc
-        assert "4" not in desc
+        assert "7" in desc   # SHADE_POSITION_OUTSIDE = 7
+        assert "9" in desc   # SHADE_OPENING_ANGLE_OUTSIDE = 9
+        assert "shadePositionOutside" not in desc
+        assert "shadeOpeningAngleOutside" not in desc
         assert "0" not in desc
         assert "1" not in desc
 
