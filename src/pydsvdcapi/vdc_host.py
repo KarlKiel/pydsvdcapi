@@ -1646,6 +1646,14 @@ class VdcHost:
         if method == "scanDevices":
             # Re-announce the addressed vDC and all its devices.
             # Matches "scanDevices" and versioned variants (version stripped above).
+            #
+            # IMPORTANT: the OK response must be sent to the vdSM BEFORE we
+            # send any VDC_SEND_ANNOUNCE_* messages.  dSS will not respond to
+            # our announce requests until it has received our scanDevices OK,
+            # so doing the re-announcement inside the handler (before returning
+            # resp) creates a deadlock that manifests as a 30-second timeout.
+            # We therefore return OK immediately and re-announce in a
+            # background task.
             dsuid_upper = dsuid_str.upper()
             if dsuid_upper in self._vdcs:
                 vdcs_to_scan: list[Vdc] = [self._vdcs[dsuid_upper]]
@@ -1657,21 +1665,30 @@ class VdcHost:
                     f"scanDevices: vDC {dsuid_str} not found"
                 )
                 return resp
-            try:
-                for vdc in vdcs_to_scan:
+
+            async def _do_scan(
+                vdcs: list[Vdc],
+                sess: VdcSession,
+                target: str,
+            ) -> None:
+                for vdc in vdcs:
                     logger.info(
                         "scanDevices: re-announcing vDC '%s' (%s)",
                         vdc.name,
                         vdc.dsuid,
                     )
-                    vdc.reset_announcement()
-                    await vdc.announce(session)
-                    await vdc.announce_devices(session)
-                resp.generic_response.code = pb.ERR_OK
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("scanDevices failed for %s", dsuid_str)
-                resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
-                resp.generic_response.description = str(exc)
+                    try:
+                        vdc.reset_announcement()
+                        await vdc.announce(sess)
+                        await vdc.announce_devices(sess)
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "scanDevices: re-announcement failed for vDC %s",
+                            vdc.dsuid,
+                        )
+
+            asyncio.ensure_future(_do_scan(vdcs_to_scan, session, dsuid_str))
+            resp.generic_response.code = pb.ERR_OK
             return resp
 
         # Unknown generic request — delegate to user callback.

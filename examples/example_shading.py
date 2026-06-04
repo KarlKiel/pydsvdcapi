@@ -204,6 +204,7 @@ def build_s1_curtain(vdc: Vdc, idx: int) -> DevInfo:
     out.on_channel_applied = _channel_callback(name)
 
     v.add_model_feature("shadeposition")
+    v.add_model_feature("shadeprops")
     v.derive_model_features()
     return DevInfo(idx=idx, name=name, device=device, vdsd=v, output=out)
 
@@ -221,6 +222,7 @@ def build_s2_awning(vdc: Vdc, idx: int) -> DevInfo:
     out.on_channel_applied = _channel_callback(name)
 
     v.add_model_feature("shadeposition")
+    v.add_model_feature("shadeprops")
     v.add_model_feature("locationconfig")
     v.add_model_feature("windprotectionconfigawning")
     v.derive_model_features()
@@ -239,7 +241,9 @@ def build_s3_indoor_blinds(vdc: Vdc, idx: int) -> DevInfo:
     out.on_channel_applied = _channel_callback(name)
 
     v.add_model_feature("shadeposition")
+    v.add_model_feature("shadeprops")
     v.add_model_feature("shadebladeang")
+    v.add_model_feature("motiontimefins")
     v.derive_model_features()
     return DevInfo(idx=idx, name=name, device=device, vdsd=v, output=out)
 
@@ -256,7 +260,9 @@ def build_s4_outdoor_shutter(vdc: Vdc, idx: int) -> DevInfo:
     out.on_channel_applied = _channel_callback(name)
 
     v.add_model_feature("shadeposition")
+    v.add_model_feature("shadeprops")
     v.add_model_feature("shadebladeang")
+    v.add_model_feature("motiontimefins")
     v.add_model_feature("locationconfig")
     v.add_model_feature("windprotectionconfigblind")
     v.derive_model_features()

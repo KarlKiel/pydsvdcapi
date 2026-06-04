@@ -1,5 +1,6 @@
 """Tests for the VdcHost class."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -737,7 +738,13 @@ def _make_ok_session() -> MagicMock:
 
 
 class TestHandleScanDevicesGenericRequest:
-    """Tests for GenericRequest 'scanDevices' (and versioned variants)."""
+    """Tests for GenericRequest 'scanDevices' (and versioned variants).
+
+    Re-announcement runs in a background asyncio task so that the OK
+    response reaches dSS before any VDC_SEND_ANNOUNCE_* messages are
+    sent (avoids a request/response deadlock).  Tests therefore call
+    ``await asyncio.sleep(0)`` after dispatching to drain the task queue.
+    """
 
     @pytest.mark.asyncio
     async def test_scan_devices_reannounces_vdc_and_devices(self):
@@ -747,6 +754,7 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -761,6 +769,7 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid), method="scanDevices/6")
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -780,6 +789,7 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -805,6 +815,7 @@ class TestHandleScanDevicesGenericRequest:
         session = _make_ok_session()
         msg = _make_scan_devices_msg(str(host.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -825,8 +836,13 @@ class TestHandleScanDevicesGenericRequest:
         session.send_request.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_scan_devices_announce_failure_returns_not_implemented(self):
-        """If announce raises, scanDevices returns ERR_NOT_IMPLEMENTED."""
+    async def test_scan_devices_announce_failure_logged_not_propagated(self):
+        """Announce errors in the background task are logged, not returned.
+
+        scanDevices always returns ERR_OK immediately; any failure during
+        the async re-announcement is only logged so the dSS side always
+        gets a timely, successful response.
+        """
         host, vdc, _device, _vdsd = _make_host_with_device()
 
         # Make send_request raise on the VDC_SEND_ANNOUNCE_VDC call.
@@ -836,9 +852,10 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let the background task fail
 
-        assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
-        assert "dropped" in resp.generic_response.description
+        # OK is returned regardless — the caller must not be blocked on errors.
+        assert resp.generic_response.code == pb.ERR_OK
 
 
 # ---------------------------------------------------------------------------
