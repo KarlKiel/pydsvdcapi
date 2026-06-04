@@ -717,8 +717,8 @@ class OutputChannel:
         sub-tree (§4.9.3).  Keys match the vDC API property names.
         """
         return {
-            "value": self._value,  # may be None (NULL)
-            "age": self.age,  # may be None (NULL)
+            "value": self._value if self._value is not None else 0.0,
+            "age": self.age,  # None → PropertyValue {} (null, not yet synced)
         }
 
     # ==================================================================

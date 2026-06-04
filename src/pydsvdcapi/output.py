@@ -1614,21 +1614,17 @@ class Output:
         Key format per output function:
 
         - ON_OFF (0), DIMMER (1): dsIndex string (``"0"``).
-        - POSITIONAL (2): ChannelType integer string (e.g. ``"7"`` for
-          shadePositionOutside, ``"9"`` for shadeOpeningAngleOutside).
-          The vdSM parses the outer key as a ChannelType integer to build
-          the bus OPC table.  Non-numeric keys are skipped → empty OPC →
-          ``m_emulatedHardwareOutputs = true`` for grey devices → bus errors.
-        - DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4): channel name string
-          (e.g. ``"brightness"``, ``"colortemp"``).  The vdSM hardcodes the
-          OPC types for these functions from ``outputDescription.function``,
-          so the outer key is only used as the channel ID.
+        - POSITIONAL (2), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4):
+          channel name string (e.g. ``"shadePositionOutside"``,
+          ``"brightness"``, ``"colortemp"``).  The vdSM builds the OPC table
+          from the ``channelType`` and ``dsIndex`` sub-element fields, so the
+          outer key is only used as the channel ID.  p44vdc uses channel names
+          for all multi-channel output functions.
         - BIPOLAR (5), INTERNALLY_CONTROLLED (6): dsIndex string (fallback).
         """
         fn = int(self._function)
-        if fn == int(OutputFunction.POSITIONAL):
-            return str(int(ch.channel_type))
         if fn in (
+            int(OutputFunction.POSITIONAL),
             int(OutputFunction.DIMMER_COLOR_TEMP),
             int(OutputFunction.FULL_COLOR_DIMMER),
         ):

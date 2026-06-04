@@ -582,7 +582,7 @@ class TestChannelPropertyDicts:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         ch = out.get_channel(0)
         state = ch.get_state_properties()
-        assert state["value"] is None
+        assert state["value"] == 0.0   # uninitialized → 0.0, matching p44vdc v_double default
         assert state["age"] is None
 
     @pytest.mark.asyncio
@@ -983,7 +983,7 @@ class TestVdsdChannelProperties:
         assert "channelStates" in props
         # DIMMER uses dsIndex string key "0".
         assert "0" in props["channelStates"]
-        assert props["channelStates"]["0"]["value"] is None
+        assert props["channelStates"]["0"]["value"] == 0.0
 
     def test_properties_include_channel_settings(self):
         _, _, _, vdsd = _make_stack()
@@ -1460,23 +1460,22 @@ class TestChannelContainerKeyFormat:
         assert str(ch.ds_index) in desc
         assert ch.name not in desc
 
-    def test_positional_keyed_by_channel_type_id(self):
-        """POSITIONAL: shade channels keyed by ChannelType integer string.
+    def test_positional_keyed_by_name(self):
+        """POSITIONAL: shade channels keyed by channel name, matching p44vdc wire format.
 
-        The vdSM parses the outer key as a ChannelType integer to build the OPC
-        table.  Non-numeric keys are skipped → empty OPC → m_emulatedHardwareOutputs
-        = true for grey GR-class devices → bus errors.  Using the ChannelType value
-        ("7" for shadePositionOutside, "9" for shadeOpeningAngleOutside) fixes this.
+        The outer key becomes channel.id in dSS.  The vdSM builds the OPC table
+        from the channelType and dsIndex sub-element fields, not from the outer
+        key, so the channel name is correct here (as p44vdc uses).
         """
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
         out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
         desc = out.get_channel_descriptions()
-        assert "7" in desc   # SHADE_POSITION_OUTSIDE = 7
-        assert "9" in desc   # SHADE_OPENING_ANGLE_OUTSIDE = 9
-        assert "shadePositionOutside" not in desc
-        assert "shadeOpeningAngleOutside" not in desc
+        assert "shadePositionOutside" in desc
+        assert "shadeOpeningAngleOutside" in desc
+        assert "7" not in desc
+        assert "9" not in desc
         assert "0" not in desc
         assert "1" not in desc
 
