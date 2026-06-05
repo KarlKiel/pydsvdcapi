@@ -306,7 +306,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         resolution=150 / 255,
     ),
     OutputChannelType.WATER_FLOW_RATE: ChannelSpec(
-        name="waterFlowRate",
+        name="waterFlow",
         min_value=0,
         max_value=100,
         resolution=100 / 255,
@@ -338,6 +338,13 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         max_value=255,
         resolution=1,
     ),
+    # -- FCU proprietary channels (192–239) ----------------------------
+    OutputChannelType.FCU_OPERATION_MODE: ChannelSpec(
+        name="operationMode",
+        min_value=0,
+        max_value=255,
+        resolution=1,
+    ),
 }
 
 
@@ -346,8 +353,7 @@ def get_channel_spec(
 ) -> ChannelSpec | None:
     """Look up the :class:`ChannelSpec` for a standard channel type.
 
-    Returns ``None`` for unknown / device-specific channel types
-    (ID ≥ 192).
+    Returns ``None`` for unknown / device-specific channel types.
     """
     if isinstance(channel_type, int) and not isinstance(
         channel_type, OutputChannelType
@@ -357,6 +363,24 @@ def get_channel_spec(
         except ValueError:
             return None
     return CHANNEL_SPECS.get(channel_type)
+
+
+#: Maps ColorClass application group ID → standard OutputChannelType for that class.
+#: Used to resolve channelType key "0" (ds-basics §7 table 7: "standard channel
+#: for the respective color class").
+COLOR_CLASS_STANDARD_CHANNEL: dict[int, OutputChannelType] = {
+    1: OutputChannelType.BRIGHTNESS,           # LIGHTS
+    2: OutputChannelType.SHADE_POSITION_OUTSIDE,  # BLINDS
+    3: OutputChannelType.HEATING_POWER,        # HEATING
+    4: OutputChannelType.AUDIO_VOLUME,         # AUDIO
+    5: OutputChannelType.AUDIO_VOLUME,         # VIDEO
+    9: OutputChannelType.COOLING_CAPACITY,     # COOLING
+    10: OutputChannelType.AIR_FLOW_INTENSITY,  # VENTILATION
+    12: OutputChannelType.AIR_FLOW_INTENSITY,  # RECIRCULATION
+    64: OutputChannelType.AIR_FLOW_INTENSITY,  # APARTMENT_VENTILATION
+    65: OutputChannelType.SHADE_POSITION_OUTSIDE,  # AWNINGS
+    69: OutputChannelType.AIR_FLOW_INTENSITY,  # APARTMENT_RECIRCULATION
+}
 
 
 # ---------------------------------------------------------------------------

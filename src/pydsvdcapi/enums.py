@@ -688,6 +688,9 @@ class OutputChannelType(IntEnum):
     VIDEO_STATION = 25
     VIDEO_INPUT_SOURCE = 26
 
+    # Fan-coil unit (FCU) proprietary range (ids 192–239 reserved)
+    FCU_OPERATION_MODE = 192
+
 
 # ---------------------------------------------------------------------------
 #  Output function / mode  (vDC API properties §4.8)

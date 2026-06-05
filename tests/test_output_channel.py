@@ -154,6 +154,7 @@ class TestChannelSpecs:
             OutputChannelType.POWER_LEVEL,
             OutputChannelType.VIDEO_STATION,
             OutputChannelType.VIDEO_INPUT_SOURCE,
+            OutputChannelType.FCU_OPERATION_MODE,
         }
         assert set(CHANNEL_SPECS.keys()) == expected
 
@@ -165,7 +166,7 @@ class TestChannelSpecs:
         assert spec.max_value == 100
 
     def test_get_channel_spec_unknown(self):
-        assert get_channel_spec(192) is None  # type: ignore[arg-type]
+        assert get_channel_spec(193) is None  # type: ignore[arg-type]
 
     def test_brightness_spec(self):
         spec = CHANNEL_SPECS[OutputChannelType.BRIGHTNESS]
@@ -255,10 +256,10 @@ class TestOutputChannelConstruction:
         out = _make_output(vdsd)
         ch = OutputChannel(
             output=out,
-            channel_type=192,  # Device-specific
+            channel_type=193,  # Device-specific (unknown)
             ds_index=5,
         )
-        assert ch.channel_type == 192  # Stored as raw int.
+        assert ch.channel_type == 193  # Stored as raw int.
         assert ch.name == "channel_5"
         assert ch.min_value == 0.0
         assert ch.max_value == 100.0
@@ -1541,3 +1542,55 @@ class TestChannelContainerKeyFormat:
         assert "channelStates" in props
         assert ch.name in props["channelStates"]            # "brightness"
         assert str(ch.ds_index) not in props["channelStates"]  # not "0"
+
+
+class TestChannelSpecsAndEnums:
+    """Channel type enum and CHANNEL_SPECS match the ds-basics §7 reference tables."""
+
+    def test_water_flow_channel_name_is_waterFlow(self):
+        """WATER_FLOW_RATE spec name must be 'waterFlow' not 'waterFlowRate'."""
+        from pydsvdcapi.output_channel import get_channel_spec
+        from pydsvdcapi.enums import OutputChannelType
+        spec = get_channel_spec(OutputChannelType.WATER_FLOW_RATE)
+        assert spec is not None
+        assert spec.name == "waterFlow"
+
+    def test_fcu_operation_mode_channel_type_exists(self):
+        """OutputChannelType must have FCU_OPERATION_MODE = 192."""
+        from pydsvdcapi.enums import OutputChannelType
+        assert OutputChannelType.FCU_OPERATION_MODE == 192
+
+    def test_fcu_operation_mode_has_channel_spec(self):
+        """CHANNEL_SPECS must have an entry for FCU_OPERATION_MODE with name 'operationMode'."""
+        from pydsvdcapi.output_channel import get_channel_spec
+        from pydsvdcapi.enums import OutputChannelType
+        spec = get_channel_spec(OutputChannelType.FCU_OPERATION_MODE)
+        assert spec is not None
+        assert spec.name == "operationMode"
+
+    def test_color_class_standard_channel_lights(self):
+        """COLOR_CLASS_STANDARD_CHANNEL[LIGHTS] == BRIGHTNESS."""
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+        from pydsvdcapi.enums import ColorClass, OutputChannelType
+        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.LIGHTS] == OutputChannelType.BRIGHTNESS
+
+    def test_color_class_standard_channel_blinds(self):
+        """COLOR_CLASS_STANDARD_CHANNEL[BLINDS] == SHADE_POSITION_OUTSIDE."""
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+        from pydsvdcapi.enums import ColorClass, OutputChannelType
+        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.BLINDS] == OutputChannelType.SHADE_POSITION_OUTSIDE
+
+    def test_color_class_standard_channel_heating(self):
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+        from pydsvdcapi.enums import ColorClass, OutputChannelType
+        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.HEATING] == OutputChannelType.HEATING_POWER
+
+    def test_color_class_standard_channel_cooling(self):
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+        from pydsvdcapi.enums import ColorClass, OutputChannelType
+        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.COOLING] == OutputChannelType.COOLING_CAPACITY
+
+    def test_color_class_standard_channel_ventilation(self):
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+        from pydsvdcapi.enums import ColorClass, OutputChannelType
+        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.VENTILATION] == OutputChannelType.AIR_FLOW_INTENSITY
