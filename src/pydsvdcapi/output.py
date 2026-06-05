@@ -1606,30 +1606,15 @@ class Output:
     # ==================================================================
 
     def _channel_key(self, ch: "OutputChannel") -> str:
-        """Return the dict key for *ch* in channel container properties.
+        """Return the channel name as the canonical property-dict key (API v3+).
 
-        The outer key becomes ``channel.id`` in dSS and is used verbatim as
-        the element name in ``channelStates`` ``setProperty`` requests.
-
-        Key format per output function:
-
-        - ON_OFF (0), DIMMER (1): dsIndex string (``"0"``).
-        - POSITIONAL (2), DIMMER_COLOR_TEMP (3), FULL_COLOR_DIMMER (4):
-          channel name string (e.g. ``"shadePositionOutside"``,
-          ``"brightness"``, ``"colortemp"``).  The vdSM builds the OPC table
-          from the ``channelType`` and ``dsIndex`` sub-element fields, so the
-          outer key is only used as the channel ID.  p44vdc uses channel names
-          for all multi-channel output functions.
-        - BIPOLAR (5), INTERNALLY_CONTROLLED (6): dsIndex string (fallback).
+        All output functions use the channel name (e.g. ``"brightness"``,
+        ``"shadePositionOutside"``) as the outer element key, matching the
+        p44vdc API v3+ ``getApiId()`` format.  Numeric backward-compat
+        resolution for incoming queries is handled by :class:`_ChannelCompatDict`
+        and :meth:`channel_by_key`.
         """
-        fn = int(self._function)
-        if fn in (
-            int(OutputFunction.POSITIONAL),
-            int(OutputFunction.DIMMER_COLOR_TEMP),
-            int(OutputFunction.FULL_COLOR_DIMMER),
-        ):
-            return ch.name
-        return str(ch.ds_index)
+        return ch.name
 
     def channel_by_key(self, key: str) -> "OutputChannel | None":
         """Return the channel whose container key or name matches *key*.
@@ -1640,17 +1625,17 @@ class Output:
         depending on the output function and API version.
         """
         for ch in self._channels.values():
-            if self._channel_key(ch) == key or ch.name == key:
+            if ch.name == key:
                 return ch
         return None
 
     def get_channel_descriptions(self) -> dict[str, Any]:
         """Return the ``channelDescriptions`` sub-tree.
 
-        Keys are determined by :meth:`_channel_key` — numeric dsIndex strings
-        for simple output functions (ON_OFF, DIMMER) and channel name strings
-        for positional and multi-channel colour functions (POSITIONAL,
-        DIMMER_COLOR_TEMP, FULL_COLOR_DIMMER).
+        Keys are channel name strings (e.g. ``"brightness"``,
+        ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
+        format. Backward-compat numeric key resolution for incoming queries is
+        provided by :class:`_ChannelCompatDict`.
         """
         return {
             self._channel_key(ch): ch.get_description_properties()
@@ -1660,7 +1645,10 @@ class Output:
     def get_channel_settings(self) -> dict[str, Any]:
         """Return the ``channelSettings`` sub-tree.
 
-        Keys follow the same convention as :meth:`get_channel_descriptions`.
+        Keys are channel name strings (e.g. ``"brightness"``,
+        ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
+        format. Backward-compat numeric key resolution for incoming queries is
+        provided by :class:`_ChannelCompatDict`.
         """
         return {
             self._channel_key(ch): ch.get_settings_properties()
@@ -1670,7 +1658,10 @@ class Output:
     def get_channel_states(self) -> dict[str, Any]:
         """Return the ``channelStates`` sub-tree.
 
-        Keys follow the same convention as :meth:`get_channel_descriptions`.
+        Keys are channel name strings (e.g. ``"brightness"``,
+        ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
+        format. Backward-compat numeric key resolution for incoming queries is
+        provided by :class:`_ChannelCompatDict`.
         """
         return {
             self._channel_key(ch): ch.get_state_properties()

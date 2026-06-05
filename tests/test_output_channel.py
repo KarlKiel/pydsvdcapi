@@ -634,8 +634,8 @@ class TestOutputChannelProperties:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         settings = out.get_channel_settings()
         assert len(settings) == 1
-        # DIMMER uses dsIndex string key.
-        assert settings["0"] == {}
+        # DIMMER uses channel name key (API v3+).
+        assert settings["brightness"] == {}
 
     @pytest.mark.asyncio
     async def test_channel_states(self):
@@ -644,9 +644,9 @@ class TestOutputChannelProperties:
         ch = out.get_channel(0)
         await ch.update_value(60.0)
         states = out.get_channel_states()
-        # DIMMER uses dsIndex string key.
-        assert states["0"]["value"] == 60.0
-        assert states["0"]["age"] is not None
+        # DIMMER uses channel name key (API v3+).
+        assert states["brightness"]["value"] == 60.0
+        assert states["brightness"]["age"] is not None
 
 
 # ===========================================================================
@@ -971,9 +971,9 @@ class TestVdsdChannelProperties:
 
         props = vdsd.get_properties()
         assert "channelDescriptions" in props
-        # DIMMER uses dsIndex string key "0".
-        assert "0" in props["channelDescriptions"]
-        assert props["channelDescriptions"]["0"]["name"] == "brightness"
+        # DIMMER uses channel name key (API v3+).
+        assert "brightness" in props["channelDescriptions"]
+        assert props["channelDescriptions"]["brightness"]["name"] == "brightness"
 
     def test_properties_include_channel_states(self):
         _, _, _, vdsd = _make_stack()
@@ -982,9 +982,9 @@ class TestVdsdChannelProperties:
 
         props = vdsd.get_properties()
         assert "channelStates" in props
-        # DIMMER uses dsIndex string key "0".
-        assert "0" in props["channelStates"]
-        assert props["channelStates"]["0"]["value"] == 0.0
+        # DIMMER uses channel name key (API v3+).
+        assert "brightness" in props["channelStates"]
+        assert props["channelStates"]["brightness"]["value"] == 0.0
 
     def test_properties_include_channel_settings(self):
         _, _, _, vdsd = _make_stack()
@@ -993,8 +993,8 @@ class TestVdsdChannelProperties:
 
         props = vdsd.get_properties()
         assert "channelSettings" in props
-        # DIMMER uses dsIndex string key "0".
-        assert "0" in props["channelSettings"]
+        # DIMMER uses channel name key (API v3+).
+        assert "brightness" in props["channelSettings"]
 
     def test_no_channels_no_properties(self):
         _, _, _, vdsd = _make_stack()
@@ -1436,30 +1436,25 @@ class TestExports:
 
 
 class TestChannelContainerKeyFormat:
-    """Channel container keys depend on OutputFunction.
+    """All output functions use the channel name as the property-dict key (API v3+)."""
 
-    ON_OFF / DIMMER → dsIndex string ("0")
-    POSITIONAL / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER → channel name
-      (matches p44vdc API v3+ getApiId() format)
-    """
-
-    def test_dimmer_keyed_by_ds_index(self):
-        """DIMMER: channelDescriptions/Settings/States keyed by dsIndex string."""
+    def test_dimmer_keyed_by_name(self):
+        """DIMMER: channelDescriptions/Settings/States keyed by channel name (API v3+)."""
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         ch = list(out.channels.values())[0]
         desc = out.get_channel_descriptions()
-        assert str(ch.ds_index) in desc       # "0"
-        assert ch.name not in desc            # "brightness" must NOT be a key
+        assert ch.name in desc              # "brightness"
+        assert str(ch.ds_index) not in desc # NOT "0"
 
-    def test_on_off_keyed_by_ds_index(self):
-        """ON_OFF: channelDescriptions keyed by dsIndex string."""
+    def test_on_off_keyed_by_name(self):
+        """ON_OFF: channelDescriptions keyed by channel name (API v3+)."""
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.ON_OFF)
         ch = list(out.channels.values())[0]
         desc = out.get_channel_descriptions()
-        assert str(ch.ds_index) in desc
-        assert ch.name not in desc
+        assert ch.name in desc
+        assert str(ch.ds_index) not in desc
 
     def test_positional_keyed_by_name(self):
         """POSITIONAL: shade channels keyed by channel name, matching p44vdc wire format.
@@ -1502,8 +1497,8 @@ class TestChannelContainerKeyFormat:
         assert "0" not in desc
 
     @pytest.mark.asyncio
-    async def test_push_notification_dimmer_keyed_by_ds_index(self):
-        """Push notification for DIMMER must use dsIndex string key."""
+    async def test_push_notification_dimmer_keyed_by_name(self):
+        """Push notification for DIMMER must use channel name key (API v3+)."""
         from pydsvdcapi.property_handling import elements_to_dict
 
         _, _, _, vdsd = _make_stack()
@@ -1519,8 +1514,8 @@ class TestChannelContainerKeyFormat:
         sent_msg = session.send_notification.call_args[0][0]
         props = elements_to_dict(sent_msg.vdc_send_push_notification.changedproperties)
         assert "channelStates" in props
-        assert str(ch.ds_index) in props["channelStates"]   # "0"
-        assert ch.name not in props["channelStates"]        # not "brightness"
+        assert ch.name in props["channelStates"]             # "brightness"
+        assert str(ch.ds_index) not in props["channelStates"]  # NOT "0"
 
     @pytest.mark.asyncio
     async def test_push_notification_color_temp_keyed_by_name(self):
