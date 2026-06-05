@@ -1394,8 +1394,6 @@ class VdcHost:
                             new_val,
                         )
                     # apply_pending_channels is async; schedule it.
-                    import asyncio
-
                     asyncio.create_task(output.apply_pending_channels())
                     logger.info(
                         "vdSD '%s' channelStates updated via setProperty",
