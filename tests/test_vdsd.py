@@ -2436,20 +2436,35 @@ class TestDeriveModelFeatures:
 
     # ---- operationlock from grey + output --------------------------------
 
-    def test_grey_with_output_adds_operationlock(self):
+    def test_grey_outdoor_with_output_adds_operationlock(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
-        vdsd.set_output(
-            Output(
-                vdsd=vdsd,
-                function=OutputFunction.POSITIONAL,
-                default_group=2,
-                name="output",
-                active_group=1,
-                groups={1},
-            )
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
         )
+        output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        vdsd.set_output(output)
         vdsd.derive_model_features()
         assert "operationlock" in vdsd.model_features
+
+    def test_grey_indoor_with_output_no_operationlock(self):
+        vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
+        )
+        output.add_channel(OutputChannelType.SHADE_POSITION_INDOOR)
+        vdsd.set_output(output)
+        vdsd.derive_model_features()
+        assert "operationlock" not in vdsd.model_features
 
     def test_grey_without_output_no_operationlock(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
