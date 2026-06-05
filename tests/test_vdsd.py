@@ -1967,22 +1967,74 @@ class TestDeriveModelFeatures:
         vdsd.derive_model_features()
         assert "heatingoutmode" not in vdsd.model_features
 
-    def test_primary_group_2_with_output_adds_location_and_wind(self):
+    def test_primary_group_2_outdoor_awning_adds_location_and_windawning(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
-        vdsd.set_output(
-            Output(
-                vdsd=vdsd,
-                function=OutputFunction.POSITIONAL,
-                default_group=2,
-                name="output",
-                active_group=1,
-                groups={1},
-            )
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
         )
+        output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        vdsd.set_output(output)
         vdsd.derive_model_features()
         assert "locationconfig" in vdsd.model_features
-        # POSITIONAL shade without blade channel → awning variant
         assert "windprotectionconfigawning" in vdsd.model_features
+        assert "windprotectionconfigblind" not in vdsd.model_features
+
+    def test_primary_group_2_outdoor_blind_adds_location_and_windblind(self):
+        vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
+        )
+        output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        output.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
+        vdsd.set_output(output)
+        vdsd.derive_model_features()
+        assert "locationconfig" in vdsd.model_features
+        assert "windprotectionconfigblind" in vdsd.model_features
+        assert "windprotectionconfigawning" not in vdsd.model_features
+
+    def test_primary_group_2_indoor_curtain_no_location_or_wind(self):
+        vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
+        )
+        output.add_channel(OutputChannelType.SHADE_POSITION_INDOOR)
+        vdsd.set_output(output)
+        vdsd.derive_model_features()
+        assert "locationconfig" not in vdsd.model_features
+        assert "windprotectionconfigawning" not in vdsd.model_features
+        assert "windprotectionconfigblind" not in vdsd.model_features
+
+    def test_primary_group_2_indoor_blind_no_location_or_wind(self):
+        vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
+        )
+        output.add_channel(OutputChannelType.SHADE_POSITION_INDOOR)
+        output.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_INDOOR)
+        vdsd.set_output(output)
+        vdsd.derive_model_features()
+        assert "locationconfig" not in vdsd.model_features
+        assert "windprotectionconfigawning" not in vdsd.model_features
         assert "windprotectionconfigblind" not in vdsd.model_features
 
     def test_primary_group_2_without_output_no_location(self):
@@ -2534,18 +2586,18 @@ class TestDeriveModelFeatures:
     # ---- windprotection split (awning vs. blind) -------------------------
 
     def test_shade_awning_no_blade_channel(self):
-        """POSITIONAL shade without blade channel → windprotectionconfigawning."""
+        """Outdoor awning (type 7, no angle channel) → windprotectionconfigawning."""
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
-        vdsd.set_output(
-            Output(
-                vdsd=vdsd,
-                function=OutputFunction.POSITIONAL,
-                default_group=2,
-                name="output",
-                active_group=1,
-                groups={1},
-            )
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.POSITIONAL,
+            default_group=2,
+            name="output",
+            active_group=1,
+            groups={1},
         )
+        output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        vdsd.set_output(output)
         vdsd.derive_model_features()
         assert "windprotectionconfigawning" in vdsd.model_features
         assert "windprotectionconfigblind" not in vdsd.model_features

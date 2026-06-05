@@ -871,15 +871,18 @@ class Vdsd:
                     self._model_features.add("fcu")
 
         if pg == 2 and self._output is not None:  # ColorGroup.GREY
-            self._model_features.add("locationconfig")
             self._model_features.add("operationlock")
             ch_types_grey = {
                 int(ch.channel_type) for ch in self._output.channels.values()
             }
-            if ch_types_grey & {9, 10}:  # slat/angle channel → jalousie/blind
-                self._model_features.add("windprotectionconfigblind")
-            else:  # no slat channel → awning / roller blind
-                self._model_features.add("windprotectionconfigawning")
+            # Outdoor shade devices have channel type 7 (shadePositionOutside)
+            # or 9 (shadeOpeningAngleOutside); indoor devices use only 8/10.
+            if ch_types_grey & {7, 9}:
+                self._model_features.add("locationconfig")
+                if ch_types_grey & {9}:  # outside slat/angle → jalousie/blind
+                    self._model_features.add("windprotectionconfigblind")
+                else:  # outdoor position only → awning / roller blind
+                    self._model_features.add("windprotectionconfigawning")
 
         if pg == 8:  # ColorGroup.BLACK — joker / configurable
             self._model_features.add("jokerconfig")
