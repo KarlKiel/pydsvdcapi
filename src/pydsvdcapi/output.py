@@ -404,6 +404,63 @@ def _build_default_scene_entry(
 
 
 # ---------------------------------------------------------------------------
+# Channel backward-compat dict
+# ---------------------------------------------------------------------------
+
+
+class _ChannelCompatDict(dict):
+    """Channel property dict with transparent numeric-key resolution.
+
+    The dSS configurator UI sends ``getProperty`` queries using the old API
+    v1/v2 channel key format: the ``channelType`` integer as a string (e.g.
+    ``"1"`` for brightness, ``"7"`` for shadePositionOutside) or ``"0"`` as
+    the spec-defined alias for the standard channel of the device's color
+    class (ds-basics §7 table 7).
+
+    This ``dict`` subclass wraps the canonical channel property dict so that
+    :func:`~pydsvdcapi.property_handling.match_query` can serve both old and
+    new format queries without modification.
+
+    Wildcard queries iterate ``dict.items()`` which only yields **canonical**
+    (named) keys — no numeric duplicates appear in wildcard responses.
+
+    Parameters
+    ----------
+    data:
+        The canonical channel property dict (e.g. ``{"brightness": {...}}``)
+        built by :meth:`~Output.get_channel_descriptions`.
+    output:
+        The owning :class:`Output` instance, used to resolve numeric keys via
+        :meth:`~Output.channel_by_key`.
+    """
+
+    def __init__(self, data: dict, output: "Output") -> None:
+        super().__init__(data)
+        self._output = output
+
+    def __contains__(self, key: object) -> bool:
+        if super().__contains__(key):
+            return True
+        if isinstance(key, str):
+            return self._output.channel_by_key(key) is not None
+        return False
+
+    def __getitem__(self, key: str) -> Any:
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        ch = self._output.channel_by_key(key)
+        if ch is not None and super().__contains__(ch.name):
+            return super().__getitem__(ch.name)
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
+# ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
 
@@ -1671,11 +1728,15 @@ class Output:
         ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
         format. Backward-compat numeric key resolution for incoming queries is
         provided by :class:`_ChannelCompatDict`.
+
+        Wildcard queries iterate ``dict.items()`` and only see canonical keys;
+        no numeric duplicates appear in responses.
         """
-        return {
-            self._channel_key(ch): ch.get_description_properties()
-            for ch in self._channels.values()
-        }
+        return _ChannelCompatDict(
+            {self._channel_key(ch): ch.get_description_properties()
+             for ch in self._channels.values()},
+            self,
+        )
 
     def get_channel_settings(self) -> dict[str, Any]:
         """Return the ``channelSettings`` sub-tree.
@@ -1684,11 +1745,15 @@ class Output:
         ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
         format. Backward-compat numeric key resolution for incoming queries is
         provided by :class:`_ChannelCompatDict`.
+
+        Wildcard queries iterate ``dict.items()`` and only see canonical keys;
+        no numeric duplicates appear in responses.
         """
-        return {
-            self._channel_key(ch): ch.get_settings_properties()
-            for ch in self._channels.values()
-        }
+        return _ChannelCompatDict(
+            {self._channel_key(ch): ch.get_settings_properties()
+             for ch in self._channels.values()},
+            self,
+        )
 
     def get_channel_states(self) -> dict[str, Any]:
         """Return the ``channelStates`` sub-tree.
@@ -1697,11 +1762,15 @@ class Output:
         ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
         format. Backward-compat numeric key resolution for incoming queries is
         provided by :class:`_ChannelCompatDict`.
+
+        Wildcard queries iterate ``dict.items()`` and only see canonical keys;
+        no numeric duplicates appear in responses.
         """
-        return {
-            self._channel_key(ch): ch.get_state_properties()
-            for ch in self._channels.values()
-        }
+        return _ChannelCompatDict(
+            {self._channel_key(ch): ch.get_state_properties()
+             for ch in self._channels.values()},
+            self,
+        )
 
     # ==================================================================
     # Property dicts (for getProperty responses)

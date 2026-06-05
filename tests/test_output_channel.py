@@ -1445,7 +1445,8 @@ class TestChannelContainerKeyFormat:
         ch = list(out.channels.values())[0]
         desc = out.get_channel_descriptions()
         assert ch.name in desc              # "brightness"
-        assert str(ch.ds_index) not in desc # NOT "0"
+        # Numeric keys are now transparently resolvable (backward-compat).
+        assert str(ch.ds_index) in desc     # "0" resolves to brightness via channel_by_key
 
     def test_on_off_keyed_by_name(self):
         """ON_OFF: channelDescriptions keyed by channel name (API v3+)."""
@@ -1454,7 +1455,8 @@ class TestChannelContainerKeyFormat:
         ch = list(out.channels.values())[0]
         desc = out.get_channel_descriptions()
         assert ch.name in desc
-        assert str(ch.ds_index) not in desc
+        # Numeric keys are now transparently resolvable (backward-compat).
+        assert str(ch.ds_index) in desc
 
     def test_positional_keyed_by_name(self):
         """POSITIONAL: shade channels keyed by channel name, matching p44vdc wire format.
@@ -1470,10 +1472,10 @@ class TestChannelContainerKeyFormat:
         desc = out.get_channel_descriptions()
         assert "shadePositionOutside" in desc
         assert "shadeOpeningAngleOutside" in desc
-        assert "7" not in desc
-        assert "9" not in desc
-        assert "0" not in desc
-        assert "1" not in desc
+        # Numeric keys are now transparently resolvable (backward-compat).
+        assert "7" in desc  # shadePositionOutside (channelType=7)
+        assert "9" in desc  # shadeOpeningAngleOutside (channelType=9)
+        assert "0" in desc  # standard channel (resolves to first channel)
 
     def test_dimmer_color_temp_keyed_by_name(self):
         """DIMMER_COLOR_TEMP: all channels keyed by channel name."""
@@ -1482,8 +1484,9 @@ class TestChannelContainerKeyFormat:
         desc = out.get_channel_descriptions()
         assert "brightness" in desc
         assert "colortemp" in desc
-        assert "0" not in desc
-        assert "1" not in desc
+        # Numeric keys are now transparently resolvable (backward-compat).
+        assert "0" in desc  # standard channel (resolves to brightness)
+        assert "1" in desc  # brightness (channelType=1)
 
     def test_full_color_dimmer_keyed_by_name(self):
         """FULL_COLOR_DIMMER: all channels keyed by channel name."""
@@ -1494,7 +1497,8 @@ class TestChannelContainerKeyFormat:
         assert "hue" in desc
         assert "saturation" in desc
         assert "colortemp" in desc
-        assert "0" not in desc
+        # Numeric keys are now transparently resolvable (backward-compat).
+        assert "0" in desc  # standard channel (resolves to brightness)
 
     @pytest.mark.asyncio
     async def test_push_notification_dimmer_keyed_by_name(self):
@@ -1537,6 +1541,113 @@ class TestChannelContainerKeyFormat:
         assert "channelStates" in props
         assert ch.name in props["channelStates"]            # "brightness"
         assert str(ch.ds_index) not in props["channelStates"]  # not "0"
+
+
+class TestChannelCompatDictGetProperty:
+    """getProperty queries using old-format numeric channel keys are served correctly."""
+
+    def _make_getproperty_request(self, channel_key: str, property_name: str):
+        """Build a VDSM_REQUEST_GET_PROPERTY protobuf asking for one channel by key."""
+        from pydsvdcapi import vdc_messages_pb2 as pb
+        from pydsvdcapi.vdcapi_pb2 import PropertyElement
+        msg = pb.Message()
+        msg.type = pb.VDSM_REQUEST_GET_PROPERTY
+        msg.message_id = 42
+        container = PropertyElement()
+        container.name = property_name   # e.g. "channelDescriptions"
+        channel_elem = PropertyElement()
+        channel_elem.name = channel_key  # e.g. "1" or "brightness"
+        container.elements.append(channel_elem)
+        msg.vdsm_request_get_property.query.append(container)
+        return msg
+
+    def test_numeric_channeltype_key_resolves_for_dimmer_descriptions(self):
+        """Query channelDescriptions with '1' (channelType=brightness) returns data."""
+        from pydsvdcapi.property_handling import (
+            build_get_property_response,
+            elements_to_dict,
+        )
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        vdsd.set_output(out)
+        props = vdsd.get_properties()
+        msg = self._make_getproperty_request("1", "channelDescriptions")
+        resp = build_get_property_response(msg, props)
+        result = elements_to_dict(resp.vdc_response_get_property.properties)
+        # Response element named "1" must contain brightness channel data
+        assert "channelDescriptions" in result
+        channel_data = result["channelDescriptions"]
+        assert "1" in channel_data
+        assert channel_data["1"]["channelType"] == 1
+        assert channel_data["1"]["name"] == "brightness"
+
+    def test_numeric_channeltype_key_resolves_for_dimmer_states(self):
+        """Query channelStates with '1' returns the current brightness value."""
+        from pydsvdcapi.property_handling import (
+            build_get_property_response,
+            elements_to_dict,
+        )
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        vdsd.set_output(out)
+        out.get_channel(0).set_value_from_vdsm(75.0)
+        props = vdsd.get_properties()
+        msg = self._make_getproperty_request("1", "channelStates")
+        resp = build_get_property_response(msg, props)
+        result = elements_to_dict(resp.vdc_response_get_property.properties)
+        assert "channelStates" in result
+        assert "1" in result["channelStates"]
+        assert result["channelStates"]["1"]["value"] == 75.0
+
+    def test_numeric_channeltype_key_resolves_for_positional(self):
+        """Query channelDescriptions '7' resolves to shadePositionOutside."""
+        from pydsvdcapi.property_handling import (
+            build_get_property_response,
+            elements_to_dict,
+        )
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
+        vdsd.set_output(out)
+        props = vdsd.get_properties()
+        msg = self._make_getproperty_request("7", "channelDescriptions")
+        resp = build_get_property_response(msg, props)
+        result = elements_to_dict(resp.vdc_response_get_property.properties)
+        assert "channelDescriptions" in result
+        assert "7" in result["channelDescriptions"]
+        assert result["channelDescriptions"]["7"]["channelType"] == 7
+        assert result["channelDescriptions"]["7"]["name"] == "shadePositionOutside"
+
+    def test_wildcard_query_not_duplicated(self):
+        """Wildcard query returns canonical keys only — no numeric duplicates."""
+        from pydsvdcapi.property_handling import (
+            build_get_property_response,
+            elements_to_dict,
+        )
+        from pydsvdcapi import vdc_messages_pb2 as pb
+        from pydsvdcapi.vdcapi_pb2 import PropertyElement
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        vdsd.set_output(out)
+        props = vdsd.get_properties()
+        # Wildcard: ask for all channelDescriptions
+        msg = pb.Message()
+        msg.type = pb.VDSM_REQUEST_GET_PROPERTY
+        msg.message_id = 1
+        wildcard = PropertyElement()
+        wildcard.name = "channelDescriptions"
+        # Empty sub-element = wildcard for all channels
+        msg.vdsm_request_get_property.query.append(wildcard)
+        resp = build_get_property_response(msg, props)
+        result = elements_to_dict(resp.vdc_response_get_property.properties)
+        assert "channelDescriptions" in result
+        channels = result["channelDescriptions"]
+        # DIMMER has exactly one channel; the key must be canonical "brightness"
+        assert len(channels) == 1
+        assert "brightness" in channels
+        assert "0" not in channels
+        assert "1" not in channels
 
 
 class TestChannelSpecsAndEnums:
