@@ -447,7 +447,7 @@ async def wait_for_session(host: VdcHost, timeout: float = 180.0) -> bool:
 # ===========================================================================
 
 
-async def main(port: int, debug: bool) -> bool:
+async def main(port: int, debug: bool, run_for: int = 0) -> bool:
     """Run the example lights VDC. Returns True if restart is requested."""
     setup_logging(debug=debug)
 
@@ -504,6 +504,14 @@ async def main(port: int, debug: bool) -> bool:
         console_loop(host, devices, restart_event, quit_event, clean_event)
     )
 
+    if run_for > 0:
+        async def _auto_quit():
+            await asyncio.sleep(run_for)
+            print(f"\n{YELLOW_C}--run-for {run_for}s elapsed — clean quit.{RESET}")
+            clean_event.set()
+            quit_event.set()
+        asyncio.create_task(_auto_quit())
+
     await quit_event.wait()
     mock_task.cancel()
     console_task.cancel()
@@ -540,11 +548,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--run-for", type=int, default=0, metavar="SECONDS",
+                        help="Auto clean-quit after N seconds (0 = run forever)")
     args = parser.parse_args()
 
     while True:
         try:
-            should_restart = asyncio.run(main(port=args.port, debug=args.debug))
+            should_restart = asyncio.run(main(port=args.port, debug=args.debug,
+                                              run_for=args.run_for))
         except KeyboardInterrupt:
             print(f"\n{YELLOW_C}Interrupted.{RESET}")
             break
