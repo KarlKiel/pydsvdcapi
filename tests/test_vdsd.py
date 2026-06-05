@@ -2002,7 +2002,7 @@ class TestDeriveModelFeatures:
         assert "windprotectionconfigblind" in vdsd.model_features
         assert "windprotectionconfigawning" not in vdsd.model_features
 
-    def test_primary_group_2_indoor_curtain_no_location_or_wind(self):
+    def test_primary_group_2_indoor_curtain_has_location_but_no_wind(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
         output = Output(
             vdsd=vdsd,
@@ -2015,11 +2015,12 @@ class TestDeriveModelFeatures:
         output.add_channel(OutputChannelType.SHADE_POSITION_INDOOR)
         vdsd.set_output(output)
         vdsd.derive_model_features()
-        assert "locationconfig" not in vdsd.model_features
+        assert "locationconfig" in vdsd.model_features
         assert "windprotectionconfigawning" not in vdsd.model_features
         assert "windprotectionconfigblind" not in vdsd.model_features
+        assert "operationlock" not in vdsd.model_features
 
-    def test_primary_group_2_indoor_blind_no_location_or_wind(self):
+    def test_primary_group_2_indoor_blind_has_location_but_no_wind(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
         output = Output(
             vdsd=vdsd,
@@ -2033,9 +2034,10 @@ class TestDeriveModelFeatures:
         output.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_INDOOR)
         vdsd.set_output(output)
         vdsd.derive_model_features()
-        assert "locationconfig" not in vdsd.model_features
+        assert "locationconfig" in vdsd.model_features
         assert "windprotectionconfigawning" not in vdsd.model_features
         assert "windprotectionconfigblind" not in vdsd.model_features
+        assert "operationlock" not in vdsd.model_features
 
     def test_primary_group_2_without_output_no_location(self):
         vdsd, _ = self._setup(primary_group=ColorGroup.GREY)
