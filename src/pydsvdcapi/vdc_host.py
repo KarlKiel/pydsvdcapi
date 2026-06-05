@@ -1183,16 +1183,26 @@ class VdcHost:
             resp.generic_response.description = f"Entity {target_dsuid} not found"
             return resp
 
-        query_names = [
-            q.name or "<wildcard>" for q in msg.vdsm_request_get_property.query
-        ]
+        def _fmt_query(elements, indent=0) -> str:
+            lines = []
+            for e in elements:
+                name = e.name or "<wildcard>"
+                sub = f" → [{_fmt_query(e.elements, indent+1)}]" if e.elements else ""
+                lines.append("  " * indent + repr(name) + sub)
+            return ", ".join(lines)
+
         logger.debug(
-            "getProperty for %s — %d query elements: %s",
+            "getProperty for %s — query: [%s]",
             target_dsuid,
-            len(msg.vdsm_request_get_property.query),
-            query_names,
+            _fmt_query(msg.vdsm_request_get_property.query),
         )
         resp = build_get_property_response(msg, props)
+        logger.debug(
+            "getProperty response for %s — %d properties: %s",
+            target_dsuid,
+            len(resp.vdc_response_get_property.properties),
+            [p.name for p in resp.vdc_response_get_property.properties],
+        )
         return resp
 
     def _handle_set_property(self, msg: pb.Message) -> pb.Message:
@@ -1200,6 +1210,11 @@ class VdcHost:
         # Normalise to upper-case — the vdSM may send lower-case hex.
         target_dsuid = msg.vdsm_request_set_property.dSUID.upper()
         incoming = elements_to_dict(msg.vdsm_request_set_property.properties)
+        logger.debug(
+            "setProperty for %s — keys: %s",
+            target_dsuid,
+            list(incoming.keys()),
+        )
 
         resp = pb.Message()
         resp.type = pb.GENERIC_RESPONSE
