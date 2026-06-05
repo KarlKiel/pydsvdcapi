@@ -1589,3 +1589,77 @@ class TestChannelSpecsAndEnums:
         from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
         from pydsvdcapi.enums import ColorClass, OutputChannelType
         assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.VENTILATION] == OutputChannelType.AIR_FLOW_INTENSITY
+
+
+# ===========================================================================
+# channel_by_key() resolution
+# ===========================================================================
+
+
+class TestChannelByKey:
+    """channel_by_key() resolves canonical names, numeric channelType, and standard-channel key."""
+
+    def test_resolve_by_canonical_name(self):
+        """Resolves by channel name (canonical key)."""
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        ch = list(out.channels.values())[0]
+        assert out.channel_by_key("brightness") is ch
+
+    def test_resolve_by_channel_type_number(self):
+        """Resolves old-format API v1/v2 key: channelType integer as string."""
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        # brightness channel has channelType=1
+        ch = out.channel_by_key("1")
+        assert ch is not None
+        assert ch.name == "brightness"
+
+    def test_resolve_by_channeltype_zero_standard_channel(self):
+        """Key '0' resolves to the standard channel for the color class (ds-basics §7 table 7)."""
+        from pydsvdcapi.enums import ColorClass
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        out.default_group = ColorClass.LIGHTS  # explicit: color class 1 → brightness
+        ch = out.channel_by_key("0")
+        assert ch is not None
+        assert ch.name == "brightness"
+
+    def test_resolve_by_channeltype_zero_shade_standard_channel(self):
+        """Key '0' with BLINDS color class resolves to shadePositionOutside."""
+        from pydsvdcapi.enums import ColorClass
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        out.default_group = ColorClass.BLINDS  # color class 2 → shadePositionOutside
+        ch = out.channel_by_key("0")
+        assert ch is not None
+        assert ch.name == "shadePositionOutside"
+
+    def test_resolve_positional_channel_type(self):
+        """Resolves shadePositionOutside (channelType=7) by numeric key '7'."""
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+        out.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
+        ch = out.channel_by_key("7")
+        assert ch is not None
+        assert ch.name == "shadePositionOutside"
+        ch9 = out.channel_by_key("9")
+        assert ch9 is not None
+        assert ch9.name == "shadeOpeningAngleOutside"
+
+    def test_resolve_color_temp_channel_type(self):
+        """Resolves colortemp (channelType=4) by numeric key '4'."""
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER_COLOR_TEMP)
+        ch = out.channel_by_key("4")
+        assert ch is not None
+        assert ch.name == "colortemp"
+
+    def test_unknown_key_returns_none(self):
+        """Returns None for unrecognised keys."""
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd, function=OutputFunction.DIMMER)
+        assert out.channel_by_key("unknown") is None
+        assert out.channel_by_key("99") is None

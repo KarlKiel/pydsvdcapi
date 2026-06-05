@@ -668,6 +668,11 @@ class Output:
         """Application profile ID for this output (use ColorClass enum)."""
         return self._default_group
 
+    @default_group.setter
+    def default_group(self, value: int) -> None:
+        self._default_group = int(value)
+        self._schedule_auto_save()
+
     @property
     def variable_ramp(self) -> bool:
         """Whether variable-speed transitions are supported."""
@@ -1617,15 +1622,45 @@ class Output:
         return ch.name
 
     def channel_by_key(self, key: str) -> "OutputChannel | None":
-        """Return the channel whose container key or name matches *key*.
+        """Return the channel matching *key*, with numeric backward-compat.
 
-        Used by ``VdcHost`` handlers to resolve the ``channelId`` field
-        in ``setOutputChannelValue`` and ``dimChannel`` notifications, which
-        dSS may send as a slot-index string, channel name, or dsIndex string
-        depending on the output function and API version.
+        Resolution order:
+
+        1. Canonical channel name (e.g. ``"brightness"``, ``"shadePositionOutside"``).
+        2. Numeric key ``"0"`` — spec-defined alias for the standard channel of
+           the device's color class (ds-basics §7 table 7).  Resolved via
+           :data:`~pydsvdcapi.output_channel.COLOR_CLASS_STANDARD_CHANNEL` using
+           ``self._default_group`` (the output's ``ColorClass`` / application
+           group ID).  Falls back to the first registered channel if the color
+           class is not in the table.
+        3. Channel type integer as string — old API v1/v2 wire format
+           (e.g. ``"1"`` → brightness, ``"7"`` → shadePositionOutside).
+
+        Used by ``setOutputChannelValue``, ``dimChannel``, and
+        ``setProperty channelStates`` handlers in ``vdc_host.py``.
         """
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+
+        # 1. Canonical name — fast path, covers all API v3+ callers.
         for ch in self._channels.values():
             if ch.name == key:
+                return ch
+        try:
+            numeric = int(key)
+        except ValueError:
+            return None
+        # 2. "0" = standard channel for color class (ds-basics §7 table 7).
+        if numeric == 0:
+            std_ct = COLOR_CLASS_STANDARD_CHANNEL.get(self._default_group)
+            if std_ct is not None:
+                found = self.get_channel_by_type(std_ct)
+                if found is not None:
+                    return found
+            # fallback: first registered channel
+            return self._channels.get(min(self._channels)) if self._channels else None
+        # 3. Channel type number (API v1/v2 primary format).
+        for ch in self._channels.values():
+            if int(ch.channel_type) == numeric:
                 return ch
         return None
 
