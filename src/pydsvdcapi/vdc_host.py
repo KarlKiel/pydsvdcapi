@@ -1361,32 +1361,27 @@ class VdcHost:
                                 idx,
                             )
         # Channel states (§4.9.3) — dSS sends this via setProperty when
-        # the user or JSON API sets an output channel value directly
-        # (setVdcDeviceOutputChannelValues path).  Each child element is
-        # named by the channel name string (e.g. "brightness") and
-        # contains a "value" child with the new double.
+        # the user or JSON API sets an output channel value directly.
+        # The channel key may be the canonical name (API v3+, e.g.
+        # "brightness") or a numeric string (old API v1/v2 channelType, e.g.
+        # "1", or standard-channel alias "0").  channel_by_key() resolves all formats.
         if "channelStates" in incoming:
             ch_states = incoming["channelStates"]
             if isinstance(ch_states, dict):
                 output = getattr(vdsd, "output", None)
                 if output is not None:
-                    for ch_name, ch_data in ch_states.items():
+                    for ch_key, ch_data in ch_states.items():
                         if not isinstance(ch_data, dict):
                             continue
                         new_val = ch_data.get("value")
                         if new_val is None:
                             continue
-                        # Locate channel by name.
-                        channel_obj = None
-                        for ch in output.channels.values():
-                            if ch.name == ch_name:
-                                channel_obj = ch
-                                break
+                        channel_obj = output.channel_by_key(ch_key)
                         if channel_obj is None:
                             logger.warning(
                                 "setProperty channelStates: channel '%s' "
                                 "not found on vdSD %s",
-                                ch_name,
+                                ch_key,
                                 vdsd.dsuid,
                             )
                             continue
@@ -1395,7 +1390,7 @@ class VdcHost:
                             "setProperty channelStates: vdSD %s ch='%s' "
                             "val=%s (buffered)",
                             vdsd.dsuid,
-                            ch_name,
+                            ch_key,
                             new_val,
                         )
                     # apply_pending_channels is async; schedule it.

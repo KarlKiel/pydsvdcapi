@@ -1135,3 +1135,87 @@ class TestDisconnectCallback:
 
         assert len(fired) == 1
         assert fired[0][1] is None
+
+
+class TestSetPropertyChannelStatesNumericKey:
+    """setProperty channelStates with old-format numeric key updates the channel."""
+
+    def _make_set_property_msg(
+        self, dsuid_str: str, channel_key: str, value: float
+    ):
+        """Build a VDSM_REQUEST_SET_PROPERTY for channelStates with a numeric key."""
+        from pydsvdcapi.vdcapi_pb2 import PropertyElement
+
+        msg = pb.Message()
+        msg.type = pb.VDSM_REQUEST_SET_PROPERTY
+        msg.message_id = 1
+        msg.vdsm_request_set_property.dSUID = dsuid_str
+
+        channel_states = PropertyElement()
+        channel_states.name = "channelStates"
+
+        channel_elem = PropertyElement()
+        channel_elem.name = channel_key   # e.g. "1" (numeric channelType)
+
+        value_elem = PropertyElement()
+        value_elem.name = "value"
+        value_elem.value.v_double = value
+        channel_elem.elements.append(value_elem)
+        channel_states.elements.append(channel_elem)
+        msg.vdsm_request_set_property.properties.append(channel_states)
+        return msg
+
+    @pytest.mark.asyncio
+    async def test_setproperty_channelstates_numeric_channeltype_key(self):
+        """setProperty channelStates with key '1' (channelType=brightness) updates value."""
+        from pydsvdcapi.enums import OutputFunction
+        from pydsvdcapi.output import Output
+
+        host = VdcHost(mac=TEST_MAC)
+        vdc = Vdc(host=host, implementation_id="test-vdc", name="Test VDC", model="test-model")
+        host.add_vdc(vdc)
+
+        dsuid = DsUid.from_name_in_space("dev-numeric-key", DsUidNamespace.VDC)
+        device = Device(vdc=vdc, dsuid=dsuid)
+        vdsd = Vdsd(device=device, primary_group=ColorGroup.YELLOW, name="Dimmer", model="dimmer-model")
+        device.add_vdsd(vdsd)
+        vdc.add_device(device)
+
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.DIMMER,
+            name="brightness",
+            default_group=1,
+            active_group=1,
+            groups={1},
+        )
+        channel_applied = AsyncMock()
+        output.on_channel_applied = channel_applied
+        vdsd.set_output(output)
+        vdsd._is_announced = True  # simulate announced state
+
+        dsuid_str = str(dsuid)
+        msg = self._make_set_property_msg(dsuid_str, "1", 80.0)
+
+        tasks = []
+        original_create_task = asyncio.create_task
+
+        def collect_task(coro):
+            task = original_create_task(coro)
+            tasks.append(task)
+            return task
+
+        with patch("pydsvdcapi.vdc_host.asyncio.create_task", side_effect=collect_task):
+            host._handle_set_property(msg)
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
+        # channel_by_key("1") must resolve to the brightness channel
+        brightness_ch = output.get_channel(0)
+        assert brightness_ch is not None
+        assert brightness_ch.name == "brightness"
+        assert output.channel_by_key("1") is brightness_ch
+        # The channel value must have been set to 80.0
+        # (apply_pending_channels clears the dict after applying, so we check the actual value)
+        assert brightness_ch.value == 80.0
