@@ -53,7 +53,7 @@ from pydsvdcapi import (
 # Configuration
 # ---------------------------------------------------------------------------
 
-DEFAULT_PORT = 8342
+DEFAULT_PORT = 8352
 STATE_FILE = Path("/tmp/pydsvdcapi_example_shading.yaml")
 
 VENDOR_NAME = "pydsvdcapi Examples"
@@ -462,6 +462,7 @@ async def main(port: int, debug: bool, run_for: int = 0) -> bool:
 
     host = VdcHost(
         port=port,
+        dsuid=DsUid.from_name_in_space(f"pydsvdcapi-example-shading-host-{_RUN_ID}", DsUidNamespace.VDC),
         model="pydsvdcapi Example Shading",
         name="example-shading-host",
         vendor_name=VENDOR_NAME,

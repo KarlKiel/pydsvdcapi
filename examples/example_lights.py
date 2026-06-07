@@ -53,7 +53,7 @@ from pydsvdcapi import (
 # Configuration
 # ---------------------------------------------------------------------------
 
-DEFAULT_PORT = 8341
+DEFAULT_PORT = 8353
 STATE_FILE = Path("/tmp/pydsvdcapi_example_lights.yaml")
 
 VENDOR_NAME = "pydsvdcapi Examples"
@@ -453,6 +453,7 @@ async def main(port: int, debug: bool, run_for: int = 0) -> bool:
 
     host = VdcHost(
         port=port,
+        dsuid=DsUid.from_name_in_space("pydsvdcapi-example-lights-host", DsUidNamespace.VDC),
         model="pydsvdcapi Example Lights",
         name="example-lights-host",
         vendor_name=VENDOR_NAME,

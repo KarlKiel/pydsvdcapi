@@ -264,6 +264,7 @@ class VdcHost:
         device_icon_16: bytes | None = None,
         device_icon_name: str | None = None,
         state_path: str | Path | None = None,
+        watchdog_timeout: float = 90.0,
     ) -> None:
         # --- persistence ----------------------------------------------
         self._store: PropertyStore | None = (
@@ -340,6 +341,7 @@ class VdcHost:
         self._on_set_configuration: SetConfigurationCallback | None = None
         self._on_disconnect: DisconnectCallback | None = None
         self._stopping: bool = False
+        self._watchdog_timeout: float = watchdog_timeout
 
         # --- vDC registry ---------------------------------------------
         self._vdcs: dict[str, Vdc] = {}  # keyed by dSUID string
@@ -991,6 +993,7 @@ class VdcHost:
             host_dsuid=str(self._dsuid),
             on_message=self._dispatch_message,
             on_hello=self._on_session_ready,
+            watchdog_timeout=self._watchdog_timeout,
         )
         self._session = session
 
@@ -1013,11 +1016,35 @@ class VdcHost:
             for vdc in self._vdcs.values():
                 vdc.reset_announcement()
             logger.info("Session with %s cleaned up", session.vdsm_dsuid)
+            if not self._stopping:
+                # Trigger re-announcement in background so vdSM can rediscover
+                # and reconnect to this host after a session ends unexpectedly.
+                asyncio.create_task(
+                    self._reannounce_after_disconnect(),
+                    name="vdc-reannounce",
+                )
             if not self._stopping and self._on_disconnect is not None:
                 try:
                     await self._on_disconnect(self, session.disconnect_reason)
                 except Exception:  # noqa: BLE001
                     logger.exception("on_disconnect callback raised")
+
+    async def _reannounce_after_disconnect(self) -> None:
+        """Re-register the DNS-SD service after a session ends unexpectedly.
+
+        A brief pause followed by an unannounce/announce cycle makes the
+        vdSM see the service as new, prompting it to reconnect.
+        """
+        await asyncio.sleep(5.0)
+        if self._stopping:
+            return
+        try:
+            logger.info("Re-announcing after session disconnect")
+            await self.unannounce()
+            await asyncio.sleep(1.0)
+            await self.announce()
+        except Exception:  # noqa: BLE001
+            logger.exception("Re-announce after disconnect failed")
 
     async def _close_session(self) -> None:
         """Close the active session if there is one."""
@@ -1169,6 +1196,20 @@ class VdcHost:
                 return vdsd.get_properties()
         return None
 
+    def _resolve_entity_label(self, dsuid_str: str) -> str:
+        """Return a human-readable label for the entity with the given dSUID."""
+        dsuid_str = dsuid_str.upper()
+        if dsuid_str == str(self._dsuid):
+            return f"host({self.name})"
+        vdc = self._vdcs.get(dsuid_str)
+        if vdc is not None:
+            return f"vdc({vdc.name})"
+        for vdc in self._vdcs.values():
+            vdsd = vdc.get_vdsd_by_dsuid(DsUid.from_string(dsuid_str))
+            if vdsd is not None:
+                return f"vdsd({vdsd.name})"
+        return f"unknown({dsuid_str[:8]}…)"
+
     def _handle_get_property(self, msg: pb.Message) -> pb.Message:
         """Handle a ``VDSM_REQUEST_GET_PROPERTY``."""
         target_dsuid = msg.vdsm_request_get_property.dSUID
@@ -1191,18 +1232,40 @@ class VdcHost:
                 lines.append("  " * indent + repr(name) + sub)
             return ", ".join(lines)
 
+        entity_label = self._resolve_entity_label(target_dsuid)
+        query_names = [e.name or "<wildcard>" for e in msg.vdsm_request_get_property.query]
         logger.debug(
-            "getProperty for %s — query: [%s]",
-            target_dsuid,
+            "getProperty %s — query: [%s]",
+            entity_label,
             _fmt_query(msg.vdsm_request_get_property.query),
         )
         resp = build_get_property_response(msg, props)
+        resp_names = [p.name for p in resp.vdc_response_get_property.properties]
         logger.debug(
-            "getProperty response for %s — %d properties: %s",
-            target_dsuid,
-            len(resp.vdc_response_get_property.properties),
-            [p.name for p in resp.vdc_response_get_property.properties],
+            "getProperty %s — response: %s",
+            entity_label,
+            resp_names,
         )
+
+        # Diagnostic: when channelDescriptions or outputDescription is queried,
+        # log detail so shade vs. light differences are visible at DEBUG level.
+        if logger.isEnabledFor(logging.DEBUG):
+            if "channelDescriptions" in query_names or "outputDescription" in query_names:
+                out_desc = props.get("outputDescription", {})
+                ch_desc = props.get("channelDescriptions", {})
+                fn = out_desc.get("function", "?") if isinstance(out_desc, dict) else "?"
+                ch_info = (
+                    {k: v.get("channelType", "?") if isinstance(v, dict) else "?"
+                     for k, v in ch_desc.items()}
+                    if isinstance(ch_desc, dict) else "?"
+                )
+                logger.debug(
+                    "getProperty %s — outputFunction=%s channelDescriptions=%s",
+                    entity_label,
+                    fn,
+                    ch_info,
+                )
+
         return resp
 
     def _handle_set_property(self, msg: pb.Message) -> pb.Message:
