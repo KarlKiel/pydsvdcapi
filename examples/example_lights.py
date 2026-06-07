@@ -26,7 +26,6 @@ import contextlib
 import logging
 import random
 import sys
-import uuid
 import threading
 import time
 from dataclasses import dataclass
@@ -58,9 +57,6 @@ STATE_FILE = Path("/tmp/pydsvdcapi_example_lights.yaml")
 
 VENDOR_NAME = "pydsvdcapi Examples"
 VENDOR_GUID = "gs1:(01)0000000000001"
-
-# Fresh random run-ID so dSS always registers new devices (no stale cache).
-_RUN_ID = uuid.uuid4().hex[:8]
 
 # ---------------------------------------------------------------------------
 # ANSI colours
@@ -145,7 +141,7 @@ def _notify(msg: str) -> None:
 
 
 def _dsuid(tag: str) -> DsUid:
-    return DsUid.from_name_in_space(f"example-lights-{_RUN_ID}-{tag}", DsUidNamespace.VDC)
+    return DsUid.from_name_in_space(f"example-lights-{tag}", DsUidNamespace.VDC)
 
 
 def _vdsd(device: Device, name: str, model: str) -> Vdsd:
@@ -471,7 +467,7 @@ async def main(port: int, debug: bool, run_for: int = 0) -> bool:
 
     devices = build_all_devices(vdc)
     print(f"\n{BOLD}Example Lights VDC — {len(devices)} devices built{RESET}")
-    print(f"Listening on port {port}. Waiting for dSS/vdSM…  [run-id: {_RUN_ID}]")
+    print(f"Listening on port {port}. Waiting for dSS/vdSM…")
 
     loop = asyncio.get_running_loop()
     _start_stdin_thread(loop)
