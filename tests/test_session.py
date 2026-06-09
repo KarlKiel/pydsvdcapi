@@ -894,7 +894,7 @@ class TestResponseCorrelation:
 
 
 class TestDisconnectReason:
-    def test_disconnect_reason_initially_none(self):
+    async def test_disconnect_reason_initially_none(self):
         """disconnect_reason must be None before the session runs."""
         _, vdc = _make_pair()
         session = VdcSession(vdc, HOST_DSUID)
