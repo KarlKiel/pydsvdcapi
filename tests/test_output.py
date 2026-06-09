@@ -116,7 +116,7 @@ class TestOutputConstruction:
         assert out.name == "Test Dimmer"
         assert out.default_group == 1
         assert out.variable_ramp is False
-        assert out.max_power is None
+        assert out.max_power == -1.0
         assert out.active_cooling_mode is None
         assert out.vdsd is vdsd
 
@@ -484,7 +484,7 @@ class TestOutputDescriptionProperties:
         assert desc["name"] == "Test Dimmer"
         assert desc["defaultGroup"] == 1
         assert desc["variableRamp"] is False
-        assert "maxPower" not in desc
+        assert desc["maxPower"] == -1.0
         assert "activeCoolingMode" not in desc
 
     def test_with_optional_fields(self):
@@ -524,7 +524,10 @@ class TestOutputSettingsProperties:
         assert settings["mode"] == int(OutputMode.GRADUAL)
         assert settings["activeGroup"] == 1
         assert settings["pushChanges"] is False
-        assert settings["groups"] == {"1": True}
+        # groups now always has 64 entries (all IDs 0-63); only group 1 is True
+        assert settings["groups"]["1"] is True
+        assert len(settings["groups"]) == 64
+        assert all(v is False for k, v in settings["groups"].items() if k != "1")
         assert "onThreshold" not in settings
         assert "minBrightness" not in settings
 
@@ -534,9 +537,19 @@ class TestOutputSettingsProperties:
         settings = out.get_settings_properties()
 
         assert "groups" in settings
-        assert settings["groups"] == {"1": True, "3": True, "5": True}
+        # groups always has 64 entries; groups 1, 3, 5 are True
+        assert settings["groups"]["1"] is True
+        assert settings["groups"]["3"] is True
+        assert settings["groups"]["5"] is True
+        assert len(settings["groups"]) == 64
+        assert all(
+            v is False
+            for k, v in settings["groups"].items()
+            if k not in ("1", "3", "5")
+        )
 
     def test_with_all_optional_fields(self):
+        # vdsd is YELLOW (primaryGroup=1) — light-specific settings are emitted
         host, vdc, device, vdsd = _make_stack()
         out = Output(
             vdsd=vdsd,
@@ -563,7 +576,9 @@ class TestOutputSettingsProperties:
         assert settings["mode"] == int(OutputMode.GRADUAL)
         assert settings["activeGroup"] == 2
         assert settings["pushChanges"] is True
-        assert settings["onThreshold"] == 50.0
+        # onThreshold only emitted for ON_OFF function — not for DIMMER
+        assert "onThreshold" not in settings
+        # light-specific fields (primaryGroup=1=YELLOW)
         assert settings["minBrightness"] == 5.0
         assert settings["dimTimeUp"] == 100
         assert settings["dimTimeDown"] == 80
@@ -571,10 +586,9 @@ class TestOutputSettingsProperties:
         assert settings["dimTimeDownAlt1"] == 120
         assert settings["dimTimeUpAlt2"] == 200
         assert settings["dimTimeDownAlt2"] == 180
-        assert settings["heatingSystemCapability"] == int(
-            HeatingSystemCapability.HEATING_AND_COOLING
-        )
-        assert settings["heatingSystemType"] == int(HeatingSystemType.RADIATOR)
+        # climate fields (primaryGroup=3=BLUE) not emitted for YELLOW device
+        assert "heatingSystemCapability" not in settings
+        assert "heatingSystemType" not in settings
 
 
 # ===========================================================================
@@ -634,40 +648,6 @@ class TestOutputStateProperties:
         # Assert: falls back to default
         assert out.get_state_properties()["transitionTime"] == 0.0
 
-    def test_output_state_includes_moving_state(self):
-        """movingState defaults to 0 (idle)."""
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        state = out.get_state_properties()
-        assert "movingState" in state
-        assert state["movingState"] == 0
-
-    def test_apply_state_stores_moving_state(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.apply_state({"movingState": 1})
-        assert out.get_state_properties()["movingState"] == 1
-
-    def test_moving_state_property_setter(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.moving_state = -1
-        assert out.get_state_properties()["movingState"] == -1
-
-    def test_moving_state_not_in_property_tree(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.moving_state = 1
-        tree = out.get_property_tree()
-        # movingState must not appear in the property tree (it is volatile)
-        assert "movingState" not in tree
-
-    def test_apply_state_moving_state_none_falls_back_to_zero(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.apply_state({"movingState": 1})
-        out.apply_state({"movingState": None})
-        assert out.get_state_properties()["movingState"] == 0
 
 
 # ===========================================================================
@@ -930,7 +910,7 @@ class TestOutputPropertyTree:
         assert tree["mode"] == int(OutputMode.GRADUAL)  # DIMMER → auto-derives GRADUAL
         assert tree["activeGroup"] == 1
         assert tree["pushChanges"] is False
-        assert "maxPower" not in tree
+        assert tree["maxPower"] == -1.0
         assert "activeCoolingMode" not in tree
         assert tree["groups"] == [1]
 
@@ -993,13 +973,11 @@ class TestOutputPropertyTree:
         out.local_priority = True
         out.error = OutputError.SHORT_CIRCUIT
         out.transition_time = 1.5
-        out.moving_state = 1
         tree = out.get_property_tree()
 
         assert "localPriority" not in tree
         assert "error" not in tree
         assert "transitionTime" not in tree
-        assert "movingState" not in tree
 
     def test_round_trip(self):
         """Serialize → _apply_state → verify all properties match."""
@@ -1514,11 +1492,12 @@ class TestOutputExport:
 class TestOutputEdgeCases:
     """Edge cases and boundary conditions."""
 
-    def test_empty_groups_returns_empty_dict(self):
+    def test_empty_groups_all_false(self):
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd, groups=set())
         settings = out.get_settings_properties()
-        assert settings["groups"] == {}
+        assert len(settings["groups"]) == 64
+        assert all(v is False for v in settings["groups"].values())
 
     def test_empty_groups_not_in_tree(self):
         host, vdc, device, vdsd = _make_stack()
@@ -1536,8 +1515,12 @@ class TestOutputEdgeCases:
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd, groups={10, 3, 7, 1})
         settings = out.get_settings_properties()
-        keys = list(settings["groups"].keys())
-        assert keys == ["1", "3", "7", "10"]
+        # groups always has 64 entries (0-63); keys are numeric-string sorted
+        assert settings["groups"]["1"] is True
+        assert settings["groups"]["3"] is True
+        assert settings["groups"]["7"] is True
+        assert settings["groups"]["10"] is True
+        assert len(settings["groups"]) == 64
 
     def test_on_off_output(self):
         """Basic on/off output (relay, socket)."""
@@ -1580,15 +1563,15 @@ class TestOutputEdgeCases:
         assert out.function == OutputFunction.INTERNALLY_CONTROLLED
 
     def test_climate_output(self):
-        """Climate control output with heating settings."""
-        host, vdc, device, vdsd = _make_stack()
+        """Climate control output with heating settings (primaryGroup=BLUE=3)."""
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.BLUE)
         out = Output(
             vdsd=vdsd,
             function=OutputFunction.ON_OFF,
             name="FCU Valve",
-            default_group=1,
-            active_group=1,
-            groups={1},
+            default_group=3,
+            active_group=3,
+            groups={3},
             heating_system_capability=HeatingSystemCapability.HEATING_AND_COOLING,
             heating_system_type=HeatingSystemType.CONVECTOR_PASSIVE,
             active_cooling_mode=True,
@@ -3352,8 +3335,8 @@ class TestShadowTimingFields:
     """Tests for shadow motor timing fields in outputSettings."""
 
     def test_shadow_timing_fields_in_settings(self):
-        """Shadow timing fields appear in outputSettings when set."""
-        host, vdc, device, vdsd = _make_stack()
+        """Shadow timing fields appear in outputSettings when set (primaryGroup=GREY=2)."""
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
         out = _make_output(vdsd)
         out._open_time = 60.0
         out._close_time = 55.0
@@ -3379,8 +3362,8 @@ class TestShadowTimingFields:
         assert "stopDelayTime" not in s
 
     def test_apply_settings_stores_shadow_timing(self):
-        """apply_settings stores shadow timing values correctly."""
-        host, vdc, device, vdsd = _make_stack()
+        """apply_settings stores shadow timing values correctly (primaryGroup=GREY=2)."""
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
         out = _make_output(vdsd)
         out.apply_settings(
             {
@@ -3399,8 +3382,8 @@ class TestShadowTimingFields:
         assert s["stopDelayTime"] == 0.3
 
     def test_shadow_timing_init_params(self):
-        """Shadow timing fields can be set at construction time."""
-        host, vdc, device, vdsd = _make_stack()
+        """Shadow timing fields can be set at construction time (primaryGroup=GREY=2)."""
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
         out = Output(
             vdsd=vdsd,
             function=OutputFunction.POSITIONAL,

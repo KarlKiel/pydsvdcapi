@@ -721,13 +721,12 @@ class OutputFunction(IntEnum):
 
 @unique
 class OutputMode(IntEnum):
-    """Output capability hint declared in ``outputSettings/mode`` of the vDC API.
+    """Output mode declared in ``outputSettings/mode`` of the vDC API.
 
     These four values are defined by the **vDC API protocol specification**.
-    They tell the dSS **configurator** (web/app frontend) what kind of UI
-    controls to render for this output.  The dSS firmware runtime itself
-    does **not** consume this field for TCP/IP VDC devices — it is completely
-    ignored during scanning, scene handling, and all other runtime processing.
+    The vdSM uses this value to set the dSM device's ``OutputMode`` register,
+    which determines how the Smart Home API reports the output (e.g.
+    ``gradual`` vs. ``positional``).
 
     Do **not** confuse with :class:`OutputHardwareMode`, which contains the
     physical hardware dimmer-circuit types from the DS485 bus spec
@@ -749,6 +748,12 @@ class OutputMode(IntEnum):
     ``CUSTOM``                    ``DISABLED``
     ============================  ===========
 
+    Note: ``POSITIONAL`` outputs use ``GRADUAL`` (2) — the vdSM maps this to
+    the gradual dSM OutputMode range (17–24).  There is no VDC API mode value
+    that maps to dSM mode 33 (positional shade motor); the positional nature
+    of the device is conveyed via ``outputDescription.function=POSITIONAL``
+    and the shade channel types in the OPC table.
+
     :class:`~pydsvdcapi.output.Output` auto-derives the correct value from
     the ``function`` argument when ``mode`` is not passed explicitly.
     """
@@ -761,13 +766,13 @@ class OutputMode(IntEnum):
 
     GRADUAL = 2
     """Continuous-range output — configurator shows the full slider in
-    "Edit Device Values".  Required for all dimmer and position outputs."""
+    "Edit Device Values".  Used for all dimmer, positional, and bipolar outputs."""
 
     DEFAULT = 127
-    """Unspecified sentinel — the configurator receives no capability hint and
-    typically falls back to showing nothing, so "Edit Device Values" will not
-    open.  Do not use this value; let :class:`~pydsvdcapi.output.Output`
-    auto-derive the correct mode from the output function instead."""
+    """Unspecified sentinel — the vdSM maps this to dSM OutputMode 254 (unknown),
+    which the Smart Home API omits entirely.  Do not use; let
+    :class:`~pydsvdcapi.output.Output` auto-derive the correct mode from the
+    output function instead."""
 
 
 # ---------------------------------------------------------------------------

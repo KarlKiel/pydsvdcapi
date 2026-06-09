@@ -1550,11 +1550,25 @@ class Vdsd:
             "progMode": self.prog_mode,
             "currentConfigId": self.current_config_id,
         }
-        # modelFeatures — each enabled feature is a boolean True element.
-        if self._model_features:
-            props["modelFeatures"] = {f: True for f in sorted(self._model_features)}
-        else:
-            props["modelFeatures"] = {}
+        # modelFeatures — sorted by canonical ModelFeatureId enum index (as p44vdc).
+        _MODEL_FEATURE_ORDER = {
+            "dontcare": 0, "blink": 1, "transt": 4, "outmode": 5,
+            "outmodeswitch": 6, "outvalue8": 7, "shadeposition": 15,
+            "shadebladeang": 18, "consumption": 20, "outputchannels": 26,
+            "heatingoutmode": 28, "heatingprops": 29, "pwmvalue": 30,
+            "blinkconfig": 34, "umroutmode": 35, "impulseconfig": 39,
+            "outmodegeneric": 40, "outconfigswitch": 41, "ventconfig": 47,
+            "consumptioneventled": 50, "consumptiontimer": 51,
+            "dimtimeconfig": 53, "outmodeauto": 54, "outmodetempcontrol": 60,
+            "outmodeenoceanvalve": 61,
+        }
+        props["modelFeatures"] = {
+            f: True
+            for f in sorted(
+                self._model_features,
+                key=lambda x: _MODEL_FEATURE_ORDER.get(x, 999),
+            )
+        }
 
         # configurations (§4.1.1) — mandatory; empty dict when no profiles.
         props["configurations"] = {

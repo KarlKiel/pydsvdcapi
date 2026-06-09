@@ -131,6 +131,10 @@ class ChannelSpec:
         for dimensionless / boolean channels.
     symbol:
         Unit symbol (e.g. ``"%"``, ``"°"``).  Empty string when no unit.
+    enum_values:
+        For enum/discrete channels: mapping of integer value → name string
+        (e.g. ``{0: "off", 1: "on"}``).  ``None`` for continuous channels.
+        Emitted as the ``values`` container in ``channelDescriptions``.
     """
 
     name: str
@@ -139,6 +143,7 @@ class ChannelSpec:
     resolution: float
     siunit: str = ""
     symbol: str = ""
+    enum_values: dict[int, str] | None = None
 
 
 #: Metadata table for all standard channel types (vDC API §4.9.4).
@@ -260,6 +265,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=2,
         resolution=1,
+        enum_values={0: "supply", 1: "exhaust", 2: "both"},
     ),
     OutputChannelType.AIR_FLAP_POSITION: ChannelSpec(
         name="airFlapPosition",
@@ -282,12 +288,14 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=1,
         resolution=1,
+        enum_values={0: "off", 1: "auto"},
     ),
     OutputChannelType.AIR_FLOW_AUTO: ChannelSpec(
         name="airFlowAuto",
         min_value=0,
         max_value=1,
         resolution=1,
+        enum_values={0: "off", 1: "auto"},
     ),
     # -- Audio channels ------------------------------------------------
     OutputChannelType.AUDIO_VOLUME: ChannelSpec(
@@ -316,6 +324,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=3,
         resolution=1,
+        enum_values={0: "off", 1: "on", 2: "standby", 3: "extendedStandby"},
     ),
     OutputChannelType.POWER_LEVEL: ChannelSpec(
         name="powerLevel",
@@ -344,6 +353,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=255,
         resolution=1,
+        enum_values={0: "off", 1: "heating", 2: "cooling", 3: "fanOnly", 4: "dry", 5: "auto"},
     ),
 }
 
@@ -722,6 +732,8 @@ class OutputChannel:
             props["siunit"] = spec.siunit
         if spec is not None and spec.symbol:
             props["symbol"] = spec.symbol
+        if spec is not None and spec.enum_values is not None:
+            props["values"] = {str(k): v for k, v in spec.enum_values.items()}
         return props
 
     def get_settings_properties(self) -> dict[str, Any]:

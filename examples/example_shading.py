@@ -163,7 +163,7 @@ def _shade_output(vdsd: Vdsd, active_group: int, groups: set[int]) -> Output:
     out = Output(
         vdsd=vdsd,
         function=OutputFunction.POSITIONAL,
-        output_usage=OutputUsage.ROOM,
+        output_usage=OutputUsage.UNDEFINED,
         name="output",
         default_group=int(ColorClass.BLINDS),
         active_group=active_group,

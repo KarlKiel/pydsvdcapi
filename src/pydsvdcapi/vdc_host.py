@@ -37,8 +37,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any, ClassVar
 
-from zeroconf import ServiceInfo
-from zeroconf.asyncio import AsyncZeroconf
+from zeroconf import ServiceInfo, ServiceListener
+from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
@@ -763,6 +763,54 @@ class VdcHost:
 
     # ---- DNS-SD announcement -----------------------------------------
 
+    async def _evict_stale_vdc_entries(self, zc: AsyncZeroconf) -> None:
+        """Send mDNS goodbye packets for stale _ds-vdc._tcp entries on this host.
+
+        When a previous process was killed without a clean unannounce, its
+        mDNS entry lingers in vdSM's DNS-SD cache.  vdSM then connects using
+        the stale dSUID and disconnects immediately on Hello mismatch.
+
+        We browse for all _ds-vdc._tcp services on our own hostname and
+        unregister any whose dSUID differs from ours, which sends TTL=0
+        goodbye packets that flush the stale entry from all listeners.
+        """
+        own_dsuid = str(self._dsuid)
+        own_server = f"{_get_hostname()}.local."
+        # Collect service names from the sync listener callback; resolve info
+        # asynchronously afterwards to avoid the sync get_service_info() error.
+        discovered_names: list[str] = []
+
+        class _Listener(ServiceListener):
+            def add_service(self, zeroconf, type_, name) -> None:  # noqa: ARG002
+                discovered_names.append(name)
+
+            def update_service(self, *_) -> None:
+                pass
+
+            def remove_service(self, *_) -> None:
+                pass
+
+        browser = AsyncServiceBrowser(zc.zeroconf, VDC_SERVICE_TYPE, _Listener())
+        await asyncio.sleep(1.0)
+        await browser.async_cancel()
+
+        for name in discovered_names:
+            info = AsyncServiceInfo(VDC_SERVICE_TYPE, name)
+            await info.async_request(zc.zeroconf, timeout=500)
+            if info.server != own_server:
+                continue
+            entry_dsuid = (info.properties.get(b"dSUID") or b"").decode()
+            if not entry_dsuid or entry_dsuid == own_dsuid:
+                continue
+            logger.info(
+                "Evicting stale VDC host mDNS entry (dSUID %s) — sending goodbye",
+                entry_dsuid,
+            )
+            try:
+                await zc.async_unregister_service(info)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to evict stale mDNS entry: %s", exc)
+
     async def announce(self) -> None:
         """Announce this vDC host on the local network via DNS-SD.
 
@@ -796,6 +844,7 @@ class VdcHost:
         )
 
         self._zeroconf = AsyncZeroconf()
+        await self._evict_stale_vdc_entries(self._zeroconf)
         await self._zeroconf.async_register_service(self._service_info)
         logger.info(
             "Announced vDC host '%s' on port %d (dSUID %s)",

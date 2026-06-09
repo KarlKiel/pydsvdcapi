@@ -45,8 +45,7 @@ State model
 
 The output's operational values (brightness level, valve position,
 colour values, etc.) live in the *channels*.  The output state itself
-carries ``localPriority``, ``transitionTime``, ``movingState``, and
-``error``.
+carries ``localPriority``, ``transitionTime``, and ``error``.
 
 When a channel value is changed locally (from the device side) and
 ``pushChanges`` is enabled, the output pushes the channel state to
@@ -57,7 +56,7 @@ Persistence
 
 Only description and settings properties are persisted (via the owning
 Vdsd's property tree → Device → Vdc → VdcHost YAML).  The runtime
-state (``localPriority``, ``transitionTime``, ``movingState``, ``error``)
+state (``localPriority``, ``transitionTime``, ``error``)
 is transient.
 
 Usage::
@@ -498,13 +497,12 @@ class Output:
     Settings (writable, persisted):
 
     mode:
-        Output capability hint for the configurator UI — one of
-        :class:`~pydsvdcapi.enums.OutputMode` values.  When omitted
-        (``None``) the correct value is auto-derived from ``function``:
-        ``ON_OFF`` → ``BINARY``; ``INTERNALLY_CONTROLLED`` / ``CUSTOM`` →
-        ``DISABLED``; all other functions → ``GRADUAL``.  The dSS firmware
-        runtime ignores this field entirely for TCP/IP VDC devices; it only
-        affects which controls the configurator renders.
+        Output mode passed in ``outputSettings/mode``.  The vdSM uses this
+        to set the dSM ``OutputMode`` register, which controls how the Smart
+        Home API reports the output (e.g. ``gradual``, ``switched``).  When
+        omitted (``None``) the correct value is auto-derived from
+        ``function``: ``ON_OFF`` → ``BINARY``; ``INTERNALLY_CONTROLLED`` /
+        ``CUSTOM`` → ``DISABLED``; all other functions → ``GRADUAL``.
     active_group:
         dS Application Group ID this output is active in.  Use
         :class:`~pydsvdcapi.enums.ColorClass` values.  For most devices equals
@@ -561,15 +559,15 @@ class Output:
         vdsd: Vdsd,
         function: OutputFunction | int = OutputFunction.ON_OFF,
         output_usage: OutputUsage | int = OutputUsage.UNDEFINED,
-        name: str,
-        default_group: int,
+        name: str | None = None,
+        default_group: int | None = None,
         variable_ramp: bool = False,
-        max_power: float | None = None,
+        max_power: float = -1.0,
         active_cooling_mode: bool | None = None,
         # Settings (writable, persisted)
         mode: OutputMode | int | None = None,
-        active_group: int,
-        groups: set[int],
+        active_group: int | None = None,
+        groups: set[int] | None = None,
         push_changes: bool = False,
         on_threshold: float | None = None,
         min_brightness: float | None = None,
@@ -591,17 +589,13 @@ class Output:
         # ---- parent reference ----------------------------------------
         self._vdsd: Vdsd = vdsd
 
-        # ---- mandatory field validation ------------------------------
-        if not name:
-            raise ValueError("Output.name must not be empty")
-
         # ---- description properties (read-only, persisted) -----------
         self._function: OutputFunction = OutputFunction(int(function))
         self._output_usage: OutputUsage = OutputUsage(int(output_usage))
-        self._name: str = name
-        self._default_group: int = default_group
+        self._name: str | None = name if name else None
+        self._default_group: int | None = default_group
         self._variable_ramp: bool = variable_ramp
-        self._max_power: float | None = max_power
+        self._max_power: float = max_power
         self._active_cooling_mode: bool | None = active_cooling_mode
 
         # ---- settings properties (read/write, persisted) -------------
@@ -618,8 +612,8 @@ class Output:
                 self._mode = OutputMode.GRADUAL
         else:
             self._mode = OutputMode(int(mode))
-        self._active_group: int = active_group
-        self._groups: set[int] = set(groups)
+        self._active_group: int | None = active_group
+        self._groups: set[int] = set(groups) if groups is not None else set()
         self._push_changes: bool = push_changes
         self._on_threshold: float | None = on_threshold
         self._min_brightness: float | None = min_brightness
@@ -656,7 +650,6 @@ class Output:
         self._local_priority: bool = False
         self._error: OutputError = OutputError.OK
         self._transition_time: float = 0.0
-        self._moving_state: int = 0
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
@@ -711,23 +704,23 @@ class Output:
         return self._output_usage
 
     @property
-    def name(self) -> str:
-        """Human-readable name."""
+    def name(self) -> str | None:
+        """Human-readable name (optional; omitted from outputDescription when None)."""
         return self._name
 
     @name.setter
-    def name(self, value: str) -> None:
-        self._name = value
+    def name(self, value: str | None) -> None:
+        self._name = value if value else None
         self._schedule_auto_save()
 
     @property
-    def default_group(self) -> int:
-        """Application profile ID for this output (use ColorClass enum)."""
+    def default_group(self) -> int | None:
+        """Application profile ID for this output (optional; omitted from outputDescription when None)."""
         return self._default_group
 
     @default_group.setter
-    def default_group(self, value: int) -> None:
-        self._default_group = int(value)
+    def default_group(self, value: int | None) -> None:
+        self._default_group = int(value) if value is not None else None
         self._schedule_auto_save()
 
     @property
@@ -736,7 +729,7 @@ class Output:
         return self._variable_ramp
 
     @property
-    def max_power(self) -> float | None:
+    def max_power(self) -> float:
         """Maximum output power in Watts (``None`` = undefined)."""
         return self._max_power
 
@@ -760,13 +753,13 @@ class Output:
         self._schedule_auto_save()
 
     @property
-    def active_group(self) -> int:
-        """Application profile ID this output is currently active in (use ColorClass enum)."""
+    def active_group(self) -> int | None:
+        """Application profile ID this output is active in (optional; omitted from outputSettings when None)."""
         return self._active_group
 
     @active_group.setter
-    def active_group(self, value: int) -> None:
-        self._active_group = int(value)
+    def active_group(self, value: int | None) -> None:
+        self._active_group = int(value) if value is not None else None
         self._schedule_auto_save()
 
     @property
@@ -991,19 +984,6 @@ class Output:
     @transition_time.setter
     def transition_time(self, value: float) -> None:
         self._transition_time = float(value)
-
-    @property
-    def moving_state(self) -> int:
-        """Motor movement state for shade/blind outputs (volatile, not persisted).
-
-        ``0`` = idle, ``1`` = moving open/up, ``-1`` = moving closed/down.
-        Matches p44vdc ``ShadowBehaviour`` wire format.
-        """
-        return self._moving_state
-
-    @moving_state.setter
-    def moving_state(self, value: int) -> None:
-        self._moving_state = int(value)
 
     # ==================================================================
     # Channel management
@@ -1780,16 +1760,21 @@ class Output:
         """Return the ``outputDescription`` property dict.
 
         Keys match the vDC API property names (§4.8.1).
+
+        ``name``, ``defaultGroup``, and ``activeCoolingMode`` are **optional**:
+        they are only included when explicitly set by the caller.
+        ``maxPower`` is always present (``-1.0`` when undefined).
         """
         desc: dict[str, Any] = {
             "function": int(self._function),
             "outputUsage": int(self._output_usage),
-            "name": self._name,
-            "defaultGroup": self._default_group,
             "variableRamp": self._variable_ramp,
+            "maxPower": self._max_power,
         }
-        if self._max_power is not None:
-            desc["maxPower"] = self._max_power
+        if self._name is not None:
+            desc["name"] = self._name
+        if self._default_group is not None:
+            desc["defaultGroup"] = self._default_group
         if self._active_cooling_mode is not None:
             desc["activeCoolingMode"] = self._active_cooling_mode
         return desc
@@ -1799,54 +1784,79 @@ class Output:
 
         Keys match the vDC API property names (§4.8.2).
 
-        Optional shadow motor timing fields (``openTime``, ``closeTime``,
-        ``angleOpenTime``, ``angleCloseTime``, ``stopDelayTime``) are only
-        included when they have been set to a non-``None`` value.
+        ``activeGroup`` is **optional** — included only when explicitly set.
+
+        ``groups`` follows p44vdc behaviour: all 64 group IDs (0–63) are
+        emitted as boolean elements (``true`` for members, ``false`` for
+        non-members).
+
+        ``onThreshold`` is included if and only if ``function`` is ON_OFF (0);
+        when function is ON_OFF and no value was supplied the spec default of
+        50.0 % is used.
+
+        Light, climate, and shadow timing settings are only included when the
+        device's ``primaryGroup`` matches the relevant application class AND
+        the value has been explicitly set.
         """
         settings: dict[str, Any] = {
             "mode": int(self._mode),
-            "activeGroup": self._active_group,
             "pushChanges": self._push_changes,
         }
 
-        # Groups — always present; only "true" entries are included.
-        settings["groups"] = {str(gid): True for gid in sorted(self._groups)}
+        # activeGroup — optional, only include when explicitly set.
+        if self._active_group is not None:
+            settings["activeGroup"] = self._active_group
 
-        # Optional light-output settings.
-        if self._on_threshold is not None:
-            settings["onThreshold"] = self._on_threshold
-        if self._min_brightness is not None:
-            settings["minBrightness"] = self._min_brightness
-        if self._dim_time_up is not None:
-            settings["dimTimeUp"] = self._dim_time_up
-        if self._dim_time_down is not None:
-            settings["dimTimeDown"] = self._dim_time_down
-        if self._dim_time_up_alt1 is not None:
-            settings["dimTimeUpAlt1"] = self._dim_time_up_alt1
-        if self._dim_time_down_alt1 is not None:
-            settings["dimTimeDownAlt1"] = self._dim_time_down_alt1
-        if self._dim_time_up_alt2 is not None:
-            settings["dimTimeUpAlt2"] = self._dim_time_up_alt2
-        if self._dim_time_down_alt2 is not None:
-            settings["dimTimeDownAlt2"] = self._dim_time_down_alt2
+        # Groups — emit all 64 IDs (p44vdc behaviour: true for members, false
+        # for non-members) so the vdSM sees the full group-membership bitmap.
+        settings["groups"] = {
+            str(gid): (gid in self._groups) for gid in range(64)
+        }
 
-        # Optional climate-control settings.
-        if self._heating_system_capability is not None:
-            settings["heatingSystemCapability"] = int(self._heating_system_capability)
-        if self._heating_system_type is not None:
-            settings["heatingSystemType"] = int(self._heating_system_type)
+        pg = int(self._vdsd.primary_group)
 
-        # Optional shadow motor timing settings (ShadowBehaviour / p44vdc).
-        if self._open_time is not None:
-            settings["openTime"] = self._open_time
-        if self._close_time is not None:
-            settings["closeTime"] = self._close_time
-        if self._angle_open_time is not None:
-            settings["angleOpenTime"] = self._angle_open_time
-        if self._angle_close_time is not None:
-            settings["angleCloseTime"] = self._angle_close_time
-        if self._stop_delay_time is not None:
-            settings["stopDelayTime"] = self._stop_delay_time
+        # onThreshold: only for ON_OFF function (mandatory for function 0).
+        if int(self._function) == int(OutputFunction.ON_OFF):
+            settings["onThreshold"] = (
+                self._on_threshold if self._on_threshold is not None else 50.0
+            )
+
+        # Light-specific settings (primaryGroup 1 = yellow/lights).
+        if pg == 1:
+            if self._min_brightness is not None:
+                settings["minBrightness"] = self._min_brightness
+            if self._dim_time_up is not None:
+                settings["dimTimeUp"] = self._dim_time_up
+            if self._dim_time_down is not None:
+                settings["dimTimeDown"] = self._dim_time_down
+            if self._dim_time_up_alt1 is not None:
+                settings["dimTimeUpAlt1"] = self._dim_time_up_alt1
+            if self._dim_time_down_alt1 is not None:
+                settings["dimTimeDownAlt1"] = self._dim_time_down_alt1
+            if self._dim_time_up_alt2 is not None:
+                settings["dimTimeUpAlt2"] = self._dim_time_up_alt2
+            if self._dim_time_down_alt2 is not None:
+                settings["dimTimeDownAlt2"] = self._dim_time_down_alt2
+
+        # Climate-control settings (primaryGroup 3 = blue/heating).
+        if pg == 3:
+            if self._heating_system_capability is not None:
+                settings["heatingSystemCapability"] = int(self._heating_system_capability)
+            if self._heating_system_type is not None:
+                settings["heatingSystemType"] = int(self._heating_system_type)
+
+        # Shadow motor timing settings (primaryGroup 2 = grey/shadow).
+        if pg == 2:
+            if self._open_time is not None:
+                settings["openTime"] = self._open_time
+            if self._close_time is not None:
+                settings["closeTime"] = self._close_time
+            if self._angle_open_time is not None:
+                settings["angleOpenTime"] = self._angle_open_time
+            if self._angle_close_time is not None:
+                settings["angleCloseTime"] = self._angle_close_time
+            if self._stop_delay_time is not None:
+                settings["stopDelayTime"] = self._stop_delay_time
 
         # Include any extra (firmware-specific) settings that arrived via
         # setProperty but are not in the standard known-key set.
@@ -1859,15 +1869,15 @@ class Output:
 
         Keys match the vDC API property names (§4.8.3).
 
-        Includes ``localPriority``, ``transitionTime`` (float, seconds),
-        ``movingState`` (integer, motor movement state for shade/blind
-        outputs), and ``error``.  All are volatile runtime state and are
-        not persisted to YAML.
+        ``localPriority`` and ``transitionTime`` (float, seconds) are always
+        present, matching p44vdc base OutputBehaviour.
+
+        ``error`` is included for all device types (not in p44vdc base but
+        useful for diagnostics).
         """
         return {
             "localPriority": self._local_priority,
             "transitionTime": self._transition_time,
-            "movingState": self._moving_state,
             "error": int(self._error),
         }
 
@@ -1968,17 +1978,14 @@ class Output:
         Called by :meth:`VdcHost._apply_vdsd_set_property` when the
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for ``outputState``.
 
-        Recognised keys: ``localPriority``, ``transitionTime``,
-        ``movingState``.  Unknown keys are silently ignored.
+        Recognised keys: ``localPriority``, ``transitionTime``.
+        Unknown keys are silently ignored.
         """
         if "localPriority" in state:
             self._local_priority = bool(state["localPriority"])
         if "transitionTime" in state:
             val = state["transitionTime"]
             self._transition_time = float(val) if val is not None else 0.0
-        if "movingState" in state:
-            val = state["movingState"]
-            self._moving_state = int(val) if val is not None else 0
 
     # ==================================================================
     # Persistence (property tree)
@@ -2004,8 +2011,7 @@ class Output:
         }
 
         # Optional description properties.
-        if self._max_power is not None:
-            tree["maxPower"] = self._max_power
+        tree["maxPower"] = self._max_power
         if self._active_cooling_mode is not None:
             tree["activeCoolingMode"] = self._active_cooling_mode
 

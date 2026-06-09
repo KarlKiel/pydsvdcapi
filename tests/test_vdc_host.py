@@ -235,6 +235,7 @@ class TestAutoMac:
 
 class TestAnnouncement:
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_announce_registers_service(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -258,6 +259,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_announce_twice_is_noop(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -276,6 +278,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_unannounce(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -299,6 +302,7 @@ class TestAnnouncement:
         assert not host.is_announced
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_service_contains_dsuid_txt(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -317,6 +321,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_custom_port_in_announcement(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -334,6 +339,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_service_name_uses_host_name(self, MockAsyncZC):
         mock_zc = MagicMock()
