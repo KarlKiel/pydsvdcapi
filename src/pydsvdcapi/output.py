@@ -433,7 +433,7 @@ class _ChannelCompatDict(dict):
         :meth:`~Output.channel_by_key`.
     """
 
-    def __init__(self, data: dict, output: "Output") -> None:
+    def __init__(self, data: dict, output: Output) -> None:
         super().__init__(data)
         self._output = output
 
@@ -452,7 +452,7 @@ class _ChannelCompatDict(dict):
             return super().__getitem__(ch.name)
         raise KeyError(key)
 
-    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+    def get(self, key: str, default: Any = None) -> Any:
         try:
             return self[key]
         except KeyError:
@@ -1647,7 +1647,7 @@ class Output:
     # Channel property dicts (for getProperty responses)
     # ==================================================================
 
-    def _channel_key(self, ch: "OutputChannel") -> str:
+    def _channel_key(self, ch: OutputChannel) -> str:
         """Return the channel name as the canonical property-dict key (API v3+).
 
         All output functions use the channel name (e.g. ``"brightness"``,
@@ -1658,7 +1658,7 @@ class Output:
         """
         return ch.name
 
-    def channel_by_key(self, key: str) -> "OutputChannel | None":
+    def channel_by_key(self, key: str) -> OutputChannel | None:
         """Return the channel matching *key*, with numeric backward-compat.
 
         Resolution order:
@@ -1687,7 +1687,7 @@ class Output:
         except ValueError:
             return None
         # 2. "0" = standard channel for color class (ds-basics §7 table 7).
-        if numeric == 0:
+        if numeric == 0 and self._default_group is not None:
             std_ct = COLOR_CLASS_STANDARD_CHANNEL.get(self._default_group)
             if std_ct is not None:
                 found = self.get_channel_by_type(std_ct)
@@ -1713,8 +1713,10 @@ class Output:
         no numeric duplicates appear in responses.
         """
         return _ChannelCompatDict(
-            {self._channel_key(ch): ch.get_description_properties()
-             for ch in self._channels.values()},
+            {
+                self._channel_key(ch): ch.get_description_properties()
+                for ch in self._channels.values()
+            },
             self,
         )
 
@@ -1730,8 +1732,10 @@ class Output:
         no numeric duplicates appear in responses.
         """
         return _ChannelCompatDict(
-            {self._channel_key(ch): ch.get_settings_properties()
-             for ch in self._channels.values()},
+            {
+                self._channel_key(ch): ch.get_settings_properties()
+                for ch in self._channels.values()
+            },
             self,
         )
 
@@ -1747,8 +1751,10 @@ class Output:
         no numeric duplicates appear in responses.
         """
         return _ChannelCompatDict(
-            {self._channel_key(ch): ch.get_state_properties()
-             for ch in self._channels.values()},
+            {
+                self._channel_key(ch): ch.get_state_properties()
+                for ch in self._channels.values()
+            },
             self,
         )
 
@@ -1809,11 +1815,9 @@ class Output:
 
         # Groups — emit all 64 IDs (p44vdc behaviour: true for members, false
         # for non-members) so the vdSM sees the full group-membership bitmap.
-        settings["groups"] = {
-            str(gid): (gid in self._groups) for gid in range(64)
-        }
+        settings["groups"] = {str(gid): (gid in self._groups) for gid in range(64)}
 
-        pg = int(self._vdsd.primary_group)
+        pg = int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
 
         # onThreshold: only for ON_OFF function (mandatory for function 0).
         if int(self._function) == int(OutputFunction.ON_OFF):
@@ -1841,7 +1845,9 @@ class Output:
         # Climate-control settings (primaryGroup 3 = blue/heating).
         if pg == 3:
             if self._heating_system_capability is not None:
-                settings["heatingSystemCapability"] = int(self._heating_system_capability)
+                settings["heatingSystemCapability"] = int(
+                    self._heating_system_capability
+                )
             if self._heating_system_type is not None:
                 settings["heatingSystemType"] = int(self._heating_system_type)
 

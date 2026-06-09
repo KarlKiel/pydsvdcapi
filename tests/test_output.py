@@ -649,7 +649,6 @@ class TestOutputStateProperties:
         assert out.get_state_properties()["transitionTime"] == 0.0
 
 
-
 # ===========================================================================
 # apply_settings
 # ===========================================================================

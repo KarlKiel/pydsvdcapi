@@ -353,7 +353,14 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=255,
         resolution=1,
-        enum_values={0: "off", 1: "heating", 2: "cooling", 3: "fanOnly", 4: "dry", 5: "auto"},
+        enum_values={
+            0: "off",
+            1: "heating",
+            2: "cooling",
+            3: "fanOnly",
+            4: "dry",
+            5: "auto",
+        },
     ),
 }
 
@@ -379,12 +386,12 @@ def get_channel_spec(
 #: Used to resolve channelType key "0" (ds-basics §7 table 7: "standard channel
 #: for the respective color class").
 COLOR_CLASS_STANDARD_CHANNEL: dict[int, OutputChannelType] = {
-    1: OutputChannelType.BRIGHTNESS,           # LIGHTS
+    1: OutputChannelType.BRIGHTNESS,  # LIGHTS
     2: OutputChannelType.SHADE_POSITION_OUTSIDE,  # BLINDS
-    3: OutputChannelType.HEATING_POWER,        # HEATING
-    4: OutputChannelType.AUDIO_VOLUME,         # AUDIO
-    5: OutputChannelType.AUDIO_VOLUME,         # VIDEO
-    9: OutputChannelType.COOLING_CAPACITY,     # COOLING
+    3: OutputChannelType.HEATING_POWER,  # HEATING
+    4: OutputChannelType.AUDIO_VOLUME,  # AUDIO
+    5: OutputChannelType.AUDIO_VOLUME,  # VIDEO
+    9: OutputChannelType.COOLING_CAPACITY,  # COOLING
     10: OutputChannelType.AIR_FLOW_INTENSITY,  # VENTILATION
     12: OutputChannelType.AIR_FLOW_INTENSITY,  # RECIRCULATION
     64: OutputChannelType.AIR_FLOW_INTENSITY,  # APARTMENT_VENTILATION

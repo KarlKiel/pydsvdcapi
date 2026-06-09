@@ -1034,6 +1034,7 @@ class TestDisconnectCallback:
 
     def test_disconnect_callback_type_exists(self):
         from pydsvdcapi.vdc_host import DisconnectCallback
+
         assert DisconnectCallback is not None
 
     def test_stopping_flag_initially_false(self):
@@ -1146,9 +1147,7 @@ class TestDisconnectCallback:
 class TestSetPropertyChannelStatesNumericKey:
     """setProperty channelStates with old-format numeric key updates the channel."""
 
-    def _make_set_property_msg(
-        self, dsuid_str: str, channel_key: str, value: float
-    ):
+    def _make_set_property_msg(self, dsuid_str: str, channel_key: str, value: float):
         """Build a VDSM_REQUEST_SET_PROPERTY for channelStates with a numeric key."""
         from pydsvdcapi.vdcapi_pb2 import PropertyElement
 
@@ -1161,7 +1160,7 @@ class TestSetPropertyChannelStatesNumericKey:
         channel_states.name = "channelStates"
 
         channel_elem = PropertyElement()
-        channel_elem.name = channel_key   # e.g. "1" (numeric channelType)
+        channel_elem.name = channel_key  # e.g. "1" (numeric channelType)
 
         value_elem = PropertyElement()
         value_elem.name = "value"
@@ -1178,12 +1177,19 @@ class TestSetPropertyChannelStatesNumericKey:
         from pydsvdcapi.output import Output
 
         host = VdcHost(mac=TEST_MAC)
-        vdc = Vdc(host=host, implementation_id="test-vdc", name="Test VDC", model="test-model")
+        vdc = Vdc(
+            host=host, implementation_id="test-vdc", name="Test VDC", model="test-model"
+        )
         host.add_vdc(vdc)
 
         dsuid = DsUid.from_name_in_space("dev-numeric-key", DsUidNamespace.VDC)
         device = Device(vdc=vdc, dsuid=dsuid)
-        vdsd = Vdsd(device=device, primary_group=ColorGroup.YELLOW, name="Dimmer", model="dimmer-model")
+        vdsd = Vdsd(
+            device=device,
+            primary_group=ColorGroup.YELLOW,
+            name="Dimmer",
+            model="dimmer-model",
+        )
         device.add_vdsd(vdsd)
         vdc.add_device(device)
 

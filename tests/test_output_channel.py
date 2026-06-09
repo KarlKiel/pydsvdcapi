@@ -583,7 +583,9 @@ class TestChannelPropertyDicts:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         ch = out.get_channel(0)
         state = ch.get_state_properties()
-        assert state["value"] == 0.0   # uninitialized → 0.0, matching p44vdc v_double default
+        assert (
+            state["value"] == 0.0
+        )  # uninitialized → 0.0, matching p44vdc v_double default
         assert state["age"] is None
 
     @pytest.mark.asyncio
@@ -624,7 +626,9 @@ class TestOutputChannelProperties:
         assert "brightness" in desc
         assert "colortemp" in desc
         assert desc["brightness"]["channelType"] == int(OutputChannelType.BRIGHTNESS)
-        assert desc["colortemp"]["channelType"] == int(OutputChannelType.COLOR_TEMPERATURE)
+        assert desc["colortemp"]["channelType"] == int(
+            OutputChannelType.COLOR_TEMPERATURE
+        )
         # Name field is also present inside each element.
         assert desc["brightness"]["name"] == "brightness"
         assert desc["colortemp"]["name"] == "colortemp"
@@ -1444,9 +1448,9 @@ class TestChannelContainerKeyFormat:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         ch = list(out.channels.values())[0]
         desc = out.get_channel_descriptions()
-        assert ch.name in desc              # "brightness"
+        assert ch.name in desc  # "brightness"
         # Numeric keys are now transparently resolvable (backward-compat).
-        assert str(ch.ds_index) in desc     # "0" resolves to brightness via channel_by_key
+        assert str(ch.ds_index) in desc  # "0" resolves to brightness via channel_by_key
 
     def test_on_off_keyed_by_name(self):
         """ON_OFF: channelDescriptions keyed by channel name (API v3+)."""
@@ -1518,7 +1522,7 @@ class TestChannelContainerKeyFormat:
         sent_msg = session.send_notification.call_args[0][0]
         props = elements_to_dict(sent_msg.vdc_send_push_notification.changedproperties)
         assert "channelStates" in props
-        assert ch.name in props["channelStates"]             # "brightness"
+        assert ch.name in props["channelStates"]  # "brightness"
         assert str(ch.ds_index) not in props["channelStates"]  # NOT "0"
 
     @pytest.mark.asyncio
@@ -1539,7 +1543,7 @@ class TestChannelContainerKeyFormat:
         sent_msg = session.send_notification.call_args[0][0]
         props = elements_to_dict(sent_msg.vdc_send_push_notification.changedproperties)
         assert "channelStates" in props
-        assert ch.name in props["channelStates"]            # "brightness"
+        assert ch.name in props["channelStates"]  # "brightness"
         assert str(ch.ds_index) not in props["channelStates"]  # not "0"
 
 
@@ -1550,11 +1554,12 @@ class TestChannelCompatDictGetProperty:
         """Build a VDSM_REQUEST_GET_PROPERTY protobuf asking for one channel by key."""
         from pydsvdcapi import vdc_messages_pb2 as pb
         from pydsvdcapi.vdcapi_pb2 import PropertyElement
+
         msg = pb.Message()
         msg.type = pb.VDSM_REQUEST_GET_PROPERTY
         msg.message_id = 42
         container = PropertyElement()
-        container.name = property_name   # e.g. "channelDescriptions"
+        container.name = property_name  # e.g. "channelDescriptions"
         channel_elem = PropertyElement()
         channel_elem.name = channel_key  # e.g. "1" or "brightness"
         container.elements.append(channel_elem)
@@ -1567,6 +1572,7 @@ class TestChannelCompatDictGetProperty:
             build_get_property_response,
             elements_to_dict,
         )
+
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         vdsd.set_output(out)
@@ -1587,6 +1593,7 @@ class TestChannelCompatDictGetProperty:
             build_get_property_response,
             elements_to_dict,
         )
+
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         vdsd.set_output(out)
@@ -1605,6 +1612,7 @@ class TestChannelCompatDictGetProperty:
             build_get_property_response,
             elements_to_dict,
         )
+
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
@@ -1621,12 +1629,13 @@ class TestChannelCompatDictGetProperty:
 
     def test_wildcard_query_not_duplicated(self):
         """Wildcard query returns canonical keys only — no numeric duplicates."""
+        from pydsvdcapi import vdc_messages_pb2 as pb
         from pydsvdcapi.property_handling import (
             build_get_property_response,
             elements_to_dict,
         )
-        from pydsvdcapi import vdc_messages_pb2 as pb
         from pydsvdcapi.vdcapi_pb2 import PropertyElement
+
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         vdsd.set_output(out)
@@ -1655,8 +1664,9 @@ class TestChannelSpecsAndEnums:
 
     def test_water_flow_channel_name_is_waterFlow(self):
         """WATER_FLOW_RATE spec name must be 'waterFlow' not 'waterFlowRate'."""
-        from pydsvdcapi.output_channel import get_channel_spec
         from pydsvdcapi.enums import OutputChannelType
+        from pydsvdcapi.output_channel import get_channel_spec
+
         spec = get_channel_spec(OutputChannelType.WATER_FLOW_RATE)
         assert spec is not None
         assert spec.name == "waterFlow"
@@ -1664,42 +1674,64 @@ class TestChannelSpecsAndEnums:
     def test_fcu_operation_mode_channel_type_exists(self):
         """OutputChannelType must have FCU_OPERATION_MODE = 192."""
         from pydsvdcapi.enums import OutputChannelType
+
         assert OutputChannelType.FCU_OPERATION_MODE == 192
 
     def test_fcu_operation_mode_has_channel_spec(self):
         """CHANNEL_SPECS must have an entry for FCU_OPERATION_MODE with name 'operationMode'."""
-        from pydsvdcapi.output_channel import get_channel_spec
         from pydsvdcapi.enums import OutputChannelType
+        from pydsvdcapi.output_channel import get_channel_spec
+
         spec = get_channel_spec(OutputChannelType.FCU_OPERATION_MODE)
         assert spec is not None
         assert spec.name == "operationMode"
 
     def test_color_class_standard_channel_lights(self):
         """COLOR_CLASS_STANDARD_CHANNEL[LIGHTS] == BRIGHTNESS."""
-        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
         from pydsvdcapi.enums import ColorClass, OutputChannelType
-        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.LIGHTS] == OutputChannelType.BRIGHTNESS
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+
+        assert (
+            COLOR_CLASS_STANDARD_CHANNEL[ColorClass.LIGHTS]
+            == OutputChannelType.BRIGHTNESS
+        )
 
     def test_color_class_standard_channel_blinds(self):
         """COLOR_CLASS_STANDARD_CHANNEL[BLINDS] == SHADE_POSITION_OUTSIDE."""
-        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
         from pydsvdcapi.enums import ColorClass, OutputChannelType
-        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.BLINDS] == OutputChannelType.SHADE_POSITION_OUTSIDE
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+
+        assert (
+            COLOR_CLASS_STANDARD_CHANNEL[ColorClass.BLINDS]
+            == OutputChannelType.SHADE_POSITION_OUTSIDE
+        )
 
     def test_color_class_standard_channel_heating(self):
-        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
         from pydsvdcapi.enums import ColorClass, OutputChannelType
-        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.HEATING] == OutputChannelType.HEATING_POWER
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+
+        assert (
+            COLOR_CLASS_STANDARD_CHANNEL[ColorClass.HEATING]
+            == OutputChannelType.HEATING_POWER
+        )
 
     def test_color_class_standard_channel_cooling(self):
-        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
         from pydsvdcapi.enums import ColorClass, OutputChannelType
-        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.COOLING] == OutputChannelType.COOLING_CAPACITY
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+
+        assert (
+            COLOR_CLASS_STANDARD_CHANNEL[ColorClass.COOLING]
+            == OutputChannelType.COOLING_CAPACITY
+        )
 
     def test_color_class_standard_channel_ventilation(self):
-        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
         from pydsvdcapi.enums import ColorClass, OutputChannelType
-        assert COLOR_CLASS_STANDARD_CHANNEL[ColorClass.VENTILATION] == OutputChannelType.AIR_FLOW_INTENSITY
+        from pydsvdcapi.output_channel import COLOR_CLASS_STANDARD_CHANNEL
+
+        assert (
+            COLOR_CLASS_STANDARD_CHANNEL[ColorClass.VENTILATION]
+            == OutputChannelType.AIR_FLOW_INTENSITY
+        )
 
 
 # ===========================================================================
@@ -1729,6 +1761,7 @@ class TestChannelByKey:
     def test_resolve_by_channeltype_zero_standard_channel(self):
         """Key '0' resolves to the standard channel for the color class (ds-basics §7 table 7)."""
         from pydsvdcapi.enums import ColorClass
+
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         out.default_group = ColorClass.LIGHTS  # explicit: color class 1 → brightness
@@ -1739,6 +1772,7 @@ class TestChannelByKey:
     def test_resolve_by_channeltype_zero_shade_standard_channel(self):
         """Key '0' with BLINDS color class resolves to shadePositionOutside."""
         from pydsvdcapi.enums import ColorClass
+
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)

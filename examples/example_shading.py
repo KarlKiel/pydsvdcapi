@@ -360,7 +360,9 @@ def _print_menu(devices: list[DevInfo], connected: bool) -> None:
     status = _col(GREEN_C, "CONNECTED") if connected else _col(RED_C, "WAITING…")
     print(f"\n{BOLD}{'=' * 60}{RESET}")
     print(f"  pydsvdcapi Example — Shading  |  {status}")
-    print(f"  {GREY_C}{len(devices)} devices  (S1=curtain  S2=awning  S3=indoor-blind  S4=shutter){RESET}")
+    print(
+        f"  {GREY_C}{len(devices)} devices  (S1=curtain  S2=awning  S3=indoor-blind  S4=shutter){RESET}"
+    )
     print(f"{BOLD}{'=' * 60}{RESET}")
     print(f"  {BOLD}r{RESET}  Restart (vanish → wait 20 s → reconnect)")
     print(f"  {BOLD}q{RESET}  Quit clean (vanish + delete persistence files)")
@@ -419,7 +421,9 @@ async def console_loop(
             return
 
         elif cmd == "q":
-            print(f"\n{YELLOW_C}Clean quit — vanishing and removing persistence…{RESET}")
+            print(
+                f"\n{YELLOW_C}Clean quit — vanishing and removing persistence…{RESET}"
+            )
             clean_event.set()
             quit_event.set()
             return
@@ -459,7 +463,9 @@ async def main(port: int, debug: bool, run_for: int = 0) -> bool:
 
     host = VdcHost(
         port=port,
-        dsuid=DsUid.from_name_in_space("pydsvdcapi-example-shading-host", DsUidNamespace.VDC),
+        dsuid=DsUid.from_name_in_space(
+            "pydsvdcapi-example-shading-host", DsUidNamespace.VDC
+        ),
         model="pydsvdcapi Example Shading",
         name="example-shading-host",
         vendor_name=VENDOR_NAME,
@@ -512,11 +518,13 @@ async def main(port: int, debug: bool, run_for: int = 0) -> bool:
     )
 
     if run_for > 0:
+
         async def _auto_quit():
             await asyncio.sleep(run_for)
             print(f"\n{YELLOW_C}--run-for {run_for}s elapsed — clean quit.{RESET}")
             clean_event.set()
             quit_event.set()
+
         asyncio.create_task(_auto_quit())
 
     await quit_event.wait()
@@ -555,14 +563,20 @@ if __name__ == "__main__":
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--run-for", type=int, default=0, metavar="SECONDS",
-                        help="Auto clean-quit after N seconds (0 = run forever)")
+    parser.add_argument(
+        "--run-for",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="Auto clean-quit after N seconds (0 = run forever)",
+    )
     args = parser.parse_args()
 
     while True:
         try:
-            should_restart = asyncio.run(main(port=args.port, debug=args.debug,
-                                              run_for=args.run_for))
+            should_restart = asyncio.run(
+                main(port=args.port, debug=args.debug, run_for=args.run_for)
+            )
         except KeyboardInterrupt:
             print(f"\n{YELLOW_C}Interrupted.{RESET}")
             break

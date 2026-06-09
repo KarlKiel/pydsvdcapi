@@ -1277,12 +1277,14 @@ class VdcHost:
             lines = []
             for e in elements:
                 name = e.name or "<wildcard>"
-                sub = f" → [{_fmt_query(e.elements, indent+1)}]" if e.elements else ""
+                sub = f" → [{_fmt_query(e.elements, indent + 1)}]" if e.elements else ""
                 lines.append("  " * indent + repr(name) + sub)
             return ", ".join(lines)
 
         entity_label = self._resolve_entity_label(target_dsuid)
-        query_names = [e.name or "<wildcard>" for e in msg.vdsm_request_get_property.query]
+        query_names = [
+            e.name or "<wildcard>" for e in msg.vdsm_request_get_property.query
+        ]
         logger.debug(
             "getProperty %s — query: [%s]",
             entity_label,
@@ -1298,22 +1300,26 @@ class VdcHost:
 
         # Diagnostic: when channelDescriptions or outputDescription is queried,
         # log detail so shade vs. light differences are visible at DEBUG level.
-        if logger.isEnabledFor(logging.DEBUG):
-            if "channelDescriptions" in query_names or "outputDescription" in query_names:
-                out_desc = props.get("outputDescription", {})
-                ch_desc = props.get("channelDescriptions", {})
-                fn = out_desc.get("function", "?") if isinstance(out_desc, dict) else "?"
-                ch_info = (
-                    {k: v.get("channelType", "?") if isinstance(v, dict) else "?"
-                     for k, v in ch_desc.items()}
-                    if isinstance(ch_desc, dict) else "?"
-                )
-                logger.debug(
-                    "getProperty %s — outputFunction=%s channelDescriptions=%s",
-                    entity_label,
-                    fn,
-                    ch_info,
-                )
+        if logger.isEnabledFor(logging.DEBUG) and (
+            "channelDescriptions" in query_names or "outputDescription" in query_names
+        ):
+            out_desc = props.get("outputDescription", {})
+            ch_desc = props.get("channelDescriptions", {})
+            fn = out_desc.get("function", "?") if isinstance(out_desc, dict) else "?"
+            ch_info = (
+                {
+                    k: v.get("channelType", "?") if isinstance(v, dict) else "?"
+                    for k, v in ch_desc.items()
+                }
+                if isinstance(ch_desc, dict)
+                else "?"
+            )
+            logger.debug(
+                "getProperty %s — outputFunction=%s channelDescriptions=%s",
+                entity_label,
+                fn,
+                ch_info,
+            )
 
         return resp
 

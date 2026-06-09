@@ -32,8 +32,8 @@ import logging
 import random
 import sys
 import threading
-import uuid
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -150,7 +150,9 @@ def _notify(msg: str) -> None:
 
 
 def _dsuid(tag: str) -> DsUid:
-    return DsUid.from_name_in_space(f"example-climate-{_RUN_ID}-{tag}", DsUidNamespace.VDC)
+    return DsUid.from_name_in_space(
+        f"example-climate-{_RUN_ID}-{tag}", DsUidNamespace.VDC
+    )
 
 
 def _vdsd(device: Device, name: str, model: str) -> Vdsd:
@@ -561,7 +563,9 @@ async def console_loop(
             return
 
         elif cmd == "q":
-            print(f"\n{YELLOW_C}Clean quit — vanishing and removing persistence…{RESET}")
+            print(
+                f"\n{YELLOW_C}Clean quit — vanishing and removing persistence…{RESET}"
+            )
             clean_event.set()
             quit_event.set()
             return
