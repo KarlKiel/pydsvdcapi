@@ -553,7 +553,7 @@ the device is announced.  Key auto-derivation rules:
 - ON_OFF function → `outconfigswitch`, `impulseconfig`
 - DIMMER / DIMMER_COLOR_TEMP / FULL_COLOR_DIMMER function → `dimtimeconfig`
 - Grey shade output with slat channel → `shadebladeang`
-  (`shadeprops` and `motiontimefins` are NOT supported for TCP/IP VDC — DS485-only path)
+  (`shadeprops` and `motiontimefins` are not auto-derived — add manually if motor timing config needed)
 - Any binary input → `akmsensor` (`akminput` and `akmdelay` are not supported for VDC devices)
 - Any button → `pushbutton`, `pushbadvanced`, `pushbdisabled`
 
@@ -561,6 +561,8 @@ Some features are **not tested** (can be set manually, VDC behavior unconfirmed)
 
 | Feature | When to consider adding |
 |---|---|
+| `shadeprops` | Grey shade device with motor timing `outputSettings` fields |
+| `motiontimefins` | Venetian blind with blade/slat angle channel — add together with `shadeprops` |
 | `blinkconfig` | Blink pattern configuration (config may be stored on dSS/vdSM) |
 | `outmodegeneric` | Joker device with selectable output mode — VDC support unclear |
 | `customactivityconfig` | Custom activity/app configuration UI |
@@ -844,6 +846,7 @@ runtime
 
 vdSM disconnects (network drop / dSS restart)
   └─ session ends → announcement state reset
+  └─ on_disconnect(host, reason) called (if set)
   └─ vdSM reconnects → full re-announcement cycle (automatic)
 
 shutdown
@@ -875,6 +878,7 @@ announce time:
 
 | Constraint | Explanation |
 |---|---|
+| **Disconnect notification** | When the vdSM connection is lost unexpectedly, the optional `on_disconnect(host, reason)` callback is called. `reason` is the exception that caused the disconnect, or `None` for a clean close. Not called when `host.stop()` initiated the disconnect. |
 | **One session at a time** | The VdcHost accepts one vdSM connection. A new connection closes the previous one. |
 | **announce() is final for structure** | Once a device is announced, add/remove vdSDs only via `device.update()` (vanish + re-announce). |
 | **modelFeatures are auto-derived at announce time** | Call `derive_model_features()` explicitly if you need to add or remove features before announcing. Features set via `add_model_feature()` before the call are preserved. |

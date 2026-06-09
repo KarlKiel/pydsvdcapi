@@ -1,6 +1,7 @@
 """Tests for the VdcSession protocol state machine."""
 
 import asyncio
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -885,3 +886,51 @@ class TestResponseCorrelation:
 
         with pytest.raises((asyncio.CancelledError, ConnectionError)):
             await req_task
+
+
+# ---------------------------------------------------------------------------
+# disconnect_reason attribute
+# ---------------------------------------------------------------------------
+
+
+class TestDisconnectReason:
+    async def test_disconnect_reason_initially_none(self):
+        """disconnect_reason must be None before the session runs."""
+        _, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        assert session.disconnect_reason is None
+
+    async def test_disconnect_reason_set_on_connection_error(self):
+        """ConnectionError during receive should be stored as disconnect_reason."""
+        _, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        exc = ConnectionResetError("connection reset by peer")
+        with patch.object(vdc, "receive", new_callable=AsyncMock, side_effect=exc):
+            await session.run()
+
+        assert isinstance(session.disconnect_reason, ConnectionResetError)
+        assert session.disconnect_reason is exc
+
+    async def test_disconnect_reason_set_on_incomplete_read(self):
+        """asyncio.IncompleteReadError during receive should be stored as disconnect_reason."""
+        _, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        exc = asyncio.IncompleteReadError(b"", 2)
+        with patch.object(vdc, "receive", new_callable=AsyncMock, side_effect=exc):
+            await session.run()
+
+        assert isinstance(session.disconnect_reason, asyncio.IncompleteReadError)
+        assert session.disconnect_reason is exc
+
+    async def test_disconnect_reason_none_on_clean_eof(self):
+        """Clean EOF (receive returns None) must leave disconnect_reason as None."""
+        _, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        # Simulate receive() returning None — the clean-EOF code path.
+        with patch.object(vdc, "receive", new_callable=AsyncMock, return_value=None):
+            await session.run()
+
+        assert session.disconnect_reason is None

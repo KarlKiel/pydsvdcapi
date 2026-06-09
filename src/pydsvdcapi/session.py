@@ -45,6 +45,7 @@ import asyncio
 import enum
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Final
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
@@ -53,6 +54,11 @@ logger = logging.getLogger(__name__)
 
 #: The API version implemented by this library.
 SUPPORTED_API_VERSION: int = 2
+
+#: Default inactivity watchdog timeout in seconds.  vdSM sends pings
+#: every ~45 s when the session is otherwise idle; 90 s ≈ 2× that
+#: interval gives a generous margin before declaring the connection dead.
+WATCHDOG_TIMEOUT_DEFAULT: Final[float] = 90.0
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +133,7 @@ class VdcSession:
         host_dsuid: str,
         on_message: MessageCallback | None = None,
         on_hello: HelloCallback | None = None,
+        watchdog_timeout: float = WATCHDOG_TIMEOUT_DEFAULT,
     ) -> None:
         self._conn = connection
         self._host_dsuid = host_dsuid
@@ -149,6 +156,15 @@ class VdcSession:
 
         # Ping/pong counter.
         self._ping_count: int = 0
+
+        # Inactivity watchdog: tracks time of last received message and
+        # closes the connection if nothing arrives within the timeout.
+        # 0 disables the watchdog.
+        self._watchdog_timeout: float = watchdog_timeout
+        self._last_activity: float = 0.0
+        self._watchdog_task: asyncio.Task[None] | None = None
+
+        self.disconnect_reason: Exception | None = None
 
     # ---- public properties -------------------------------------------
 
@@ -206,18 +222,25 @@ class VdcSession:
 
         This coroutine reads messages in a loop, dispatches them to the
         appropriate handler, and returns when the session terminates
-        (bye, connection loss, or :meth:`close`).
+        (bye, connection loss, watchdog timeout, or :meth:`close`).
         """
         logger.info("Session started for connection from %s", self._conn.peername)
+        loop = asyncio.get_running_loop()
+        self._last_activity = loop.time()
+        if self._watchdog_timeout > 0:
+            self._watchdog_task = asyncio.create_task(
+                self._run_watchdog(), name="vdc-watchdog"
+            )
         try:
             while self._state is not SessionState.CLOSED:
                 try:
                     msg = await self._conn.receive()
-                except asyncio.IncompleteReadError:
+                except asyncio.IncompleteReadError as exc:
                     logger.info(
                         "Connection from %s closed (incomplete read)",
                         self._conn.peername,
                     )
+                    self.disconnect_reason = exc
                     break
                 except (ConnectionError, ValueError) as exc:
                     logger.warning(
@@ -225,6 +248,7 @@ class VdcSession:
                         self._conn.peername,
                         exc,
                     )
+                    self.disconnect_reason = exc
                     break
 
                 if msg is None:
@@ -238,6 +262,9 @@ class VdcSession:
 
         finally:
             self._state = SessionState.CLOSED
+            if self._watchdog_task is not None:
+                self._watchdog_task.cancel()
+                self._watchdog_task = None
             # Cancel all pending outgoing requests.
             for future in self._pending_requests.values():
                 if not future.done():
@@ -249,6 +276,31 @@ class VdcSession:
                 self._conn.peername,
                 self._vdsm_dsuid or "<unknown>",
             )
+
+    async def _run_watchdog(self) -> None:
+        """Close the session if no message arrives within *watchdog_timeout* seconds."""
+        interval = max(10.0, self._watchdog_timeout / 3)
+        loop = asyncio.get_running_loop()
+        try:
+            while self._state is not SessionState.CLOSED:
+                await asyncio.sleep(interval)
+                if self._state is SessionState.CLOSED:
+                    break
+                elapsed = loop.time() - self._last_activity
+                if elapsed >= self._watchdog_timeout:
+                    logger.warning(
+                        "No message received from %s for %.0fs — closing dead session",
+                        self._conn.peername,
+                        elapsed,
+                    )
+                    self.disconnect_reason = TimeoutError(
+                        f"Inactivity watchdog: no message for {elapsed:.0f}s"
+                    )
+                    self._state = SessionState.CLOSED
+                    await self._conn.close()
+                    break
+        except asyncio.CancelledError:
+            pass
 
     # ---- close -------------------------------------------------------
 
@@ -270,6 +322,9 @@ class VdcSession:
 
         # Track the incoming message ID for the incrementing counter.
         self._track_message_id(msg.message_id)
+
+        # Update inactivity watchdog timestamp on every received message.
+        self._last_activity = asyncio.get_running_loop().time()
 
         # --- GENERIC_RESPONSE: correlate to a pending outgoing request
         if msg_type == pb.GENERIC_RESPONSE and msg.message_id > 0:

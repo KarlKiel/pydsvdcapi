@@ -46,12 +46,13 @@ configured components.  All have a confirmed data path back to the vdSD.
 
 ### Grey / Shade Rules (primaryGroup == 2)
 
-> **`shadeprops` and `motiontimefins` are NOT supported for VDC devices.**
+> **`shadeprops` and `motiontimefins` are not auto-derived.**
 > Both features open the "Device Properties Shade" panel which writes motor
 > travel/timing values via DS485 `setMaxMotionTime()` / `setMotionTime()`.
-> Those values are stored on the dSS side only — the VDC receives no
-> write-back and cannot react to the configuration.  Attempting to add either
-> feature with `add_model_feature()` raises `ValueError`.
+> The VDC receives no write-back of those values.  The features are **not
+> blocked** — add them manually via `add_model_feature()` if the device
+> supports motor timing configuration (e.g., devices that expose
+> `outputSettings` motor timing fields).
 
 | Trigger | Features added | Configurator UI |
 |---|---|---|
@@ -156,6 +157,8 @@ the dSS configurator.
 
 | Feature | UI description | Status / notes |
 |---|---|---|
+| `shadeprops` | "Device Properties Shade" panel — motor travel time configuration via dSS; writes motor timing to `outputSettings` fields on the VDC device | Not auto-derived; add manually for grey shade devices that expose motor timing `outputSettings` |
+| `motiontimefins` | Slat/fin rotation timing in the shade properties panel | Not auto-derived; add manually together with `shadeprops` when blade/slat angle channel is present |
 | `blinkconfig` | Configuration menu for BLINK behaviour | No vdSD property stores the config — behaviour may be stored on dSS/vdSM side |
 | `customtransitiontime` | Per-scene transition time configuration | No vdSD property stores the config — may be stored on dSS/vdSM; if confirmed working, consider raising a library issue to auto-derive it |
 | `consumptiontimer` | Consumption timer / run-time UI panel | Not tested for TCP/IP VDC; auto-derivation removed until confirmed |
@@ -175,7 +178,7 @@ the dSS configurator.
 The following features are **rejected with `ValueError`** when passed to
 `add_model_feature()`. They will also never be auto-derived.
 
-Three root causes explain why they cannot work on TCP/IP VDC devices:
+Two root causes explain why they cannot work on TCP/IP VDC devices:
 
 **A — Output-mode selectors write via DS485, not via VDC:**  
 The configurator UI calls `setDeviceConfig(CfgClassFunction, CfgFunction_Mode, value)`
@@ -188,12 +191,6 @@ on it.
 These features control physical hardware capabilities (LED indicators, dimmer
 hardware type, TKM button hardware) that have no corresponding VDC property or
 API interaction.
-
-**C — Shade motion-timing configuration writes via DS485, not via VDC:**  
-The shade properties panel calls `setMaxMotionTime()` and `setMotionTime()` over
-the DS485 bus to store travel and slat-rotation times in the dSS device model.
-**No `setVdcProperty()` call is made.** The VDC neither receives the values nor
-can react to or store them.
 
 | Feature | Why not supported |
 |---|---|
@@ -216,8 +213,6 @@ can react to or store them.
 | `grkl387workaround` | **(B)** Hardware workaround for specific KL 0x387 firmware bug — injected by dSS firmware for physical KL devices; meaningless for VDC |
 | `akminput` | **(B)** "Input" dropdown to configure sensor behaviour (standard / inverted...) — hardware specific, no handlers / properties in vdc-API |
 | `akmdelay` | **(B)** "Turn-on / Turn-off delay" timings dropdowns for delayed sensor response — hardware specific, no handlers / properties in vdc-API |
-| `shadeprops` | **(C)** "Device Properties Shade" panel — writes motor travel time via DS485 `setMaxMotionTime()`; stored on dSS only, VDC receives no write-back |
-| `motiontimefins` | **(C)** Slat/fin rotation timing in the shade properties panel — writes via DS485 `setMotionTime()`; same DS485-only path as `shadeprops` |
 
 ---
 
@@ -263,7 +258,7 @@ output.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
 device.set_output(output)
 # Auto-derived: dontcare, blink, shadeposition, shadebladeang,
 #               locationconfig, operationlock, windprotectionconfigblind
-# NOT derived:  shadeprops, motiontimefins (unsupported for TCP/IP VDC)
+# NOT derived:  shadeprops, motiontimefins (add manually if motor timing config needed)
 ```
 
 ### Grey — Roller Shutter / Awning
@@ -276,7 +271,7 @@ output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
 device.set_output(output)
 # Auto-derived: dontcare, blink, shadeposition, locationconfig,
 #               operationlock, windprotectionconfigawning
-# NOT derived:  shadeprops (unsupported for TCP/IP VDC)
+# NOT derived:  shadeprops (add manually if motor timing config needed)
 ```
 
 ### Blue — Heating Valve (ON/OFF)

@@ -215,3 +215,6 @@ docs/p44vdc-comparison.md
 # Examples pycache
 examples/__pycache__/
 .claude/settings.json
+
+# Git worktrees
+.worktrees/

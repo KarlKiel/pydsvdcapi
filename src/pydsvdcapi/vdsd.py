@@ -624,7 +624,7 @@ class Vdsd:
     _VENTILATION_CHANNEL_TYPES: frozenset = frozenset({12, 13, 14, 15, 20, 21})
 
     # Features that cannot be used with TCP/IP VDC devices and must never be
-    # declared.  Four root causes:
+    # declared.  Three root causes:
     #   1. Output-mode selectors (outmode, outmodeswitch, …) write to the dSS
     #      m_OutputMode field via DS485 CfgFunction_Mode.  The written value is
     #      never forwarded to the VDC, so VDC devices cannot observe or react
@@ -634,9 +634,8 @@ class Vdsd:
     #   3. AKM input configuration (akminput, akmdelay) writes to DS485 bus
     #      registers via setAKMInputProperty() / setAKMInputTimeouts(); the
     #      written values are never forwarded to the VDC.
-    #   4. Shade properties configuration (shadeprops, motiontimefins) triggers
-    #      setMaxMotionTime() / setMotionTime() DS485 calls whose results are
-    #      stored on the dSS side only; the VDC receives no write-back.
+    # Note: "shadeprops" and "motiontimefins" are NOT in this set — they are
+    # not auto-derived but may be added manually via add_model_feature().
     _UNSUPPORTED_MODEL_FEATURES: frozenset = frozenset(
         {
             # LED indicators — not API-controlled on VDC devices
@@ -665,11 +664,6 @@ class Vdsd:
             # AKM input/delay config — DS485 bus only, never reaches VDC
             "akminput",
             "akmdelay",
-            # Shade properties / motion timing — triggers setMaxMotionTime() /
-            # setMotionTime() DS485 calls; values stored on dSS only, VDC
-            # receives no write-back and cannot react to the configuration.
-            "shadeprops",
-            "motiontimefins",
         }
     )
 
@@ -709,7 +703,8 @@ class Vdsd:
           POSITIONAL (2) → ``"shadeposition"``; additionally
           ``channelType`` 9 or 10 present → ``"shadebladeang"``
           (``"shadeprops"`` and ``"motiontimefins"`` are **not**
-          auto-derived — they are unsupported for TCP/IP VDC devices)
+          auto-derived — add them manually via :meth:`add_model_feature`
+          if the device supports motor timing configuration)
         * ``primaryGroup`` ≠ 2 → ``"outvalue8"``
         * Both ``channelType`` 2 (HUE) and 3 (SATURATION) present, or
           both 1 (BRIGHTNESS) and 4 (COLOR_TEMPERATURE) present →
@@ -765,11 +760,11 @@ class Vdsd:
 
         Note: features in :attr:`_UNSUPPORTED_MODEL_FEATURES` are
         **never** auto-derived and will raise :exc:`ValueError` if
-        passed to :meth:`add_model_feature`.  This includes
-        ``"shadeprops"`` and ``"motiontimefins"`` — the shade properties
-        panel writes motor timing via DS485 ``setMaxMotionTime()`` /
-        ``setMotionTime()``; the VDC receives no write-back and cannot
-        react to those settings.  See
+        passed to :meth:`add_model_feature`.  ``"shadeprops"`` and
+        ``"motiontimefins"`` are **not** in that blocked set — they are
+        not auto-derived but may be added manually when the device
+        supports motor timing configuration (e.g. grey shade devices
+        with ``outputSettings`` motor timing fields).  See
         ``docs/model-features-auto-assignment.md`` for the full list and
         rationale.
         """
@@ -792,9 +787,8 @@ class Vdsd:
                 self._model_features.add("transt")
 
             # shade vs. normal output — determined by primaryGroup (ColorGroup.GREY=2)
-            # "shadeprops" and "motiontimefins" are NOT derived: they open the
-            # shade-properties panel which writes motor timing via DS485
-            # setMaxMotionTime()/setMotionTime(); the VDC receives no write-back.
+            # "shadeprops" and "motiontimefins" are NOT auto-derived; add them
+            # manually via add_model_feature() when motor timing config is needed.
             if pg == 2:  # ColorGroup.GREY — outdoor shade device
                 if fn == 2:  # OutputFunction.POSITIONAL
                     self._model_features.add("shadeposition")
@@ -878,14 +872,17 @@ class Vdsd:
 
         if pg == 2 and self._output is not None:  # ColorGroup.GREY
             self._model_features.add("locationconfig")
-            self._model_features.add("operationlock")
             ch_types_grey = {
                 int(ch.channel_type) for ch in self._output.channels.values()
             }
-            if ch_types_grey & {9, 10}:  # slat/angle channel → jalousie/blind
-                self._model_features.add("windprotectionconfigblind")
-            else:  # no slat channel → awning / roller blind
-                self._model_features.add("windprotectionconfigawning")
+            # Outdoor shade devices have channel type 7 (shadePositionOutside)
+            # or 9 (shadeOpeningAngleOutside); indoor devices use only 8/10.
+            if ch_types_grey & {7, 9}:
+                self._model_features.add("operationlock")
+                if ch_types_grey & {9}:  # outside slat/angle → jalousie/blind
+                    self._model_features.add("windprotectionconfigblind")
+                else:  # outdoor position only → awning / roller blind
+                    self._model_features.add("windprotectionconfigawning")
 
         if pg == 8:  # ColorGroup.BLACK — joker / configurable
             self._model_features.add("jokerconfig")
@@ -1553,11 +1550,41 @@ class Vdsd:
             "progMode": self.prog_mode,
             "currentConfigId": self.current_config_id,
         }
-        # modelFeatures — each enabled feature is a boolean True element.
-        if self._model_features:
-            props["modelFeatures"] = {f: True for f in sorted(self._model_features)}
-        else:
-            props["modelFeatures"] = {}
+        # modelFeatures — sorted by canonical ModelFeatureId enum index (as p44vdc).
+        _MODEL_FEATURE_ORDER = {
+            "dontcare": 0,
+            "blink": 1,
+            "transt": 4,
+            "outmode": 5,
+            "outmodeswitch": 6,
+            "outvalue8": 7,
+            "shadeposition": 15,
+            "shadebladeang": 18,
+            "consumption": 20,
+            "outputchannels": 26,
+            "heatingoutmode": 28,
+            "heatingprops": 29,
+            "pwmvalue": 30,
+            "blinkconfig": 34,
+            "umroutmode": 35,
+            "impulseconfig": 39,
+            "outmodegeneric": 40,
+            "outconfigswitch": 41,
+            "ventconfig": 47,
+            "consumptioneventled": 50,
+            "consumptiontimer": 51,
+            "dimtimeconfig": 53,
+            "outmodeauto": 54,
+            "outmodetempcontrol": 60,
+            "outmodeenoceanvalve": 61,
+        }
+        props["modelFeatures"] = {
+            f: True
+            for f in sorted(
+                self._model_features,
+                key=lambda x: _MODEL_FEATURE_ORDER.get(x, 999),
+            )
+        }
 
         # configurations (§4.1.1) — mandatory; empty dict when no profiles.
         props["configurations"] = {
@@ -1734,7 +1761,7 @@ class Vdsd:
 
             # Channel properties (§4.9 / §4.1.3).
             # Each sub-tree is a single PropertyElement whose children are
-            # keyed by channel name (e.g. "brightness", "colortemp").
+            # keyed by channel name (e.g. "brightness", "shadePositionOutside").
             ch_desc = self._output.get_channel_descriptions()
             if ch_desc:
                 props["channelDescriptions"] = ch_desc

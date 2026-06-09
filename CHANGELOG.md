@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for `POSITIONAL` (2) output function now use the **channel name** (e.g. `"shadePositionOutside"`) as the outer key, matching the p44vdc wire format.  The vdSM builds the OPC table from the `channelType` and `dsIndex` sub-element fields — not from the outer key — so channel names are correct here.  All three multi-channel output functions (POSITIONAL, DIMMER_COLOR_TEMP, FULL_COLOR_DIMMER) now consistently use channel names as container keys.
+- Removed S2 awning workaround in `examples/example_shading.py` (`name="0"` override); the example now uses the standard `add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)` call.
+
+### Added
+- `on_disconnect` callback parameter on `VdcHost.start()`: an optional async callback fired when the vdSM TCP connection is lost unexpectedly (network drop, dSS restart, etc.). Receives `(host: VdcHost, reason: Exception | None)` — `reason` is the exception that caused the disconnect, or `None` for a clean EOF / bye. The callback is **not** called when `host.stop()` initiates the disconnect.
+- `VdcSession.disconnect_reason: Exception | None` attribute — exposed after `session.run()` returns so callers can inspect what ended the session.
+- `shadeprops` and `motiontimefins` model features are no longer blocked: they have been moved from the unsupported set to the "not tested / add manually" category. Add them via `add_model_feature()` on grey shade devices that expose motor timing `outputSettings` fields.
+
 ## [0.8.8] - 2026-05-30
 
 ### Added

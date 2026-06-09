@@ -37,8 +37,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any, ClassVar
 
-from zeroconf import ServiceInfo
-from zeroconf.asyncio import AsyncZeroconf
+from zeroconf import ServiceInfo, ServiceListener
+from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
@@ -80,6 +80,12 @@ FirmwareUpgradeCallback = Callable[[str, bool, bool, dict[str, Any]], Awaitable[
 #: Callback for the ``setConfiguration`` GenericRequest method (§7.4.4).
 #: ``(dsuid, config_id, params) -> None``
 SetConfigurationCallback = Callable[[str, str, dict[str, Any]], Awaitable[None]]
+
+#: Callback invoked when the vdSM TCP connection is lost unexpectedly.
+#: Receives the :class:`VdcHost` instance and the exception that caused
+#: the disconnect (or ``None`` for a clean EOF / bye).
+#: Not called when :meth:`VdcHost.stop` initiated the disconnect.
+DisconnectCallback = Callable[["VdcHost", Exception | None], Awaitable[None]]
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +264,7 @@ class VdcHost:
         device_icon_16: bytes | None = None,
         device_icon_name: str | None = None,
         state_path: str | Path | None = None,
+        watchdog_timeout: float = 90.0,
     ) -> None:
         # --- persistence ----------------------------------------------
         self._store: PropertyStore | None = (
@@ -332,6 +339,9 @@ class VdcHost:
         self._on_authenticate: AuthenticateCallback | None = None
         self._on_firmware_upgrade: FirmwareUpgradeCallback | None = None
         self._on_set_configuration: SetConfigurationCallback | None = None
+        self._on_disconnect: DisconnectCallback | None = None
+        self._stopping: bool = False
+        self._watchdog_timeout: float = watchdog_timeout
 
         # --- vDC registry ---------------------------------------------
         self._vdcs: dict[str, Vdc] = {}  # keyed by dSUID string
@@ -753,6 +763,54 @@ class VdcHost:
 
     # ---- DNS-SD announcement -----------------------------------------
 
+    async def _evict_stale_vdc_entries(self, zc: AsyncZeroconf) -> None:
+        """Send mDNS goodbye packets for stale _ds-vdc._tcp entries on this host.
+
+        When a previous process was killed without a clean unannounce, its
+        mDNS entry lingers in vdSM's DNS-SD cache.  vdSM then connects using
+        the stale dSUID and disconnects immediately on Hello mismatch.
+
+        We browse for all _ds-vdc._tcp services on our own hostname and
+        unregister any whose dSUID differs from ours, which sends TTL=0
+        goodbye packets that flush the stale entry from all listeners.
+        """
+        own_dsuid = str(self._dsuid)
+        own_server = f"{_get_hostname()}.local."
+        # Collect service names from the sync listener callback; resolve info
+        # asynchronously afterwards to avoid the sync get_service_info() error.
+        discovered_names: list[str] = []
+
+        class _Listener(ServiceListener):
+            def add_service(self, zeroconf, type_, name) -> None:  # noqa: ARG002
+                discovered_names.append(name)
+
+            def update_service(self, *_) -> None:
+                pass
+
+            def remove_service(self, *_) -> None:
+                pass
+
+        browser = AsyncServiceBrowser(zc.zeroconf, VDC_SERVICE_TYPE, _Listener())
+        await asyncio.sleep(1.0)
+        await browser.async_cancel()
+
+        for name in discovered_names:
+            info = AsyncServiceInfo(VDC_SERVICE_TYPE, name)
+            await info.async_request(zc.zeroconf, timeout=500)
+            if info.server != own_server:
+                continue
+            entry_dsuid = (info.properties.get(b"dSUID") or b"").decode()
+            if not entry_dsuid or entry_dsuid == own_dsuid:
+                continue
+            logger.info(
+                "Evicting stale VDC host mDNS entry (dSUID %s) — sending goodbye",
+                entry_dsuid,
+            )
+            try:
+                await zc.async_unregister_service(info)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to evict stale mDNS entry: %s", exc)
+
     async def announce(self) -> None:
         """Announce this vDC host on the local network via DNS-SD.
 
@@ -786,6 +844,7 @@ class VdcHost:
         )
 
         self._zeroconf = AsyncZeroconf()
+        await self._evict_stale_vdc_entries(self._zeroconf)
         await self._zeroconf.async_register_service(self._service_info)
         logger.info(
             "Announced vDC host '%s' on port %d (dSUID %s)",
@@ -827,6 +886,7 @@ class VdcHost:
         on_authenticate: AuthenticateCallback | None = None,
         on_firmware_upgrade: FirmwareUpgradeCallback | None = None,
         on_set_configuration: SetConfigurationCallback | None = None,
+        on_disconnect: DisconnectCallback | None = None,
         announce: bool = True,
         bind_address: str = "0.0.0.0",
     ) -> None:
@@ -866,6 +926,12 @@ class VdcHost:
             Optional async callback for the ``setConfiguration``
             GenericRequest (§7.4.4).  Signature:
             ``(dsuid, config_id, params) -> None``.
+        on_disconnect:
+            Optional async callback invoked when the vdSM TCP connection
+            is lost unexpectedly (network drop, dSS restart, etc.).
+            Receives ``(host, reason)`` where *reason* is the exception
+            that caused the disconnect, or ``None`` for a clean EOF / bye.
+            **Not called** when :meth:`stop` initiated the disconnect.
         announce:
             If ``True`` (default) the DNS-SD service is announced
             automatically after the server starts listening.
@@ -884,6 +950,7 @@ class VdcHost:
         self._on_authenticate = on_authenticate
         self._on_firmware_upgrade = on_firmware_upgrade
         self._on_set_configuration = on_set_configuration
+        self._on_disconnect = on_disconnect
 
         self._server = await asyncio.start_server(
             self._handle_new_connection,
@@ -930,7 +997,11 @@ class VdcHost:
         await self.unannounce()
 
         # Close the active session.
-        await self._close_session()
+        self._stopping = True
+        try:
+            await self._close_session()
+        finally:
+            self._stopping = False
 
         # Shut down the TCP server.
         if self._server is not None:
@@ -971,6 +1042,7 @@ class VdcHost:
             host_dsuid=str(self._dsuid),
             on_message=self._dispatch_message,
             on_hello=self._on_session_ready,
+            watchdog_timeout=self._watchdog_timeout,
         )
         self._session = session
 
@@ -993,6 +1065,35 @@ class VdcHost:
             for vdc in self._vdcs.values():
                 vdc.reset_announcement()
             logger.info("Session with %s cleaned up", session.vdsm_dsuid)
+            if not self._stopping:
+                # Trigger re-announcement in background so vdSM can rediscover
+                # and reconnect to this host after a session ends unexpectedly.
+                asyncio.create_task(
+                    self._reannounce_after_disconnect(),
+                    name="vdc-reannounce",
+                )
+            if not self._stopping and self._on_disconnect is not None:
+                try:
+                    await self._on_disconnect(self, session.disconnect_reason)
+                except Exception:  # noqa: BLE001
+                    logger.exception("on_disconnect callback raised")
+
+    async def _reannounce_after_disconnect(self) -> None:
+        """Re-register the DNS-SD service after a session ends unexpectedly.
+
+        A brief pause followed by an unannounce/announce cycle makes the
+        vdSM see the service as new, prompting it to reconnect.
+        """
+        await asyncio.sleep(5.0)
+        if self._stopping:
+            return
+        try:
+            logger.info("Re-announcing after session disconnect")
+            await self.unannounce()
+            await asyncio.sleep(1.0)
+            await self.announce()
+        except Exception:  # noqa: BLE001
+            logger.exception("Re-announce after disconnect failed")
 
     async def _close_session(self) -> None:
         """Close the active session if there is one."""
@@ -1144,6 +1245,20 @@ class VdcHost:
                 return vdsd.get_properties()
         return None
 
+    def _resolve_entity_label(self, dsuid_str: str) -> str:
+        """Return a human-readable label for the entity with the given dSUID."""
+        dsuid_str = dsuid_str.upper()
+        if dsuid_str == str(self._dsuid):
+            return f"host({self.name})"
+        vdc = self._vdcs.get(dsuid_str)
+        if vdc is not None:
+            return f"vdc({vdc.name})"
+        for vdc in self._vdcs.values():
+            vdsd = vdc.get_vdsd_by_dsuid(DsUid.from_string(dsuid_str))
+            if vdsd is not None:
+                return f"vdsd({vdsd.name})"
+        return f"unknown({dsuid_str[:8]}…)"
+
     def _handle_get_property(self, msg: pb.Message) -> pb.Message:
         """Handle a ``VDSM_REQUEST_GET_PROPERTY``."""
         target_dsuid = msg.vdsm_request_get_property.dSUID
@@ -1158,16 +1273,54 @@ class VdcHost:
             resp.generic_response.description = f"Entity {target_dsuid} not found"
             return resp
 
+        def _fmt_query(elements, indent=0) -> str:
+            lines = []
+            for e in elements:
+                name = e.name or "<wildcard>"
+                sub = f" → [{_fmt_query(e.elements, indent + 1)}]" if e.elements else ""
+                lines.append("  " * indent + repr(name) + sub)
+            return ", ".join(lines)
+
+        entity_label = self._resolve_entity_label(target_dsuid)
         query_names = [
-            q.name or "<wildcard>" for q in msg.vdsm_request_get_property.query
+            e.name or "<wildcard>" for e in msg.vdsm_request_get_property.query
         ]
         logger.debug(
-            "getProperty for %s — %d query elements: %s",
-            target_dsuid,
-            len(msg.vdsm_request_get_property.query),
-            query_names,
+            "getProperty %s — query: [%s]",
+            entity_label,
+            _fmt_query(msg.vdsm_request_get_property.query),
         )
         resp = build_get_property_response(msg, props)
+        resp_names = [p.name for p in resp.vdc_response_get_property.properties]
+        logger.debug(
+            "getProperty %s — response: %s",
+            entity_label,
+            resp_names,
+        )
+
+        # Diagnostic: when channelDescriptions or outputDescription is queried,
+        # log detail so shade vs. light differences are visible at DEBUG level.
+        if logger.isEnabledFor(logging.DEBUG) and (
+            "channelDescriptions" in query_names or "outputDescription" in query_names
+        ):
+            out_desc = props.get("outputDescription", {})
+            ch_desc = props.get("channelDescriptions", {})
+            fn = out_desc.get("function", "?") if isinstance(out_desc, dict) else "?"
+            ch_info = (
+                {
+                    k: v.get("channelType", "?") if isinstance(v, dict) else "?"
+                    for k, v in ch_desc.items()
+                }
+                if isinstance(ch_desc, dict)
+                else "?"
+            )
+            logger.debug(
+                "getProperty %s — outputFunction=%s channelDescriptions=%s",
+                entity_label,
+                fn,
+                ch_info,
+            )
+
         return resp
 
     def _handle_set_property(self, msg: pb.Message) -> pb.Message:
@@ -1175,6 +1328,11 @@ class VdcHost:
         # Normalise to upper-case — the vdSM may send lower-case hex.
         target_dsuid = msg.vdsm_request_set_property.dSUID.upper()
         incoming = elements_to_dict(msg.vdsm_request_set_property.properties)
+        logger.debug(
+            "setProperty for %s — keys: %s",
+            target_dsuid,
+            list(incoming.keys()),
+        )
 
         resp = pb.Message()
         resp.type = pb.GENERIC_RESPONSE
@@ -1336,32 +1494,27 @@ class VdcHost:
                                 idx,
                             )
         # Channel states (§4.9.3) — dSS sends this via setProperty when
-        # the user or JSON API sets an output channel value directly
-        # (setVdcDeviceOutputChannelValues path).  Each child element is
-        # named by the channel name string (e.g. "brightness") and
-        # contains a "value" child with the new double.
+        # the user or JSON API sets an output channel value directly.
+        # The channel key may be the canonical name (API v3+, e.g.
+        # "brightness") or a numeric string (old API v1/v2 channelType, e.g.
+        # "1", or standard-channel alias "0").  channel_by_key() resolves all formats.
         if "channelStates" in incoming:
             ch_states = incoming["channelStates"]
             if isinstance(ch_states, dict):
                 output = getattr(vdsd, "output", None)
                 if output is not None:
-                    for ch_name, ch_data in ch_states.items():
+                    for ch_key, ch_data in ch_states.items():
                         if not isinstance(ch_data, dict):
                             continue
                         new_val = ch_data.get("value")
                         if new_val is None:
                             continue
-                        # Locate channel by name.
-                        channel_obj = None
-                        for ch in output.channels.values():
-                            if ch.name == ch_name:
-                                channel_obj = ch
-                                break
+                        channel_obj = output.channel_by_key(ch_key)
                         if channel_obj is None:
                             logger.warning(
                                 "setProperty channelStates: channel '%s' "
                                 "not found on vdSD %s",
-                                ch_name,
+                                ch_key,
                                 vdsd.dsuid,
                             )
                             continue
@@ -1370,12 +1523,10 @@ class VdcHost:
                             "setProperty channelStates: vdSD %s ch='%s' "
                             "val=%s (buffered)",
                             vdsd.dsuid,
-                            ch_name,
+                            ch_key,
                             new_val,
                         )
                     # apply_pending_channels is async; schedule it.
-                    import asyncio
-
                     asyncio.create_task(output.apply_pending_channels())
                     logger.info(
                         "vdSD '%s' channelStates updated via setProperty",
@@ -1621,6 +1772,14 @@ class VdcHost:
         if method == "scanDevices":
             # Re-announce the addressed vDC and all its devices.
             # Matches "scanDevices" and versioned variants (version stripped above).
+            #
+            # IMPORTANT: the OK response must be sent to the vdSM BEFORE we
+            # send any VDC_SEND_ANNOUNCE_* messages.  dSS will not respond to
+            # our announce requests until it has received our scanDevices OK,
+            # so doing the re-announcement inside the handler (before returning
+            # resp) creates a deadlock that manifests as a 30-second timeout.
+            # We therefore return OK immediately and re-announce in a
+            # background task.
             dsuid_upper = dsuid_str.upper()
             if dsuid_upper in self._vdcs:
                 vdcs_to_scan: list[Vdc] = [self._vdcs[dsuid_upper]]
@@ -1632,21 +1791,30 @@ class VdcHost:
                     f"scanDevices: vDC {dsuid_str} not found"
                 )
                 return resp
-            try:
-                for vdc in vdcs_to_scan:
+
+            async def _do_scan(
+                vdcs: list[Vdc],
+                sess: VdcSession,
+                target: str,
+            ) -> None:
+                for vdc in vdcs:
                     logger.info(
                         "scanDevices: re-announcing vDC '%s' (%s)",
                         vdc.name,
                         vdc.dsuid,
                     )
-                    vdc.reset_announcement()
-                    await vdc.announce(session)
-                    await vdc.announce_devices(session)
-                resp.generic_response.code = pb.ERR_OK
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("scanDevices failed for %s", dsuid_str)
-                resp.generic_response.code = pb.ERR_NOT_IMPLEMENTED
-                resp.generic_response.description = str(exc)
+                    try:
+                        vdc.reset_announcement()
+                        await vdc.announce(sess)
+                        await vdc.announce_devices(sess)
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "scanDevices: re-announcement failed for vDC %s",
+                            vdc.dsuid,
+                        )
+
+            asyncio.ensure_future(_do_scan(vdcs_to_scan, session, dsuid_str))
+            resp.generic_response.code = pb.ERR_OK
             return resp
 
         # Unknown generic request — delegate to user callback.
@@ -1757,10 +1925,7 @@ class VdcHost:
             # fall back to channel type (int).
             channel_obj = None
             if notif.channelId:
-                for ch in output.channels.values():
-                    if ch.name == notif.channelId:
-                        channel_obj = ch
-                        break
+                channel_obj = output.channel_by_key(notif.channelId)
             if channel_obj is None and notif.channel:
                 from pydsvdcapi.enums import OutputChannelType
 
@@ -1896,13 +2061,10 @@ class VdcHost:
                 )
                 continue
 
-            # Find the channel by name (channelId), fall back to int type.
+            # Find the channel by container key, name, or channel type.
             channel_obj = None
             if notif.channelId:
-                for ch in output.channels.values():
-                    if ch.name == notif.channelId:
-                        channel_obj = ch
-                        break
+                channel_obj = output.channel_by_key(notif.channelId)
             if channel_obj is None and notif.HasField("channel"):
                 # Look up by channel type (int).
                 from pydsvdcapi.enums import OutputChannelType

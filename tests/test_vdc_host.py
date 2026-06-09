@@ -1,5 +1,6 @@
 """Tests for the VdcHost class."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -234,6 +235,7 @@ class TestAutoMac:
 
 class TestAnnouncement:
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_announce_registers_service(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -257,6 +259,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_announce_twice_is_noop(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -275,6 +278,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_unannounce(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -298,6 +302,7 @@ class TestAnnouncement:
         assert not host.is_announced
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_service_contains_dsuid_txt(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -316,6 +321,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_custom_port_in_announcement(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -333,6 +339,7 @@ class TestAnnouncement:
         await host.unannounce()
 
     @pytest.mark.asyncio
+    @patch("pydsvdcapi.vdc_host.VdcHost._evict_stale_vdc_entries", new=AsyncMock())
     @patch("pydsvdcapi.vdc_host.AsyncZeroconf")
     async def test_service_name_uses_host_name(self, MockAsyncZC):
         mock_zc = MagicMock()
@@ -737,7 +744,13 @@ def _make_ok_session() -> MagicMock:
 
 
 class TestHandleScanDevicesGenericRequest:
-    """Tests for GenericRequest 'scanDevices' (and versioned variants)."""
+    """Tests for GenericRequest 'scanDevices' (and versioned variants).
+
+    Re-announcement runs in a background asyncio task so that the OK
+    response reaches dSS before any VDC_SEND_ANNOUNCE_* messages are
+    sent (avoids a request/response deadlock).  Tests therefore call
+    ``await asyncio.sleep(0)`` after dispatching to drain the task queue.
+    """
 
     @pytest.mark.asyncio
     async def test_scan_devices_reannounces_vdc_and_devices(self):
@@ -747,6 +760,7 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -761,6 +775,7 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid), method="scanDevices/6")
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -780,6 +795,7 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -805,6 +821,7 @@ class TestHandleScanDevicesGenericRequest:
         session = _make_ok_session()
         msg = _make_scan_devices_msg(str(host.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let background re-announce task fully complete
 
         assert resp.generic_response.code == pb.ERR_OK
         sent_types = [c.args[0].type for c in session.send_request.call_args_list]
@@ -825,8 +842,13 @@ class TestHandleScanDevicesGenericRequest:
         session.send_request.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_scan_devices_announce_failure_returns_not_implemented(self):
-        """If announce raises, scanDevices returns ERR_NOT_IMPLEMENTED."""
+    async def test_scan_devices_announce_failure_logged_not_propagated(self):
+        """Announce errors in the background task are logged, not returned.
+
+        scanDevices always returns ERR_OK immediately; any failure during
+        the async re-announcement is only logged so the dSS side always
+        gets a timely, successful response.
+        """
         host, vdc, _device, _vdsd = _make_host_with_device()
 
         # Make send_request raise on the VDC_SEND_ANNOUNCE_VDC call.
@@ -836,9 +858,10 @@ class TestHandleScanDevicesGenericRequest:
 
         msg = _make_scan_devices_msg(str(vdc.dsuid))
         resp = await host._dispatch_message(session, msg)
+        await asyncio.sleep(0.05)  # let the background task fail
 
-        assert resp.generic_response.code == pb.ERR_NOT_IMPLEMENTED
-        assert "dropped" in resp.generic_response.description
+        # OK is returned regardless — the caller must not be blocked on errors.
+        assert resp.generic_response.code == pb.ERR_OK
 
 
 # ---------------------------------------------------------------------------
@@ -1004,3 +1027,207 @@ class TestPendingVanishWiring:
 
         assert host._pending_vanish == set()
         assert vdc.get_device(device.dsuid) is None
+
+
+class TestDisconnectCallback:
+    """Tests for the on_disconnect callback mechanism."""
+
+    def test_disconnect_callback_type_exists(self):
+        from pydsvdcapi.vdc_host import DisconnectCallback
+
+        assert DisconnectCallback is not None
+
+    def test_stopping_flag_initially_false(self):
+        host = VdcHost(mac=TEST_MAC)
+        assert host._stopping is False
+
+    def test_on_disconnect_initially_none(self):
+        host = VdcHost(mac=TEST_MAC)
+        assert host._on_disconnect is None
+
+    @pytest.mark.asyncio
+    async def test_start_accepts_on_disconnect(self):
+        """on_disconnect parameter is accepted and stored."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+
+        async def on_disc(h, exc):
+            pass
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            await host.stop()
+
+        assert host._on_disconnect is on_disc
+
+    @pytest.mark.asyncio
+    async def test_callback_fires_on_unexpected_disconnect(self):
+        """Callback fires when session ends without stop() being called."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+        fired: list[tuple] = []
+
+        async def on_disc(h, exc):
+            fired.append((h, exc))
+
+        err = ConnectionResetError("peer reset")
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = err
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            await host._run_session(mock_session)
+            await host.stop()
+
+        assert len(fired) == 1
+        assert fired[0][0] is host
+        assert fired[0][1] is err
+
+    @pytest.mark.asyncio
+    async def test_callback_not_fired_when_stopping(self):
+        """Callback must NOT fire when stop() initiated the disconnect."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+        fired: list[tuple] = []
+
+        async def on_disc(h, exc):
+            fired.append((h, exc))
+
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = ConnectionResetError("peer reset")
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            host._stopping = True
+            await host._run_session(mock_session)
+            host._stopping = False
+            await host.stop()
+
+        assert fired == []
+
+    @pytest.mark.asyncio
+    async def test_callback_not_fired_when_no_callback_set(self):
+        """No error when on_disconnect is None and session ends."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = ConnectionResetError("peer reset")
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(announce=False)
+            await host._run_session(mock_session)
+            await host.stop()
+
+    @pytest.mark.asyncio
+    async def test_callback_receives_none_reason_on_clean_close(self):
+        """Callback fires with None reason for clean EOF."""
+        host = VdcHost(mac=TEST_MAC, port=0)
+        fired: list[tuple] = []
+
+        async def on_disc(h, exc):
+            fired.append((h, exc))
+
+        mock_session = MagicMock(spec=VdcSession)
+        mock_session.run = AsyncMock(return_value=None)
+        mock_session.disconnect_reason = None
+        mock_session.vdsm_dsuid = "test-dsuid"
+
+        with patch("pydsvdcapi.vdc_host.AsyncZeroconf"):
+            await host.start(on_disconnect=on_disc, announce=False)
+            await host._run_session(mock_session)
+            await host.stop()
+
+        assert len(fired) == 1
+        assert fired[0][1] is None
+
+
+class TestSetPropertyChannelStatesNumericKey:
+    """setProperty channelStates with old-format numeric key updates the channel."""
+
+    def _make_set_property_msg(self, dsuid_str: str, channel_key: str, value: float):
+        """Build a VDSM_REQUEST_SET_PROPERTY for channelStates with a numeric key."""
+        from pydsvdcapi.vdcapi_pb2 import PropertyElement
+
+        msg = pb.Message()
+        msg.type = pb.VDSM_REQUEST_SET_PROPERTY
+        msg.message_id = 1
+        msg.vdsm_request_set_property.dSUID = dsuid_str
+
+        channel_states = PropertyElement()
+        channel_states.name = "channelStates"
+
+        channel_elem = PropertyElement()
+        channel_elem.name = channel_key  # e.g. "1" (numeric channelType)
+
+        value_elem = PropertyElement()
+        value_elem.name = "value"
+        value_elem.value.v_double = value
+        channel_elem.elements.append(value_elem)
+        channel_states.elements.append(channel_elem)
+        msg.vdsm_request_set_property.properties.append(channel_states)
+        return msg
+
+    @pytest.mark.asyncio
+    async def test_setproperty_channelstates_numeric_channeltype_key(self):
+        """setProperty channelStates with key '1' (channelType=brightness) updates value."""
+        from pydsvdcapi.enums import OutputFunction
+        from pydsvdcapi.output import Output
+
+        host = VdcHost(mac=TEST_MAC)
+        vdc = Vdc(
+            host=host, implementation_id="test-vdc", name="Test VDC", model="test-model"
+        )
+        host.add_vdc(vdc)
+
+        dsuid = DsUid.from_name_in_space("dev-numeric-key", DsUidNamespace.VDC)
+        device = Device(vdc=vdc, dsuid=dsuid)
+        vdsd = Vdsd(
+            device=device,
+            primary_group=ColorGroup.YELLOW,
+            name="Dimmer",
+            model="dimmer-model",
+        )
+        device.add_vdsd(vdsd)
+        vdc.add_device(device)
+
+        output = Output(
+            vdsd=vdsd,
+            function=OutputFunction.DIMMER,
+            name="brightness",
+            default_group=1,
+            active_group=1,
+            groups={1},
+        )
+        channel_applied = AsyncMock()
+        output.on_channel_applied = channel_applied
+        vdsd.set_output(output)
+        vdsd._is_announced = True  # simulate announced state
+
+        dsuid_str = str(dsuid)
+        msg = self._make_set_property_msg(dsuid_str, "1", 80.0)
+
+        tasks = []
+        original_create_task = asyncio.create_task
+
+        def collect_task(coro):
+            task = original_create_task(coro)
+            tasks.append(task)
+            return task
+
+        with patch("pydsvdcapi.vdc_host.asyncio.create_task", side_effect=collect_task):
+            host._handle_set_property(msg)
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
+        # channel_by_key("1") must resolve to the brightness channel
+        brightness_ch = output.get_channel(0)
+        assert brightness_ch is not None
+        assert brightness_ch.name == "brightness"
+        assert output.channel_by_key("1") is brightness_ch
+        # The channel value must have been set to 80.0
+        # (apply_pending_channels clears the dict after applying, so we check the actual value)
+        assert brightness_ch.value == 80.0

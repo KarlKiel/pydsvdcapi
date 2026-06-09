@@ -59,7 +59,8 @@ Property exposure
 
 Three property sub-trees at the vdSD level (§4.1.3), each represented
 as a **single** ``PropertyElement`` whose children are keyed by the
-channel's **dsIndex** string (e.g. ``"0"``, ``"1"``):
+channel's **name** (e.g. ``"brightness"``, ``"colortemp"``,
+``"shadePositionOutside"``):
 
 * **channelDescriptions** — read-only metadata (name, channelType,
   dsIndex, min, max, resolution).
@@ -72,14 +73,10 @@ channel's **dsIndex** string (e.g. ``"0"``, ``"1"``):
 
    All three property sub-trees (``channelDescriptions``,
    ``channelSettings``, ``channelStates``) and push notifications use
-   the channel's **dsIndex** as the element key (e.g. ``"0"``, ``"1"``),
-   matching the p44vdc wire format.  The channel name is carried as the
-   ``name`` field *inside* each element.
-
-   The ``setOutputChannelValue`` notification from dSS carries the
-   channel name in the ``channelId`` field (API v3+), which is resolved
-   by name-matching in :class:`~pydsvdcapi.vdc_host.VdcHost` — this
-   is independent of the property key format.
+   the channel's **name** as the element key.  This matches the
+   ``channelId`` field that dSS sends in ``setOutputChannelValue``
+   notifications (API v3+), which :class:`~pydsvdcapi.vdc_host.VdcHost`
+   resolves by name.
 
 Persistence
 ~~~~~~~~~~~
@@ -134,6 +131,10 @@ class ChannelSpec:
         for dimensionless / boolean channels.
     symbol:
         Unit symbol (e.g. ``"%"``, ``"°"``).  Empty string when no unit.
+    enum_values:
+        For enum/discrete channels: mapping of integer value → name string
+        (e.g. ``{0: "off", 1: "on"}``).  ``None`` for continuous channels.
+        Emitted as the ``values`` container in ``channelDescriptions``.
     """
 
     name: str
@@ -142,6 +143,7 @@ class ChannelSpec:
     resolution: float
     siunit: str = ""
     symbol: str = ""
+    enum_values: dict[int, str] | None = None
 
 
 #: Metadata table for all standard channel types (vDC API §4.9.4).
@@ -263,6 +265,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=2,
         resolution=1,
+        enum_values={0: "supply", 1: "exhaust", 2: "both"},
     ),
     OutputChannelType.AIR_FLAP_POSITION: ChannelSpec(
         name="airFlapPosition",
@@ -285,12 +288,14 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=1,
         resolution=1,
+        enum_values={0: "off", 1: "auto"},
     ),
     OutputChannelType.AIR_FLOW_AUTO: ChannelSpec(
         name="airFlowAuto",
         min_value=0,
         max_value=1,
         resolution=1,
+        enum_values={0: "off", 1: "auto"},
     ),
     # -- Audio channels ------------------------------------------------
     OutputChannelType.AUDIO_VOLUME: ChannelSpec(
@@ -309,7 +314,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         resolution=150 / 255,
     ),
     OutputChannelType.WATER_FLOW_RATE: ChannelSpec(
-        name="waterFlowRate",
+        name="waterFlow",
         min_value=0,
         max_value=100,
         resolution=100 / 255,
@@ -319,6 +324,7 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         min_value=0,
         max_value=3,
         resolution=1,
+        enum_values={0: "off", 1: "on", 2: "standby", 3: "extendedStandby"},
     ),
     OutputChannelType.POWER_LEVEL: ChannelSpec(
         name="powerLevel",
@@ -341,6 +347,21 @@ CHANNEL_SPECS: dict[OutputChannelType, ChannelSpec] = {
         max_value=255,
         resolution=1,
     ),
+    # -- FCU proprietary channels (192–239) ----------------------------
+    OutputChannelType.FCU_OPERATION_MODE: ChannelSpec(
+        name="operationMode",
+        min_value=0,
+        max_value=255,
+        resolution=1,
+        enum_values={
+            0: "off",
+            1: "heating",
+            2: "cooling",
+            3: "fanOnly",
+            4: "dry",
+            5: "auto",
+        },
+    ),
 }
 
 
@@ -349,8 +370,7 @@ def get_channel_spec(
 ) -> ChannelSpec | None:
     """Look up the :class:`ChannelSpec` for a standard channel type.
 
-    Returns ``None`` for unknown / device-specific channel types
-    (ID ≥ 192).
+    Returns ``None`` for unknown / device-specific channel types.
     """
     if isinstance(channel_type, int) and not isinstance(
         channel_type, OutputChannelType
@@ -360,6 +380,24 @@ def get_channel_spec(
         except ValueError:
             return None
     return CHANNEL_SPECS.get(channel_type)
+
+
+#: Maps ColorClass application group ID → standard OutputChannelType for that class.
+#: Used to resolve channelType key "0" (ds-basics §7 table 7: "standard channel
+#: for the respective color class").
+COLOR_CLASS_STANDARD_CHANNEL: dict[int, OutputChannelType] = {
+    1: OutputChannelType.BRIGHTNESS,  # LIGHTS
+    2: OutputChannelType.SHADE_POSITION_OUTSIDE,  # BLINDS
+    3: OutputChannelType.HEATING_POWER,  # HEATING
+    4: OutputChannelType.AUDIO_VOLUME,  # AUDIO
+    5: OutputChannelType.AUDIO_VOLUME,  # VIDEO
+    9: OutputChannelType.COOLING_CAPACITY,  # COOLING
+    10: OutputChannelType.AIR_FLOW_INTENSITY,  # VENTILATION
+    12: OutputChannelType.AIR_FLOW_INTENSITY,  # RECIRCULATION
+    64: OutputChannelType.AIR_FLOW_INTENSITY,  # APARTMENT_VENTILATION
+    65: OutputChannelType.SHADE_POSITION_OUTSIDE,  # AWNINGS
+    69: OutputChannelType.AIR_FLOW_INTENSITY,  # APARTMENT_RECIRCULATION
+}
 
 
 # ---------------------------------------------------------------------------
@@ -685,9 +723,8 @@ class OutputChannel:
         """Return this channel's ``channelDescriptions`` value dict.
 
         The returned dict is used as the *value* of the element keyed by
-        :attr:`dsIndex` (the channel's integer index as a string) inside the
-        ``channelDescriptions`` property sub-tree (§4.9.1).  Keys match the
-        vDC API property names.
+        the channel's :attr:`name` inside the ``channelDescriptions`` property
+        sub-tree (§4.9.1).  Keys match the vDC API property names.
         """
         spec = get_channel_spec(self._channel_type)
         props: dict[str, Any] = {
@@ -702,15 +739,16 @@ class OutputChannel:
             props["siunit"] = spec.siunit
         if spec is not None and spec.symbol:
             props["symbol"] = spec.symbol
+        if spec is not None and spec.enum_values is not None:
+            props["values"] = {str(k): v for k, v in spec.enum_values.items()}
         return props
 
     def get_settings_properties(self) -> dict[str, Any]:
         """Return this channel's ``channelSettings`` value dict.
 
         The returned dict is used as the *value* of the element keyed by
-        :attr:`dsIndex` (the channel's integer index as a string) inside the
-        ``channelSettings`` property sub-tree (§4.9.2).  Currently no
-        per-channel settings are defined.
+        the channel's :attr:`name` inside the ``channelSettings`` property
+        sub-tree (§4.9.2).  Currently no per-channel settings are defined.
         """
         return {}
 
@@ -718,13 +756,12 @@ class OutputChannel:
         """Return this channel's ``channelStates`` value dict.
 
         The returned dict is used as the *value* of the element keyed by
-        :attr:`dsIndex` (the channel's integer index as a string) inside the
-        ``channelStates`` property sub-tree (§4.9.3).  Keys match the vDC API
-        property names.
+        the channel's :attr:`name` inside the ``channelStates`` property
+        sub-tree (§4.9.3).  Keys match the vDC API property names.
         """
         return {
-            "value": self._value,  # may be None (NULL)
-            "age": self.age,  # may be None (NULL)
+            "value": self._value if self._value is not None else 0.0,
+            "age": self.age,  # None → PropertyValue {} (null, not yet synced)
         }
 
     # ==================================================================
