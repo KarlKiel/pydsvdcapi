@@ -1817,7 +1817,9 @@ class Output:
         # for non-members) so the vdSM sees the full group-membership bitmap.
         settings["groups"] = {str(gid): (gid in self._groups) for gid in range(64)}
 
-        pg = int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
+        pg = (
+            int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
+        )
 
         # onThreshold: only for ON_OFF function (mandatory for function 0).
         if int(self._function) == int(OutputFunction.ON_OFF):
