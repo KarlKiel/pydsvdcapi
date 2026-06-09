@@ -1813,9 +1813,7 @@ class Output:
         if self._active_group is not None:
             settings["activeGroup"] = self._active_group
 
-        # Groups — emit all 64 IDs (p44vdc behaviour: true for members, false
-        # for non-members) so the vdSM sees the full group-membership bitmap.
-        settings["groups"] = {str(gid): (gid in self._groups) for gid in range(64)}
+        settings["groups"] = {str(gid): True for gid in sorted(self._groups)}
 
         pg = (
             int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
