@@ -20,6 +20,8 @@ Sources consulted:
 
 All comparisons are based on the property-tree structure as seen in `VDSM_REQUEST_GET_PROPERTY` responses and `VDC_SEND_PUSH_NOTIFICATION` messages.
 
+Last updated: 2026-06-15 (branch `Prepare-for-release-0.8.6`)
+
 ---
 
 ## 1. `outputDescription`
@@ -38,30 +40,29 @@ Fields returned (from `outputDescriptionProperties` static array in `outputbehav
 
 **Not present in p44vdc `outputDescription`**: `name`, `defaultGroup`, `activeCoolingMode`.
 
-### pydsvdcapi
+### pydsvdcapi (current)
 
-From `output.py` `get_description_properties()` (line 1492–1508):
+From `output.py` `get_description_properties()`:
 
 | Field name | Type | Notes |
 |---|---|---|
 | `function` | int | OutputFunction enum value |
 | `outputUsage` | int | OutputUsage enum value |
-| `name` | str | always included |
-| `defaultGroup` | int | always included |
 | `variableRamp` | bool | |
-| `maxPower` | double | only when not None |
-| `activeCoolingMode` | bool | only when not None |
+| `maxPower` | double | always present; `-1.0` when no value given |
+| `name` | str | **optional** — only when explicitly set |
+| `defaultGroup` | int | **optional** — only when explicitly set |
+| `activeCoolingMode` | bool | **optional** — only when explicitly set |
 
 ### Differences
 
 | Field | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| `name` | NOT present in `outputDescription` | ALWAYS present | WARN — dSS may ignore; no known error impact for output description |
-| `defaultGroup` | NOT present in `outputDescription` | ALWAYS present | WARN — dSS may ignore; no known error impact |
-| `activeCoolingMode` | NOT present in p44vdc source | Present when set | INFO — p44vdc extension pydsvdcapi borrowed, not in p44vdc core |
-| `x-p44-recommendedTransitionTime` | Present (p44 extension) | NOT present | INFO — p44-specific extension, not required by spec |
-
-**Assessment**: The extra fields pydsvdcapi sends (`name`, `defaultGroup`) are not in the p44vdc model but appear to be harmless — the vdSM ignores unknown fields in `outputDescription`. These fields are not the cause of grey-device errors.
+| `name` | NOT in `outputDescription` | Optional — only when set | INFO — no longer always injected; harmless when present |
+| `defaultGroup` | NOT in `outputDescription` | Optional — only when set | INFO — no longer always injected; harmless when present |
+| `activeCoolingMode` | NOT in base p44vdc | Optional — only when set | INFO — extension field, harmless |
+| `maxPower` | Present; omitted when no value | Always present (`-1.0` for "no value") | INFO — `-1.0` sentinel matches dSS expectation for "unknown" |
+| `x-p44-recommendedTransitionTime` | Present (p44 extension) | NOT present | INFO — p44-specific extension, not required |
 
 ---
 
@@ -80,44 +81,48 @@ Fields returned (from `outputSettingsProperties` in `outputbehaviour.cpp`):
 
 **Critical detail on `groups`**: In p44vdc the property system encodes `groups` as a `propflag_container` of `apivalue_bool` properties. In protobuf this means a `PropertyElement` named `"groups"` that contains child `PropertyElement`s, each child having its name = the group number (as string, e.g. `"1"`, `"2"`, `"3"`) and its value as a `v_bool`. Groups **not** in the membership have value `false`; groups **in** the membership have value `true`. The container emits ALL indices in the range 0–63 (the full bitmask width), including `false` entries.
 
-**Not present in p44vdc `outputSettings`**: `activeGroup`, `onThreshold`, `minBrightness`, `dimTimeUp`, `dimTimeDown`, `dimTimeUp/DownAlt1/2`, `heatingSystemCapability`, `heatingSystemType`.
+**Not present in p44vdc base `outputSettings`**: `activeGroup`, `onThreshold`. Light/climate/shadow-specific fields live in sub-behaviours (`LightBehaviour`, `HeatingBehaviour`, `ShadowBehaviour`).
 
-### pydsvdcapi
+**Shadow-specific fields** (from `ShadowBehaviour::accessField()`):
 
-From `output.py` `get_settings_properties()` (line 1510–1548):
+| Field | Type |
+|---|---|
+| `openTime` | `double` (seconds) |
+| `closeTime` | `double` (seconds) |
+| `angleOpenTime` | `double` (seconds) |
+| `angleCloseTime` | `double` (seconds) |
+| `stopDelayTime` | `double` (seconds) |
+
+### pydsvdcapi (current)
+
+From `output.py` `get_settings_properties()`:
 
 | Field name | Type | Notes |
 |---|---|---|
 | `mode` | int | OutputMode enum |
-| `activeGroup` | int | always present |
 | `pushChanges` | bool | |
-| `groups` | dict `{str: True}` | Only `true` entries; e.g. `{"1": True, "3": True}` |
-| `onThreshold` | double | only when not None |
-| `minBrightness` | double | only when not None |
-| `dimTimeUp/Down` + Alt1/Alt2 | int | only when not None |
-| `heatingSystemCapability` | int | only when not None |
-| `heatingSystemType` | int | only when not None |
+| `activeGroup` | int | **optional** — only when explicitly set |
+| `groups` | dict `{str: True}` | Only `true` entries emitted; e.g. `{"2": True}` |
+| `onThreshold` | double | only for `function == ON_OFF`; default `50.0` |
+| `minBrightness` | double | only when set **and** `primaryGroup == 1` (light) |
+| `dimTimeUp/Down` + Alt1/Alt2 | int | only when set and `primaryGroup == 1` |
+| `heatingSystemCapability` | int | only when set **and** `primaryGroup == 3` (climate) |
+| `heatingSystemType` | int | only when set and `primaryGroup == 3` |
+| `openTime` | double | only when set **and** `primaryGroup == 2` (shadow) |
+| `closeTime` | double | only when set and `primaryGroup == 2` |
+| `angleOpenTime` | double | only when set and `primaryGroup == 2` |
+| `angleCloseTime` | double | only when set and `primaryGroup == 2` |
+| `stopDelayTime` | double | only when set and `primaryGroup == 2` |
 
 ### Differences
 
 | Field | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| `groups` encoding | Boolean container — ALL indices 0–63 emitted (true/false) | Dict with only `true` entries | **WARN** — p44vdc emits both true and false entries; pydsvdcapi only emits true entries. The vdSM reads this correctly since missing = false, but write-back via `setProperty` may behave differently. Read direction: likely OK. |
-| `activeGroup` | NOT present in `outputSettings` | Always present | WARN — extra field; not known to cause errors |
+| `groups` encoding | Boolean container — ALL indices 0–63 emitted (true/false) | Only `true` entries emitted | INFO — vdSM treats missing entries as `false`; functionally equivalent for reading |
+| `activeGroup` | NOT in base `outputSettings` | Optional — only when set | INFO — extra field; not known to cause errors |
 | `x-p44-bridgePushInterval` | Present (p44 extension) | NOT present | INFO — p44 extension only |
-| Dimming/climate fields | NOT in base outputbehaviour (may be in sub-behaviour) | Present when set | INFO — sub-behaviour fields; may be in LightBehaviour for p44vdc |
-
-**Note on shadow devices**: For shadow/shade devices in p44vdc, `outputSettings` is handled by `ShadowBehaviour` and **adds** extra fields:
-
-| Field | p44vdc (ShadowBehaviour) | pydsvdcapi | Severity |
-|---|---|---|---|
-| `openTime` | `double` (seconds) — in `outputSettings` | NOT present | **WARN** — shadow-specific motor timing; if dSS sends this, pydsvdcapi ignores it |
-| `closeTime` | `double` (seconds) — in `outputSettings` | NOT present | WARN |
-| `angleOpenTime` | `double` (seconds) — in `outputSettings` | NOT present | WARN |
-| `angleCloseTime` | `double` (seconds) — in `outputSettings` | NOT present | WARN |
-| `stopDelayTime` | `double` (seconds) — in `outputSettings` | NOT present | WARN |
-
-These five shadow-specific settings fields are added by `ShadowBehaviour::accessField()` under the `settings_key_offset` domain. pydsvdcapi does not implement them. They are not a cause of errors during device announcement but will be missing when dSS reads back settings for grey devices.
+| `onThreshold` | Not in base outputbehaviour | Only for ON_OFF function | INFO — correct gating |
+| Shadow timing fields | In ShadowBehaviour | Present when set, gated on `primaryGroup == 2` | **FIXED** — now implemented |
 
 ---
 
@@ -131,7 +136,7 @@ From `channelDescProperties` in `channelbehaviour.cpp`:
 |---|---|---|
 | `name` | `string` | Channel name, e.g. `"brightness"`, `"shadePositionOutside"` |
 | `channelIndex` | `uint64` | **Deprecated in API v3+** — returns `mChannelIndex`; NOT returned for API version ≥ 3 |
-| `dsIndex` | `uint64` | Returns `mChannelIndex` (same value as channelIndex); always returned |
+| `dsIndex` | `uint64` | Returns `mChannelIndex`; always returned |
 | `channelType` | `uint64` | DsChannelType enum value |
 | `siunit` | `string` | SI unit name, e.g. `"percent"`, `"kelvin"`, `"degree"` |
 | `symbol` | `string` | Unit symbol string, e.g. `"%"`, `"K"`, `"°"` |
@@ -140,7 +145,33 @@ From `channelDescProperties` in `channelbehaviour.cpp`:
 | `resolution` | `double` | |
 | `values` | object/container | Enum values list — only present when `!REDUCED_FOOTPRINT` |
 
-**Key detail — element naming (keying)**: In p44vdc the channel description sub-tree is a container keyed by the **channel's `dsIndex` integer** (as string), not by channel name. Each child `PropertyElement` is named with the channel's numeric index (e.g. `"0"`, `"1"`), and within that element the `name` field carries the channel name string.
+**Key detail — element naming (keying)**: In p44vdc the channel container key is determined by `ChannelBehaviour::getApiId(aApiVersion)` (`channelbehaviour.cpp`), called from `Device::getDescriptorByIndex` for all three channel containers:
+
+```cpp
+string ChannelBehaviour::getApiId(int aApiVersion)
+{
+  if (aApiVersion>=3 && !mChannelId.empty()) {
+    return mChannelId;   // channel name string, e.g. "brightness", "shadePositionOutside"
+  }
+  else {
+    return string_format("%d", getChannelType());  // decimal channel TYPE (not dsIndex)
+  }
+}
+```
+
+- **API v3+** (current vdSM): key = channel **name string** (e.g. `"brightness"`, `"shadePositionOutside"`)
+- **API v2 and earlier**: key = decimal string of the **channel type enum** (e.g. `"1"` for `channeltype_brightness`) — **not** the dsIndex
+
+The `dsIndex` value (`mChannelIndex`) is **never** used as the container element key in any path. It appears only as a named field *inside* the channel's description object. This applies identically to `channelDescriptions`, `channelSettings`, and `channelStates`, for **all device classes** — verified:
+
+- `LightBehaviour`, `ShadowBehaviour`: no override
+- `ClimateControlBehaviour`: overrides only behaviour-level descriptors (`climatecontrol_key`), not channel container keys
+- `AudioBehaviour`/`AudioScene`: overrides only scene-level properties (`audioscene_key`), not channel keys
+- `CustomDevice`: no override of any channel key logic; inherits unchanged from `Device`
+
+**`VDC_SEND_ANNOUNCE_DEVICE`**: carries no property data at all — only `vdc_dSUID`. The vdSM then issues `getProperty` requests after acknowledgment, which go through the standard path above.
+
+**Incoming `setProperty`** (`Device::getDescriptorByName`): matches channel elements by the same `getApiId()` output — channel name string (API v3+), channel type decimal (API v2), or the literal `"0"` as a backward-compat alias for the first channel. `dsIndex` values are **not** a valid key for incoming property writes.
 
 **Shade channel specs (from `shadowbehaviour.hpp`)**:
 
@@ -153,48 +184,43 @@ From `channelDescProperties` in `channelbehaviour.cpp`:
 - Position channel: dsIndex = 0 (added first)
 - Angle channel: dsIndex = 1 (added second)
 
-### pydsvdcapi
+### pydsvdcapi (current)
 
-From `output_channel.py` `get_description_properties()` (line 622–636):
+From `output_channel.py` `get_description_properties()`:
 
 | Field name | Type | Notes |
 |---|---|---|
 | `name` | str | |
 | `channelType` | int | |
 | `dsIndex` | int | |
+| `siunit` | str | **FIXED** — now always present from `ChannelSpec` |
+| `symbol` | str | **FIXED** — now always present from `ChannelSpec` |
 | `min` | float | |
 | `max` | float | |
 | `resolution` | float | |
+| `values` | dict `{str: str}` | **NEW** — present for enum channels (e.g. FCU operation mode, power state) |
 
-**Key detail — element naming (keying)**: pydsvdcapi keys channel descriptions by **channel name** (e.g. `"shadePositionOutside"`), not by integer dsIndex. This is documented explicitly in `output_channel.py` docstring and `output.py` (lines 36–39).
+**Key detail — element naming (keying)**: pydsvdcapi keys channel containers by **channel name string** (e.g. `"shadePositionOutside"`), matching p44vdc's API v3+ behaviour. A backward-compat `_ChannelCompatDict` additionally resolves numeric keys (channel type decimal strings and `"0"` as default-channel alias) at `getProperty` time, covering the API v2 and legacy cases.
 
 **Shade channel specs** from `CHANNEL_SPECS` in `output_channel.py`:
 
-| Channel | `channelType` | name | min | max | resolution |
-|---|---|---|---|---|---|
-| SHADE_POSITION_OUTSIDE | enum value | `"shadePositionOutside"` | 0 | 100 | 100/255 ≈ 0.3922 |
-| SHADE_POSITION_INDOOR | enum value | `"shadePositionIndoor"` | 0 | 100 | 100/255 ≈ 0.3922 |
-| SHADE_OPENING_ANGLE_OUTSIDE | enum value | `"shadeOpeningAngleOutside"` | 0 | 100 | 100/255 ≈ 0.3922 |
-| SHADE_OPENING_ANGLE_INDOOR | enum value | `"shadeOpeningAngleIndoor"` | 0 | 100 | 100/255 ≈ 0.3922 |
+| Channel | `channelType` | name | min | max | resolution | siunit | symbol |
+|---|---|---|---|---|---|---|---|
+| SHADE_POSITION_OUTSIDE | enum value | `"shadePositionOutside"` | 0 | 100 | 100/65536 ≈ 0.001526 | `"percent"` | `"%"` |
+| SHADE_POSITION_INDOOR | enum value | `"shadePositionIndoor"` | 0 | 100 | 100/65536 ≈ 0.001526 | `"percent"` | `"%"` |
+| SHADE_OPENING_ANGLE_OUTSIDE | enum value | `"shadeOpeningAngleOutside"` | 0 | 100 | 100/65536 ≈ 0.001526 | `"percent"` | `"%"` |
+| SHADE_OPENING_ANGLE_INDOOR | enum value | `"shadeOpeningAngleIndoor"` | 0 | 100 | 100/65536 ≈ 0.001526 | `"percent"` | `"%"` |
 
 ### Differences
 
 | Field | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| Element key (container child name) | **Integer dsIndex as string** (e.g. `"0"`, `"1"`) | **Channel name string** (e.g. `"shadePositionOutside"`) | **CRITICAL** — This is the most fundamental structural difference; see discussion below |
-| `siunit` | Present — e.g. `"percent"` for shade channels | **NOT present** | **CRITICAL** — dSS firmware may rely on `siunit` to render units correctly |
-| `symbol` | Present — e.g. `"%"` for shade channels | **NOT present** | WARN — unit symbol for display |
+| Element key (container child name) | **Channel name string** for API v3+ (e.g. `"shadePositionOutside"`); channel type decimal for API v2 | **Channel name string** always; numeric compat layer covers type-decimal and `"0"` alias | None — identical for API v3+; compat layer covers older paths |
+| `siunit` | Present | **FIXED** — now always present | ~~CRITICAL~~ → resolved |
+| `symbol` | Present | **FIXED** — now always present | ~~CRITICAL~~ → resolved |
+| `values` | Present (enum list, non-reduced builds) | Present for enum channels | INFO — now implemented for discrete-value channels |
 | `channelIndex` | Present (deprecated, API < 3) | NOT present | INFO — deprecated field |
-| `resolution` | 100/65536 ≈ 0.001526 for shade channels | 100/255 ≈ 0.392 for shade channels | **WARN** — p44vdc uses higher-resolution 16-bit scale; pydsvdcapi uses 8-bit scale |
-| `values` | Present (enum value list, non-reduced builds) | NOT present | INFO — rarely needed |
-
-**CRITICAL discussion on element key format**:
-
-The comment in `pydsvdcapi/output.py` lines 36–39 says that using channel name as key was intentional to fix a `deviceOutputIndex:255` error. However, p44vdc itself uses the integer dsIndex as the element key. The vdSM uses `getChannelById()` in p44vdc to resolve `channelId` strings — this works because the channel *name* field **inside** the element (not the element key) is used for lookup, while the **element key** is the numeric index.
-
-The vdSM therefore sees `channelDescriptions` keyed by integers (p44vdc) vs keyed by names (pydsvdcapi). This discrepancy likely does not cause a direct crash, but:
-- For grey/shade devices specifically, the dSS firmware does position/angle lookups by channel type or channel name from within the descriptor element — which pydsvdcapi correctly provides.
-- However, if dSS iterates the container expecting integer keys and tries to use them as indices, it would fail silently or produce wrong results with pydsvdcapi's name keys.
+| `resolution` (shade) | 100/65536 ≈ 0.001526 | **FIXED** — 100/65536 ≈ 0.001526 | ~~WARN~~ → resolved |
 
 ---
 
@@ -204,15 +230,13 @@ The vdSM therefore sees `channelDescriptions` keyed by integers (p44vdc) vs keye
 
 From `channelbehaviour.cpp`: Settings properties are **empty** (`numSettingsProperties = 0`). No fields defined.
 
-### pydsvdcapi
-
-From `output_channel.py` `get_settings_properties()` (line 638–645):
+### pydsvdcapi (current)
 
 Returns an **empty dict** `{}` for all channels.
 
 ### Differences
 
-None — both return empty settings. No difference.
+None — both return empty settings.
 
 ---
 
@@ -225,23 +249,21 @@ From `channelStateProperties` in `channelbehaviour.cpp`:
 | Field name | Type | Notes |
 |---|---|---|
 | `value` | `double` | Current channel value; `null` when unknown |
-| `age` | `double` | Seconds since last hardware sync as double; `null` when `mChannelLastSync==Never` or value is volatile |
+| `age` | `double` | Seconds since last hardware sync; `null` when `mChannelLastSync==Never` or volatile |
 | `x-p44-transitional` | `double` | Intermediate value during transition (p44 extension) |
 | `x-p44-transitiontimeleft` | `double` | Remaining transition time (p44 extension) |
 | `x-p44-progress` | `double` | Transition completion % (p44 extension) |
 
-**No `error` field** in channel states. Error lives in `outputState` at the output level, not per channel.
+**No `error` field** in channel states — error lives in `outputState` at the output level.
 
-**`age` semantics**: `age` is `null` (not `0`) when the value was never confirmed, or when `mChannelLastSync` is `Never`. When a value has been confirmed, `age` is `(MainLoop::now() - mChannelLastSync) / Second` as a double.
+### pydsvdcapi (current)
 
-### pydsvdcapi
-
-From `output_channel.py` `get_state_properties()` (line 647–657):
+From `output_channel.py` `get_state_properties()`:
 
 | Field name | Type | Notes |
 |---|---|---|
 | `value` | float or None | `None` when unknown → serialised as null |
-| `age` | float or None | `time.monotonic() - _last_update` when known; `None` when `_last_update is None` |
+| `age` | float or None | `time.monotonic() - _last_update` when known; `None` when never set |
 
 ### Differences
 
@@ -250,10 +272,7 @@ From `output_channel.py` `get_state_properties()` (line 647–657):
 | `x-p44-transitional` | Present (p44 extension) | NOT present | INFO — p44 extension only |
 | `x-p44-transitiontimeleft` | Present (p44 extension) | NOT present | INFO — p44 extension only |
 | `x-p44-progress` | Present (p44 extension) | NOT present | INFO — p44 extension only |
-| `age` null semantics | `null` when never confirmed | `None` (null) when `_last_update is None` | INFO — same semantics, consistent |
-| `error` | NOT in channelStates (only in outputState) | NOT in channelStates | None — both agree |
-
-**Assessment**: Channel states match well between p44vdc and pydsvdcapi. The only differences are p44-specific extension fields that pydsvdcapi does not include. This area is unlikely to cause errors.
+| `age` null semantics | `null` when never confirmed | `None` (null) when `_last_update is None` | INFO — same semantics |
 
 ---
 
@@ -261,21 +280,21 @@ From `output_channel.py` `get_state_properties()` (line 647–657):
 
 ### p44vdc
 
-p44vdc sends push notifications via `pushOutputState()` / `reportOutputState()`. The pushed property tree for a channel state update contains:
+p44vdc sends push notifications via `pushNotification` → `accessProperty` with the same API version as regular `getProperty` responses. The pushed property tree for a channel state update contains:
 
 ```
 changedproperties:
   PropertyElement(name="channelStates"):
-    PropertyElement(name="<dsIndex>"):   ← integer string, e.g. "0"
+    PropertyElement(name="<channelId>"):   ← channel name string for API v3+ (e.g. "shadePositionOutside")
       PropertyElement(name="value", value=<double>)
       PropertyElement(name="age", value=<double>)
 ```
 
-The element key within `channelStates` is the **integer dsIndex** (as string, e.g. `"0"` for the position channel), consistent with how `getProperty` responses are structured.
+The element key is produced by the same `Device::getDescriptorByIndex` → `getApiId(aApiVersion)` path as `getProperty`. For API v3+ this is the **channel name string**.
 
-### pydsvdcapi
+### pydsvdcapi (current)
 
-From `output.py` `_push_channel_state()` (line 1408–1453):
+From `output.py` `_push_channel_state()`:
 
 ```python
 push_tree = {
@@ -285,26 +304,16 @@ push_tree = {
 }
 ```
 
-The element key within `channelStates` is the **channel name string** (e.g. `"shadePositionOutside"`).
+The element key within `channelStates` is the **channel name string**.
 
 ### Differences
 
 | Aspect | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| `channelStates` child element key in push | Integer dsIndex as string, e.g. `"0"` | Channel name string, e.g. `"shadePositionOutside"` | **CRITICAL** for grey devices — see discussion |
+| `channelStates` child element key in push | Channel name string for API v3+ (e.g. `"shadePositionOutside"`) | Channel name string (e.g. `"shadePositionOutside"`) | None — identical for API v3+ |
 | Properties pushed | `value`, `age` | `value`, `age` | None |
 
-**CRITICAL discussion on push notification key format for grey devices**:
-
-This is the most likely root cause of errors on grey (shade) devices:
-
-- The vdSM (dSS firmware) receives a `VDC_SEND_PUSH_NOTIFICATION` for `channelStates`.
-- It tries to match the child element name against its registered channel lookup table.
-- For yellow (dimmer/CT/RGB) devices: p44vdc uses `"0"` for brightness. dSS may look up channel index 0 and find the brightness channel. When pydsvdcapi sends `"brightness"`, dSS may also accept this because it falls back to name lookup — explaining why yellow devices work.
-- For grey (shade) devices: p44vdc uses `"0"` for position, `"1"` for angle. If dSS does integer-index matching, pydsvdcapi's `"shadePositionOutside"` key will not match index `"0"`, causing the push to be silently ignored or logged as `deviceOutputIndex:255`.
-- However, the pydsvdcapi comment in `output.py` line 39 states that switching *to* name-keying fixed the `deviceOutputIndex:255` errors. This suggests dSS for API v3+ does support name-keyed lookup. The discrepancy vs p44vdc may be in which API version the push notification uses.
-
-**Conclusion**: The key format difference exists but may be intentional in pydsvdcapi. The `deviceOutputIndex:255` errors users see are more likely caused by item 3 (missing `siunit` in channelDescriptions) or item 7 (channelId matching in setOutputChannelValue) than by the push key format.
+**Note**: Earlier analysis incorrectly stated p44vdc uses `dsIndex` as the push key. The actual p44vdc source (`pushNotification` → `accessProperty` → `Device::getDescriptorByIndex` → `getApiId()`) returns the channel name string for API v3+, identical to pydsvdcapi.
 
 ---
 
@@ -320,13 +329,9 @@ In `customdevice.cpp`, channel resolution for `setOutputChannelValue` uses three
 
 `getChannelById()` matches on the channel's **name string** (the `channelId` in the notification).
 
-In `outputbehaviour.cpp`, the `getChannelById()` implementation iterates all channels and returns the first one where `cb->getChannelId() == aId`. The `getChannelId()` of a channel returns its **name string** (e.g. `"shadePositionOutside"`).
+### pydsvdcapi (current)
 
-The `VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE` protobuf message has a `channelId` field that carries the channel name string (API v3+) and a `channel` field that carries the integer type (API v1/v2).
-
-### pydsvdcapi
-
-From `vdc_host.py` `_handle_set_output_channel_value()` (line 1868–1938):
+From `vdc_host.py` `_handle_set_output_channel_value()`:
 
 ```python
 # Priority 1: channelId (name string)
@@ -346,15 +351,13 @@ if channel_obj is None and notif.HasField("channel"):
 
 | Aspect | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| channelId lookup priority | index → type → id (name) | name (channelId) → type | INFO — functionally equivalent for API v3+; index-based is not supported in pydsvdcapi |
-| Index-based fallback | Supported (`"index"` field) | NOT supported | INFO — deprecated path; not used by modern vdSM |
-| Name matching | `getChannelId()` = channel name string | `ch.name == notif.channelId` | None — same result |
-
-**Assessment**: Channel lookup for `setOutputChannelValue` is functionally equivalent for API v3+ (which uses `channelId` = name string). The missing index-based lookup is a deprecated fallback and not the cause of grey device errors.
+| channelId lookup priority | index → type → id (name) | name (channelId) → type | INFO — functionally equivalent for API v3+; integer-index path is deprecated |
+| Index-based fallback | Supported | NOT supported | INFO — deprecated path; not used by modern vdSM |
+| Name matching | `getChannelId()` = channel name | `ch.name == notif.channelId` | None — same result |
 
 ---
 
-## 8. `outputState` (formerly `outputState` vs `outputState`)
+## 8. `outputState`
 
 ### p44vdc
 
@@ -367,21 +370,25 @@ From `outputStateProperties` in `outputbehaviour.cpp`:
 
 **No `error` field in outputState in base OutputBehaviour.**
 
-### pydsvdcapi
+### pydsvdcapi (current)
 
-From `output.py` `get_state_properties()` (line 1550–1558):
+From `output.py` `get_state_properties()`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `localPriority` | bool | |
-| `error` | int | OutputError enum value |
+| `transitionTime` | double | **FIXED** — now present |
+| `error` | int | OutputError enum value; extra field not in p44vdc base |
+
+**Note**: `movingState` was present in earlier pydsvdcapi versions but has been **removed** — it was never part of the VDC API spec and not emitted by p44vdc.
 
 ### Differences
 
 | Field | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| `transitionTime` | Present (double, seconds) | NOT present | WARN — dSS may read this to track active transitions |
-| `error` | NOT in base outputState | Always present (int) | **WARN** — pydsvdcapi sends an extra `error` field; not expected by dSS; likely harmless but non-standard |
+| `transitionTime` | Present | **FIXED** — now present | ~~WARN~~ → resolved |
+| `error` | NOT in base outputState | Always present | INFO — extra field; likely harmless |
+| `movingState` | NOT in VDC API | **REMOVED** | resolved — no longer emitted |
 
 ---
 
@@ -389,32 +396,40 @@ From `output.py` `get_state_properties()` (line 1550–1558):
 
 ### p44vdc
 
-`modelFeatures` is encoded in the property tree as a **boolean container array** (`apivalue_object + propflag_container`). Each enabled feature is a child element named by the feature name string with a boolean `true` value. p44vdc iterates over `numModelFeatures` known features in order.
+`modelFeatures` is encoded as a **boolean container array** (`apivalue_object + propflag_container`). Each enabled feature is a child element named by the feature name string with a boolean `true` value. p44vdc iterates features in canonical `ModelFeatureId` enum order (from `modelconst.h`).
 
-### pydsvdcapi
+### pydsvdcapi (current)
 
-From `vdsd.py` `get_properties()` (line 1556–1560):
+From `vdsd.py` `get_properties()`:
 
 ```python
-props["modelFeatures"] = {f: True for f in sorted(self._model_features)}
+_MODEL_FEATURE_ORDER = {
+    "dontcare": 0, "blink": 1, "transt": 4, "outmode": 5, ...
+}
+props["modelFeatures"] = {
+    f: True
+    for f in sorted(self._model_features, key=lambda x: _MODEL_FEATURE_ORDER.get(x, 999))
+}
 ```
 
-An object (dict) where each key is the feature name string and each value is `True`. Absent features are simply not included.
+An object (dict) where each key is the feature name string and each value is `True`. Absent features are not emitted. Order follows the canonical `ModelFeatureId` enum index from `modelconst.h`.
 
 ### Differences
 
 | Aspect | p44vdc | pydsvdcapi | Severity |
 |---|---|---|---|
-| Absent features | Explicitly emitted as `false` values (full container) | Not emitted at all | WARN — Functionally equivalent since absent = false, but dSS may iterate a fixed set |
-| Feature ordering | Fixed canonical order by enum index | Alphabetical sort | INFO — irrelevant to semantics |
+| Absent features | Explicitly emitted as `false` (full container) | Not emitted | INFO — absent = false; functionally equivalent |
+| Feature ordering | Canonical enum index order | **FIXED** — now canonical enum index order | ~~INFO~~ → resolved |
 
 ---
 
 ## 10. `groups` in `outputSettings` — encoding detail
 
-This is a known subtlety. p44vdc emits `groups` as a container of 64 boolean values (indices 0–63), with `true` for member groups and `false` for non-member groups. pydsvdcapi emits only the `true` entries as a dict.
+p44vdc emits `groups` as a container of 64 boolean values (indices 0–63), with `true` for member groups and `false` for non-member groups. pydsvdcapi emits only the `true` entries.
 
-For **write-back** via `setProperty`, the vdSM sends group membership changes as individual `{index: bool}` entries. pydsvdcapi handles this correctly in `apply_settings()`. For **read** via `getProperty`, pydsvdcapi sends only true entries; this should be fine as the vdSM initialises group membership from the true entries.
+For **write-back** via `setProperty`, the vdSM sends group membership changes as individual `{index: bool}` entries — pydsvdcapi handles this correctly in `apply_settings()`. For **read** via `getProperty`, pydsvdcapi sends only true entries; the vdSM correctly infers non-listed groups as non-members.
+
+Emitting all 64 entries was tested and found to cause excessive individual `groupMembership` queries from the vdSM (64 per device), significantly slowing announcement. The true-only format was deliberately retained.
 
 ---
 
@@ -433,64 +448,50 @@ Key fields sent in `VDC_SEND_ANNOUNCE_DEVICE` / `getProperty` response for a dev
 | `model` | |
 | `hardwareGuid` | |
 | `vendorName` | |
-| `modelFeatures` | bool container, see section 9 |
+| `modelFeatures` | bool container — canonical order |
 | `outputDescription` | single object |
 | `outputSettings` | single object |
 | `outputState` | single object |
-| `channelDescriptions` | container keyed by integer dsIndex |
-| `channelSettings` | container keyed by integer dsIndex |
-| `channelStates` | container keyed by integer dsIndex |
+| `channelDescriptions` | container keyed by channel name string (API v3+) or channel type decimal (API v2) |
+| `channelSettings` | container keyed by channel name string (API v3+) or channel type decimal (API v2) |
+| `channelStates` | container keyed by channel name string (API v3+) or channel type decimal (API v2) |
 
-### pydsvdcapi
+### pydsvdcapi (current)
 
-Same top-level fields, with differences noted above. Channel containers are keyed by channel name instead of integer dsIndex.
-
----
-
-## Summary: Most Critical Differences
-
-### CRITICAL
-
-1. **`siunit` and `symbol` missing from `channelDescriptions`** (section 3):
-   p44vdc sends `siunit` (e.g. `"percent"`) and `symbol` (e.g. `"%"`) for every channel. pydsvdcapi omits these entirely. The dSS firmware uses `siunit` to validate channel value ranges and to display units in the UI. For grey devices, missing `siunit` on shade channels may cause the dSS to reject or misinterpret the channel descriptors.
-
-2. **`resolution` value differs significantly for shade channels** (section 3):
-   p44vdc uses `100/65536 ≈ 0.001526` (16-bit precision) for shade position and angle channels. pydsvdcapi uses `100/255 ≈ 0.392` (8-bit precision). A higher-resolution value from p44vdc allows finer positioning. If dSS firmware validates that transmitted values are multiples of resolution, pydsvdcapi's coarser resolution could trigger rounding errors.
-
-3. **Push notification key format discrepancy** (section 6):
-   p44vdc keys `channelStates` children by integer dsIndex; pydsvdcapi keys by channel name. While pydsvdcapi's approach appears to work for yellow devices (confirmed by users), the root of the `deviceOutputIndex:255` errors on grey devices may lie in this area if the dSS firmware uses different code paths for grey (shade) vs yellow (light) channel state updates.
-
-### WARN
-
-4. **`openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime` missing** (section 2):
-   These shadow-specific settings fields are present in p44vdc's `ShadowBehaviour` and are part of `outputSettings` for grey devices. pydsvdcapi does not include them. If dSS firmware tries to read motor timing from these fields and they are absent, it falls back to defaults, which should be non-fatal. If dSS writes these fields, pydsvdcapi's `apply_settings()` silently ignores them.
-
-5. **`transitionTime` missing from `outputState`** (section 8):
-   pydsvdcapi does not include `transitionTime` in `outputState`. The dSS may read this to track whether a transition is in progress (especially relevant for position-based shade movements). This could cause the dSS shade control logic to mis-time movements.
-
-6. **`error` extra field in `outputState`** (section 8):
-   pydsvdcapi always sends `error: 0` in outputState. p44vdc base does not include this field. Likely harmless but non-standard.
-
-7. **`groups` encoding in `outputSettings`** (section 10):
-   p44vdc sends all 64 group indices (true/false). pydsvdcapi sends only true entries. Functionally equivalent for reading but different in wire format.
-
-### INFO
-
-8. Extra fields in `outputDescription` (`name`, `defaultGroup`) — harmless.
-9. Missing p44-specific extension fields (`x-p44-recommendedTransitionTime`, `x-p44-bridgePushInterval`, `x-p44-transitional`, `x-p44-transitiontimeleft`, `x-p44-progress`) — not required.
-10. `channelIndex` (deprecated) missing — correct for API v3+.
-11. `values` (enum value list) missing from channelDescriptions — rarely used.
+Same top-level fields. Channel containers are keyed by channel name (with numeric-key backward-compat resolution via `_ChannelCompatDict`).
 
 ---
 
-## Recommended Fixes (Priority Order)
+## Summary: Current Status
 
-1. **Add `siunit` and `symbol` to `channelDescriptions`** in `OutputChannel.get_description_properties()`. Shade channels should report `siunit="percent"`, `symbol="%"`. Light channels: `brightness` → `siunit="percent"`, `symbol="%"`; `colortemp` → `siunit="reciprocal megakelvin"`, `symbol="mired"`; `hue` → `siunit="degree"`, `symbol="°"`.
+### Resolved (previously CRITICAL/WARN)
 
-2. **Review `resolution` for shade channels**: Consider whether the p44vdc value of `100/65536` is more appropriate than `100/255`. The spec likely expects this to match the hardware's actual positioning granularity.
+1. ~~**`siunit` and `symbol` missing from `channelDescriptions`**~~ — **FIXED**: now always present from `ChannelSpec`.
 
-3. **Add `transitionTime` to `outputState`**: Add a `transitionTime` field (float, seconds, current active transition duration) to `Output.get_state_properties()`.
+2. ~~**`transitionTime` missing from `outputState`**~~ — **FIXED**: now present.
 
-4. **Investigate push notification key format**: Verify experimentally whether grey-device push failures are due to the name vs integer key in `channelStates` push notifications.
+3. ~~**Shadow timing fields missing from `outputSettings`**~~ — **FIXED**: `openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime` now implemented, gated on `primaryGroup == 2`.
 
-5. **Add shadow-specific outputSettings fields**: Add `openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime` as optional float fields to `Output` (and handle them in `apply_settings()`), to match what p44vdc's ShadowBehaviour exposes.
+4. ~~**`name` and `defaultGroup` always in `outputDescription`**~~ — **FIXED**: now optional, only when explicitly set.
+
+5. ~~**`activeGroup` always in `outputSettings`**~~ — **FIXED**: now optional, only when explicitly set.
+
+6. ~~**`modelFeatures` order was alphabetical**~~ — **FIXED**: now sorted by canonical `ModelFeatureId` enum index.
+
+7. ~~**`movingState` in `outputState`**~~ — **REMOVED**: was non-standard, never in VDC API spec.
+
+### Remaining Differences
+
+| # | Area | p44vdc | pydsvdcapi | Severity |
+|---|---|---|---|---|
+| A | `groups` encoding | All 64 entries (true/false) | True entries only | INFO — functionally equivalent; full-64 deliberately avoided (performance) |
+| B | `resolution` for shade channels | 100/65536 ≈ 0.001526 | 100/65536 ≈ 0.001526 | ~~WARN~~ → resolved |
+| C | Channel container key | Channel name string (API v3+); channel type decimal (API v2) | Channel name string; compat layer handles type-decimal and `"0"` alias | None — identical for API v3+ |
+| D | `values` in channelDescriptions | All channels | Enum channels only | INFO — correctly scoped |
+| E | `error` in `outputState` | NOT present | Always present | INFO — extra field, harmless |
+| F | p44-specific extension fields | Present | NOT present | INFO — not required |
+| G | `channelIndex` (deprecated) | Present (API < 3) | NOT present | INFO — correct for API v3+ |
+
+### No open items
+
+All previously identified CRITICAL and WARN differences have been resolved. The remaining differences (A, C–G) are all INFO-level and either deliberate design choices or non-standard extras that are harmless in practice.

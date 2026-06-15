@@ -524,10 +524,7 @@ class TestOutputSettingsProperties:
         assert settings["mode"] == int(OutputMode.GRADUAL)
         assert settings["activeGroup"] == 1
         assert settings["pushChanges"] is False
-        # groups now always has 64 entries (all IDs 0-63); only group 1 is True
-        assert settings["groups"]["1"] is True
-        assert len(settings["groups"]) == 64
-        assert all(v is False for k, v in settings["groups"].items() if k != "1")
+        assert settings["groups"] == {"1": True}
         assert "onThreshold" not in settings
         assert "minBrightness" not in settings
 
@@ -537,16 +534,7 @@ class TestOutputSettingsProperties:
         settings = out.get_settings_properties()
 
         assert "groups" in settings
-        # groups always has 64 entries; groups 1, 3, 5 are True
-        assert settings["groups"]["1"] is True
-        assert settings["groups"]["3"] is True
-        assert settings["groups"]["5"] is True
-        assert len(settings["groups"]) == 64
-        assert all(
-            v is False
-            for k, v in settings["groups"].items()
-            if k not in ("1", "3", "5")
-        )
+        assert settings["groups"] == {"1": True, "3": True, "5": True}
 
     def test_with_all_optional_fields(self):
         # vdsd is YELLOW (primaryGroup=1) — light-specific settings are emitted
@@ -1491,12 +1479,11 @@ class TestOutputExport:
 class TestOutputEdgeCases:
     """Edge cases and boundary conditions."""
 
-    def test_empty_groups_all_false(self):
+    def test_empty_groups_returns_empty_dict(self):
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd, groups=set())
         settings = out.get_settings_properties()
-        assert len(settings["groups"]) == 64
-        assert all(v is False for v in settings["groups"].values())
+        assert settings["groups"] == {}
 
     def test_empty_groups_not_in_tree(self):
         host, vdc, device, vdsd = _make_stack()
@@ -1514,12 +1501,8 @@ class TestOutputEdgeCases:
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd, groups={10, 3, 7, 1})
         settings = out.get_settings_properties()
-        # groups always has 64 entries (0-63); keys are numeric-string sorted
-        assert settings["groups"]["1"] is True
-        assert settings["groups"]["3"] is True
-        assert settings["groups"]["7"] is True
-        assert settings["groups"]["10"] is True
-        assert len(settings["groups"]) == 64
+        keys = list(settings["groups"].keys())
+        assert keys == ["1", "3", "7", "10"]
 
     def test_on_off_output(self):
         """Basic on/off output (relay, socket)."""

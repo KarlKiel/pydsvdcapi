@@ -265,6 +265,85 @@ class TestOutputChannelConstruction:
         assert ch.max_value == 100.0
         assert ch.resolution == 1.0
 
+    def test_custom_channel_siunit_symbol_enum_values(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=240,  # Custom/proprietary type
+            ds_index=0,
+            name="operatingMode",
+            min_value=0,
+            max_value=3,
+            resolution=1,
+            siunit="",
+            symbol="",
+            enum_values={0: "off", 1: "heating", 2: "cooling", 3: "auto"},
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "operatingMode"
+        assert desc["min"] == 0
+        assert desc["max"] == 3
+        assert "siunit" not in desc  # empty string → omitted
+        assert "symbol" not in desc
+        assert desc["values"] == {
+            "0": "off",
+            "1": "heating",
+            "2": "cooling",
+            "3": "auto",
+        }
+
+    def test_custom_channel_siunit_symbol_in_description(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=241,
+            ds_index=0,
+            name="powerLevel",
+            min_value=0,
+            max_value=5000,
+            resolution=1,
+            siunit="watt",
+            symbol="W",
+        )
+        desc = ch.get_description_properties()
+        assert desc["siunit"] == "watt"
+        assert desc["symbol"] == "W"
+        assert "values" not in desc  # no enum_values given
+
+    def test_predefined_channel_ignores_siunit_symbol_enum_values_params(self):
+        # Predefined channel: spec is authoritative; caller params for
+        # siunit/symbol/enum_values must be silently ignored.
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+            siunit="kelvin",  # must be ignored
+            symbol="K",  # must be ignored
+            enum_values={0: "x"},  # must be ignored
+        )
+        desc = ch.get_description_properties()
+        assert desc["siunit"] == "percent"  # from spec
+        assert desc["symbol"] == "%"  # from spec
+        assert "values" not in desc  # spec has no enum_values
+
+    def test_predefined_enum_channel_ignores_enum_values_param(self):
+        # FCU_OPERATION_MODE is a predefined enum channel.
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.FCU_OPERATION_MODE,
+            ds_index=0,
+            enum_values={0: "wrong"},  # must be ignored
+        )
+        desc = ch.get_description_properties()
+        assert desc["values"]["0"] == "off"  # from spec, not "wrong"
+        assert desc["values"]["1"] == "heating"
+
     def test_repr(self):
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd)
@@ -860,6 +939,75 @@ class TestChannelPersistence:
         assert tree["min"] == 0
         assert tree["max"] == 100
         assert "resolution" in tree
+        # Predefined channel: siunit/symbol are stored (from spec).
+        assert tree["siunit"] == "percent"
+        assert tree["symbol"] == "%"
+        assert "enumValues" not in tree  # brightness has no discrete values
+
+    def test_custom_channel_property_tree_persists_siunit_symbol_enum_values(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=240,
+            ds_index=0,
+            name="myMode",
+            min_value=0,
+            max_value=3,
+            resolution=1,
+            siunit="",
+            symbol="",
+            enum_values={0: "off", 1: "on", 2: "eco"},
+        )
+        tree = ch.get_property_tree()
+        assert "siunit" not in tree  # empty string → not persisted
+        assert "symbol" not in tree
+        assert tree["enumValues"] == {"0": "off", "1": "on", "2": "eco"}
+
+    def test_custom_channel_siunit_symbol_persisted_and_restored(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch1 = OutputChannel(
+            output=out,
+            channel_type=241,
+            ds_index=0,
+            name="powerWatts",
+            min_value=0,
+            max_value=5000,
+            resolution=1,
+            siunit="watt",
+            symbol="W",
+        )
+        tree = ch1.get_property_tree()
+        assert tree["siunit"] == "watt"
+        assert tree["symbol"] == "W"
+
+        # Restore into a new instance and verify description.
+        ch2 = OutputChannel(output=out, channel_type=241, ds_index=0)
+        ch2._apply_state(tree)
+        desc = ch2.get_description_properties()
+        assert desc["siunit"] == "watt"
+        assert desc["symbol"] == "W"
+
+    def test_custom_channel_enum_values_round_trip(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch1 = OutputChannel(
+            output=out,
+            channel_type=242,
+            ds_index=0,
+            name="operMode",
+            min_value=0,
+            max_value=2,
+            resolution=1,
+            enum_values={0: "off", 1: "heat", 2: "cool"},
+        )
+        tree = ch1.get_property_tree()
+
+        ch2 = OutputChannel(output=out, channel_type=242, ds_index=0)
+        ch2._apply_state(tree)
+        desc = ch2.get_description_properties()
+        assert desc["values"] == {"0": "off", "1": "heat", "2": "cool"}
 
     def test_channel_apply_state(self):
         _, _, _, vdsd = _make_stack()

@@ -418,14 +418,28 @@ class OutputChannel:
         Zero-based ``dsIndex`` within the device.  Index 0 is the
         default / primary channel.
     name:
-        Human-readable label.  Defaults to the spec name for the
-        channel type, or ``"channel_<dsIndex>"`` for custom types.
+        Protocol-level channel name.  Defaults to the spec name for
+        predefined types, or ``"channel_<dsIndex>"`` for custom types.
+        Ignored for predefined types when *name* matches the spec name;
+        callers may supply a custom label for predefined types if
+        needed, but the spec name is strongly preferred.
     min_value:
         Override the standard minimum value.
     max_value:
         Override the standard maximum value.
     resolution:
         Override the standard resolution.
+    siunit:
+        SI unit name (e.g. ``"percent"``, ``"kelvin"``).  Only used for
+        custom channel types — predefined types always use the spec value.
+    symbol:
+        Unit symbol (e.g. ``"%"``, ``"K"``).  Only used for custom
+        channel types — predefined types always use the spec value.
+    enum_values:
+        Discrete value mapping ``{int: str}`` for enum/mode channels
+        (e.g. ``{0: "off", 1: "on"}``).  Only used for custom channel
+        types — predefined types always use the spec value.  When set,
+        emitted as the ``values`` container in ``channelDescriptions``.
     """
 
     def __init__(
@@ -438,6 +452,9 @@ class OutputChannel:
         min_value: float | None = None,
         max_value: float | None = None,
         resolution: float | None = None,
+        siunit: str | None = None,
+        symbol: str | None = None,
+        enum_values: dict[int, str] | None = None,
     ) -> None:
         self._output: Output = output
 
@@ -474,6 +491,17 @@ class OutputChannel:
         self._resolution: float = float(
             resolution if resolution is not None else (spec.resolution if spec else 1.0)
         )
+
+        # Predefined channels: spec is authoritative for unit/symbol/values.
+        # Custom channels: use caller-supplied values.
+        if spec is not None:
+            self._siunit: str = spec.siunit
+            self._symbol: str = spec.symbol
+            self._enum_values: dict[int, str] | None = spec.enum_values
+        else:
+            self._siunit = siunit or ""
+            self._symbol = symbol or ""
+            self._enum_values = enum_values
 
         # ---- volatile state (NOT persisted) --------------------------
         self._value: float | None = None
@@ -726,7 +754,6 @@ class OutputChannel:
         the channel's :attr:`name` inside the ``channelDescriptions`` property
         sub-tree (§4.9.1).  Keys match the vDC API property names.
         """
-        spec = get_channel_spec(self._channel_type)
         props: dict[str, Any] = {
             "name": self._name,
             "channelType": int(self._channel_type),
@@ -735,12 +762,12 @@ class OutputChannel:
             "max": self._max_value,
             "resolution": self._resolution,
         }
-        if spec is not None and spec.siunit:
-            props["siunit"] = spec.siunit
-        if spec is not None and spec.symbol:
-            props["symbol"] = spec.symbol
-        if spec is not None and spec.enum_values is not None:
-            props["values"] = {str(k): v for k, v in spec.enum_values.items()}
+        if self._siunit:
+            props["siunit"] = self._siunit
+        if self._symbol:
+            props["symbol"] = self._symbol
+        if self._enum_values is not None:
+            props["values"] = {str(k): v for k, v in self._enum_values.items()}
         return props
 
     def get_settings_properties(self) -> dict[str, Any]:
@@ -782,6 +809,12 @@ class OutputChannel:
             "max": self._max_value,
             "resolution": self._resolution,
         }
+        if self._siunit:
+            node["siunit"] = self._siunit
+        if self._symbol:
+            node["symbol"] = self._symbol
+        if self._enum_values is not None:
+            node["enumValues"] = {str(k): v for k, v in self._enum_values.items()}
         if self._uplink_converter_code is not None:
             node["uplinkConverter"] = self._uplink_converter_code
         if self._downlink_converter_code is not None:
@@ -817,6 +850,12 @@ class OutputChannel:
             self._max_value = float(state["max"])
         if "resolution" in state:
             self._resolution = float(state["resolution"])
+        if "siunit" in state:
+            self._siunit = str(state["siunit"])
+        if "symbol" in state:
+            self._symbol = str(state["symbol"])
+        if "enumValues" in state:
+            self._enum_values = {int(k): str(v) for k, v in state["enumValues"].items()}
         # Converters
         if "uplinkConverter" in state:
             self.set_uplink_converter(state["uplinkConverter"])

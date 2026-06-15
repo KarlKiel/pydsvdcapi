@@ -1021,6 +1021,9 @@ class Output:
         min_value: float | None = None,
         max_value: float | None = None,
         resolution: float | None = None,
+        siunit: str | None = None,
+        symbol: str | None = None,
+        enum_values: dict[int, str] | None = None,
     ) -> OutputChannel:
         """Add a channel to this output.
 
@@ -1032,6 +1035,9 @@ class Output:
             Zero-based index.  Auto-assigned (next free) if omitted.
         name, min_value, max_value, resolution:
             Override defaults from :data:`CHANNEL_SPECS`.
+        siunit, symbol, enum_values:
+            Unit metadata and discrete value mapping for custom channel
+            types.  Ignored for predefined types (spec values are used).
 
         Returns
         -------
@@ -1058,6 +1064,9 @@ class Output:
             min_value=min_value,
             max_value=max_value,
             resolution=resolution,
+            siunit=siunit,
+            symbol=symbol,
+            enum_values=enum_values,
         )
         self._channels[ds_index] = channel
         self._ensure_scene_channel_entries()
@@ -1813,9 +1822,7 @@ class Output:
         if self._active_group is not None:
             settings["activeGroup"] = self._active_group
 
-        # Groups — emit all 64 IDs (p44vdc behaviour: true for members, false
-        # for non-members) so the vdSM sees the full group-membership bitmap.
-        settings["groups"] = {str(gid): (gid in self._groups) for gid in range(64)}
+        settings["groups"] = {str(gid): True for gid in sorted(self._groups)}
 
         pg = (
             int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
