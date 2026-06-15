@@ -7,14 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for `POSITIONAL` (2) output function now use the **channel name** (e.g. `"shadePositionOutside"`) as the outer key, matching the p44vdc wire format.  The vdSM builds the OPC table from the `channelType` and `dsIndex` sub-element fields — not from the outer key — so channel names are correct here.  All three multi-channel output functions (POSITIONAL, DIMMER_COLOR_TEMP, FULL_COLOR_DIMMER) now consistently use channel names as container keys.
-- Removed S2 awning workaround in `examples/example_shading.py` (`name="0"` override); the example now uses the standard `add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)` call.
+## [0.8.9] - 2026-06-15
 
 ### Added
 - `on_disconnect` callback parameter on `VdcHost.start()`: an optional async callback fired when the vdSM TCP connection is lost unexpectedly (network drop, dSS restart, etc.). Receives `(host: VdcHost, reason: Exception | None)` — `reason` is the exception that caused the disconnect, or `None` for a clean EOF / bye. The callback is **not** called when `host.stop()` initiates the disconnect.
 - `VdcSession.disconnect_reason: Exception | None` attribute — exposed after `session.run()` returns so callers can inspect what ended the session.
 - `shadeprops` and `motiontimefins` model features are no longer blocked: they have been moved from the unsupported set to the "not tested / add manually" category. Add them via `add_model_feature()` on grey shade devices that expose motor timing `outputSettings` fields.
+- `FCU_OPERATION_MODE` channel type added to `OutputChannelType` enum and `CHANNEL_SPECS`, with correct enum `values` (`off`, `heating`, `cooling`, `fanOnly`, `dry`, `auto`).
+- `COLOR_CLASS_STANDARD_CHANNEL` mapping added to `output_channel.py` — maps application group ID to the standard `OutputChannelType` for that group (e.g. group 1 → `BRIGHTNESS`, group 2 → `SHADE_POSITION_OUTSIDE`). Used for resolving channel-type key `"0"` per ds-basics §7.
+- `values` container emitted in `channelDescriptions` for all enum/discrete channels: `AIR_FLOW_DIRECTION`, `AIR_LOUVER_AUTO`, `AIR_FLOW_AUTO`, `POWER_STATE`, `FCU_OPERATION_MODE`. String keys, string values (e.g. `{"0": "off", "1": "on"}`).
+- `OutputChannel` and `Output.add_channel()` now accept `siunit`, `symbol`, and `enum_values` parameters for fully custom channel types. For predefined types the spec is always authoritative; for device-specific channel types these parameters control what is emitted in `channelDescriptions` and what is persisted to YAML.
+- `_ChannelCompatDict` backward-compatibility layer: `getProperty` requests for `channelDescriptions`, `channelSettings`, and `channelStates` now resolve numeric keys (channel type decimal strings such as `"1"`, and the special `"0"` alias for the primary channel) in addition to the canonical channel name keys, covering API v2 and legacy lookup paths.
+
+### Fixed
+- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for **all** output functions now use the **channel name string** (e.g. `"shadePositionOutside"`, `"brightness"`) as the outer key, matching p44vdc API v3+ wire format. Includes `POSITIONAL`, `DIMMER_COLOR_TEMP`, and `FULL_COLOR_DIMMER`. Numeric key backward-compatibility is handled transparently via `_ChannelCompatDict`.
+- Removed S2 awning workaround in `examples/example_shading.py` (`name="0"` override); the example now uses the standard `add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)` call.
+- `modelFeatures` property now emitted in canonical `ModelFeatureId` enum order (from `modelconst.h`) instead of alphabetical order, matching p44vdc.
+- `movingState` removed from `outputState` — it was not part of the vDC API spec and was never emitted by p44vdc.
+- `waterFlow` channel name corrected (`WATER_FLOW_RATE` spec name was missing; now `"waterFlow"`).
+- `outputSettings` shadow timing fields (`openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime`) are now correctly gated on `primaryGroup == 2` (shade/blind devices), not emitted for other device classes.
+- `outputSettings` light-specific fields (`minBrightness`, `dimTimeUp`, `dimTimeDown`, `dimTimeUpAlt1`, `dimTimeDownAlt1`, `dimTimeUpAlt2`, `dimTimeDownAlt2`) are correctly gated on `primaryGroup == 1`.
+- `outputSettings` climate fields (`heatingSystemCapability`, `heatingSystemType`) are correctly gated on `primaryGroup == 3`.
 
 ## [0.8.8] - 2026-05-30
 
@@ -126,6 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DsUid` — dSUID encoding/decoding with multiple creation strategies.
 - Property handling helpers (`build_get_property_response`, etc.).
 
+[0.8.9]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.4...v0.8.6
