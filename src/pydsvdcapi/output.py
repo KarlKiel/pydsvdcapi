@@ -1021,6 +1021,9 @@ class Output:
         min_value: float | None = None,
         max_value: float | None = None,
         resolution: float | None = None,
+        siunit: str | None = None,
+        symbol: str | None = None,
+        enum_values: dict[int, str] | None = None,
     ) -> OutputChannel:
         """Add a channel to this output.
 
@@ -1032,6 +1035,9 @@ class Output:
             Zero-based index.  Auto-assigned (next free) if omitted.
         name, min_value, max_value, resolution:
             Override defaults from :data:`CHANNEL_SPECS`.
+        siunit, symbol, enum_values:
+            Unit metadata and discrete value mapping for custom channel
+            types.  Ignored for predefined types (spec values are used).
 
         Returns
         -------
@@ -1058,6 +1064,9 @@ class Output:
             min_value=min_value,
             max_value=max_value,
             resolution=resolution,
+            siunit=siunit,
+            symbol=symbol,
+            enum_values=enum_values,
         )
         self._channels[ds_index] = channel
         self._ensure_scene_channel_entries()
