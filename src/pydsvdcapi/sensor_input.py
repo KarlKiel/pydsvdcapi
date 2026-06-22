@@ -75,7 +75,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -97,6 +97,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+
+#: Type alias for the sensor-input-settings-changed callback.
+#: ``async def callback(sensor_input: SensorInput, changed: dict[str, Any]) -> None``
+SensorInputSettingsChangedCallback = Callable[
+    ["SensorInput", dict[str, Any]],
+    Coroutine[Any, Any, None],
+]
 
 # ---------------------------------------------------------------------------
 # SensorInput
@@ -233,6 +244,7 @@ class SensorInput:
 
         # ---- push throttling / alive timer state ---------------------
         self._session: VdcSession | None = None
+        self._on_settings_changed: SensorInputSettingsChangedCallback | None = None
         self._last_push_time: float | None = None
         self._last_pushed_state: tuple | None = None
         self._alive_timer_handle: asyncio.TimerHandle | None = None
@@ -600,6 +612,15 @@ class SensorInput:
                 self._changes_only_interval,
             )
             self._schedule_auto_save()
+
+    @property
+    def on_settings_changed(self) -> SensorInputSettingsChangedCallback | None:
+        """Callback invoked when the vdSM writes ``sensorSettings``."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(self, callback: SensorInputSettingsChangedCallback | None) -> None:
+        self._on_settings_changed = callback
 
     # ---- persistence -------------------------------------------------
 
