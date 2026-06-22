@@ -586,6 +586,54 @@ class BinaryInput:
                 exc,
             )
 
+    async def push_settings(self, session: VdcSession | None = None) -> None:
+        """Push the current ``binaryInputSettings`` to the vdSM.
+
+        Sends a ``VDC_SEND_PUSH_NOTIFICATION`` carrying the full
+        ``binaryInputSettings`` subtree for this input.  A no-op if no
+        session is active or the vdSD is not announced.
+        """
+        session = session or self._session
+        if session is None:
+            logger.debug(
+                "BinaryInput[%d]: no active session — skipping push_settings",
+                self._ds_index,
+            )
+            return
+        if not self._vdsd.is_announced:
+            logger.debug(
+                "BinaryInput[%d]: vdSD not announced — skipping push_settings",
+                self._ds_index,
+            )
+            return
+
+        settings_dict = self.get_settings_properties()
+        push_tree: dict[str, Any] = {
+            "binaryInputSettings": {str(self._ds_index): settings_dict}
+        }
+
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._vdsd.dsuid)
+        for elem in dict_to_elements(push_tree):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+
+        try:
+            await session.send_notification(msg)
+            logger.debug(
+                "BinaryInput[%d] '%s': pushed settings for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
+            )
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "BinaryInput[%d] '%s': failed to push settings: %s",
+                self._ds_index,
+                self._name,
+                exc,
+            )
+
     # ---- session management ------------------------------------------
 
     def start_alive_timer(self, session: VdcSession) -> None:

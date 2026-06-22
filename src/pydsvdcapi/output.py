@@ -1671,6 +1671,50 @@ class Output:
                 exc,
             )
 
+    async def push_settings(self) -> None:
+        """Push the current ``outputSettings`` to the vdSM.
+
+        Sends a ``VDC_SEND_PUSH_NOTIFICATION`` with the full
+        ``outputSettings`` property subtree.  A no-op if the session is
+        not active or the vdSD has not been announced.
+        """
+        session = self._session
+        if session is None:
+            logger.debug(
+                "No active session — skipping push_settings for output '%s'",
+                self._name,
+            )
+            return
+        if not self._vdsd.is_announced:
+            logger.debug(
+                "vdSD not announced — skipping push_settings for output '%s'",
+                self._name,
+            )
+            return
+
+        settings_dict = self.get_settings_properties()
+        push_tree: dict[str, Any] = {"outputSettings": settings_dict}
+
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._vdsd.dsuid)
+        for elem in dict_to_elements(push_tree):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+
+        try:
+            await session.send_notification(msg)
+            logger.debug(
+                "Pushed outputSettings for vdSD %s: %s",
+                self._vdsd.dsuid,
+                settings_dict,
+            )
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "Failed to push outputSettings for vdSD %s: %s",
+                self._vdsd.dsuid,
+                exc,
+            )
+
     # ==================================================================
     # Channel property dicts (for getProperty responses)
     # ==================================================================
