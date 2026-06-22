@@ -119,6 +119,14 @@ DimChannelCallback = Callable[
     Coroutine[Any, Any, None],
 ]
 
+#: Type alias for the output-settings-changed callback.
+#: ``async def callback(output: Output, changed: dict[str, Any]) -> None``
+#: *changed* is the dict of keys that arrived in the ``setProperty`` request.
+OutputSettingsChangedCallback = Callable[
+    ["Output", dict[str, Any]],
+    Coroutine[Any, Any, None],
+]
+
 
 # ---------------------------------------------------------------------------
 # Output function → auto-created channel types
@@ -664,6 +672,8 @@ class Output:
         self._on_channel_applied: ChannelAppliedCallback | None = None
         #: Callback invoked for dimChannel notifications (§7.3.5).
         self._on_dim_channel: DimChannelCallback | None = None
+        #: Callback invoked when vdSM writes outputSettings.
+        self._on_settings_changed: OutputSettingsChangedCallback | None = None
         #: Last stepping direction for AREA_STEPPING_CONTINUE: -1 down, +1 up, 0 unknown.
         self._last_step_direction: int = 0
         #: Area of last directional step (for AREA_STEPPING_CONTINUE).
@@ -1011,6 +1021,15 @@ class Output:
     @on_dim_channel.setter
     def on_dim_channel(self, callback: DimChannelCallback | None) -> None:
         self._on_dim_channel = callback
+
+    @property
+    def on_settings_changed(self) -> OutputSettingsChangedCallback | None:
+        """Callback invoked when the vdSM writes ``outputSettings``."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(self, callback: OutputSettingsChangedCallback | None) -> None:
+        self._on_settings_changed = callback
 
     def add_channel(
         self,
