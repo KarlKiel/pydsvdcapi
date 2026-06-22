@@ -111,7 +111,7 @@ import asyncio
 import enum
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -198,6 +198,18 @@ DEFAULT_MULTI_CLICK_WINDOW: float = 0.3
 
 #: Interval between ``HOLD_REPEAT`` events while button is held.
 DEFAULT_HOLD_REPEAT_INTERVAL: float = 1.0
+
+
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+
+#: Type alias for the button-input-settings-changed callback.
+#: ``async def callback(button_input: ButtonInput, changed: dict[str, Any]) -> None``
+ButtonInputSettingsChangedCallback = Callable[
+    ["ButtonInput", dict[str, Any]],
+    Coroutine[Any, Any, None],
+]
 
 
 # ---------------------------------------------------------------------------
@@ -619,6 +631,7 @@ class ButtonInput:
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
+        self._on_settings_changed: ButtonInputSettingsChangedCallback | None = None
 
         # ---- click detector (state machine) --------------------------
         valid_keys = {
@@ -1048,6 +1061,15 @@ class ButtonInput:
                 self._channel,
             )
             self._schedule_auto_save()
+
+    @property
+    def on_settings_changed(self) -> ButtonInputSettingsChangedCallback | None:
+        """Callback invoked when the vdSM writes ``buttonInputSettings``."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(self, callback: ButtonInputSettingsChangedCallback | None) -> None:
+        self._on_settings_changed = callback
 
     # ---- persistence -------------------------------------------------
 
