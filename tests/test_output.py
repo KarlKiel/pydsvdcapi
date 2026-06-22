@@ -1252,12 +1252,12 @@ class TestOutputSessionManagement:
 class TestVdcHostOutputSetProperty:
     """Test VdcHost._apply_vdsd_set_property for outputSettings/outputState."""
 
-    def test_apply_output_settings(self):
+    async def test_apply_output_settings(self):
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         vdsd.set_output(out)
 
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "outputSettings": {"mode": 2, "pushChanges": True},
@@ -1267,12 +1267,12 @@ class TestVdcHostOutputSetProperty:
         assert out.mode == OutputMode.GRADUAL
         assert out.push_changes is True
 
-    def test_apply_output_state(self):
+    async def test_apply_output_state(self):
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         vdsd.set_output(out)
 
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "outputState": {"localPriority": True},
@@ -1281,34 +1281,34 @@ class TestVdcHostOutputSetProperty:
 
         assert out.local_priority is True
 
-    def test_apply_output_settings_no_output(self):
+    async def test_apply_output_settings_no_output(self):
         """Settings for non-existing output should not crash."""
         host, vdc, device, vdsd = _make_stack()
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "outputSettings": {"mode": 1},
             },
         )
 
-    def test_apply_output_state_no_output(self):
+    async def test_apply_output_state_no_output(self):
         """State for non-existing output should not crash."""
         host, vdc, device, vdsd = _make_stack()
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "outputState": {"localPriority": True},
             },
         )
 
-    def test_apply_output_settings_not_dict(self):
+    async def test_apply_output_settings_not_dict(self):
         """Non-dict outputSettings should be silently ignored."""
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(
             vdsd
         )  # DIMMER → auto-derives GRADUAL; invalid settings leave it unchanged
         vdsd.set_output(out)
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "outputSettings": "invalid",
@@ -1316,12 +1316,12 @@ class TestVdcHostOutputSetProperty:
         )
         assert out.mode == OutputMode.GRADUAL
 
-    def test_apply_output_state_not_dict(self):
+    async def test_apply_output_state_not_dict(self):
         """Non-dict outputState should be silently ignored."""
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         vdsd.set_output(out)
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "outputState": "invalid",
@@ -1329,13 +1329,13 @@ class TestVdcHostOutputSetProperty:
         )
         assert out.local_priority is False
 
-    def test_mixed_set_property(self):
+    async def test_mixed_set_property(self):
         """Verify output + other settings applied together."""
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd)
         vdsd.set_output(out)
 
-        host._apply_vdsd_set_property(
+        await host._apply_vdsd_set_property(
             vdsd,
             {
                 "name": "Renamed",
@@ -2193,7 +2193,7 @@ class TestVdcHostSceneDispatch:
         for elem in dict_to_elements(scene_data):
             msg.vdsm_request_set_property.properties.append(elem)
 
-        resp = host._handle_set_property(msg)
+        resp = await host._handle_set_property(msg)
         assert resp.generic_response.code == pb.ERR_OK
 
         entry = out.get_scene(5)

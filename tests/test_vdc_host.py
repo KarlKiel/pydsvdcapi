@@ -1218,7 +1218,7 @@ class TestSetPropertyChannelStatesNumericKey:
             return task
 
         with patch("pydsvdcapi.vdc_host.asyncio.create_task", side_effect=collect_task):
-            host._handle_set_property(msg)
+            await host._handle_set_property(msg)
 
         if tasks:
             await asyncio.gather(*tasks)

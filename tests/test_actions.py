@@ -1370,7 +1370,7 @@ class TestGenericRequestSetConfiguration:
 class TestSetPropertyCustomActions:
     """Tests for setProperty writes to customActions."""
 
-    def test_apply_custom_action_settings(self):
+    async def test_apply_custom_action_settings(self):
         host, _, _, vdsd = _make_stack()
         cust = CustomAction(
             vdsd=vdsd,
@@ -1386,11 +1386,11 @@ class TestSetPropertyCustomActions:
                 "0": {"title": "New Title", "params": {"vol": 99}},
             }
         }
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
         assert cust.title == "New Title"
         assert cust.params == {"vol": 99}
 
-    def test_apply_custom_action_nonexistent_index_ignored(self):
+    async def test_apply_custom_action_nonexistent_index_ignored(self):
         host, _, _, vdsd = _make_stack()
         cust = CustomAction(
             vdsd=vdsd,
@@ -1407,5 +1407,5 @@ class TestSetPropertyCustomActions:
             }
         }
         # Should not raise.
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
         assert cust.title == "Title"  # unchanged

@@ -1047,7 +1047,7 @@ class TestVdcHostBinaryInputSetProperty:
         vdc.add_device(device)
         return host, vdc, device, vdsd, bi
 
-    def test_set_binary_input_settings(self):
+    async def test_set_binary_input_settings(self):
         host, vdc, device, vdsd, bi = self._setup()
 
         incoming = {
@@ -1059,12 +1059,12 @@ class TestVdcHostBinaryInputSetProperty:
             },
         }
 
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
 
         assert bi.group == 5
         assert bi.sensor_function == BinaryInputType.SMOKE
 
-    def test_set_binary_input_settings_partial(self):
+    async def test_set_binary_input_settings_partial(self):
         host, vdc, device, vdsd, bi = self._setup()
 
         incoming = {
@@ -1073,12 +1073,12 @@ class TestVdcHostBinaryInputSetProperty:
             },
         }
 
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
 
         assert bi.group == 8
         assert bi.sensor_function == BinaryInputType.PRESENCE  # unchanged
 
-    def test_set_binary_input_unknown_index(self):
+    async def test_set_binary_input_unknown_index(self):
         host, vdc, device, vdsd, bi = self._setup()
 
         incoming = {
@@ -1088,10 +1088,10 @@ class TestVdcHostBinaryInputSetProperty:
         }
 
         # Should not raise.
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
         assert bi.group == 0  # unchanged
 
-    def test_set_property_via_message(self):
+    async def test_set_property_via_message(self):
         """Full message dispatch for setProperty binaryInputSettings."""
         host, vdc, device, vdsd, bi = self._setup()
 
@@ -1109,7 +1109,7 @@ class TestVdcHostBinaryInputSetProperty:
         group_elem.name = "group"
         group_elem.value.v_uint64 = 6
 
-        resp = host._handle_set_property(msg)
+        resp = await host._handle_set_property(msg)
 
         assert resp.generic_response.code == pb.ERR_OK
         assert bi.group == 6

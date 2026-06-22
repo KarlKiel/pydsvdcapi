@@ -1123,7 +1123,7 @@ class TestVdcHostSensorInputSetProperty:
         vdc.add_device(device)
         return host, vdc, device, vdsd, si
 
-    def test_set_sensor_settings(self):
+    async def test_set_sensor_settings(self):
         host, vdc, device, vdsd, si = self._setup()
 
         incoming = {
@@ -1136,13 +1136,13 @@ class TestVdcHostSensorInputSetProperty:
             },
         }
 
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
 
         assert si.group == 5
         assert si.min_push_interval == 10.0
         assert si.changes_only_interval == 30.0
 
-    def test_set_sensor_settings_partial(self):
+    async def test_set_sensor_settings_partial(self):
         host, vdc, device, vdsd, si = self._setup()
 
         incoming = {
@@ -1151,12 +1151,12 @@ class TestVdcHostSensorInputSetProperty:
             },
         }
 
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
 
         assert si.group == 8
         assert si.min_push_interval == 2.0  # unchanged default
 
-    def test_set_sensor_settings_unknown_index(self):
+    async def test_set_sensor_settings_unknown_index(self):
         host, vdc, device, vdsd, si = self._setup()
 
         incoming = {
@@ -1166,10 +1166,10 @@ class TestVdcHostSensorInputSetProperty:
         }
 
         # Should not raise.
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
         assert si.group == 0  # unchanged
 
-    def test_set_property_via_message(self):
+    async def test_set_property_via_message(self):
         """Full message dispatch for setProperty sensorSettings."""
         host, vdc, device, vdsd, si = self._setup()
 
@@ -1187,7 +1187,7 @@ class TestVdcHostSensorInputSetProperty:
         group_elem.name = "group"
         group_elem.value.v_uint64 = 6
 
-        resp = host._handle_set_property(msg)
+        resp = await host._handle_set_property(msg)
 
         assert resp.generic_response.code == pb.ERR_OK
         assert si.group == 6
