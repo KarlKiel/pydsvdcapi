@@ -1393,7 +1393,9 @@ class VdcHost:
             vdc.zone_id = int(incoming["zoneID"])
             logger.info("vDC '%s' zoneID set to %d", vdc.dsuid, vdc.zone_id)
 
-    async def _apply_vdsd_set_property(self, vdsd: Any, incoming: dict[str, Any]) -> None:
+    async def _apply_vdsd_set_property(
+        self, vdsd: Any, incoming: dict[str, Any]
+    ) -> None:
         """Apply writable properties to a vdSD.
 
         Supports wildcard expansion per §7.1.2: if a container property

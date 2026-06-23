@@ -472,7 +472,9 @@ class BinaryInput:
         return self._on_settings_changed
 
     @on_settings_changed.setter
-    def on_settings_changed(self, callback: BinaryInputSettingsChangedCallback | None) -> None:
+    def on_settings_changed(
+        self, callback: BinaryInputSettingsChangedCallback | None
+    ) -> None:
         self._on_settings_changed = callback
 
     # ---- persistence -------------------------------------------------

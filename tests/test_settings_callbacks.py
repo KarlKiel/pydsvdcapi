@@ -206,8 +206,9 @@ class TestBinaryInputCallback:
 
     async def test_binary_input_push_settings_sends_notification(self):
         _, _, _, vdsd = _scaffold()
-        bi = _make_binary_input(vdsd, ds_index=2, group=3,
-                                sensor_function=BinaryInputType.SMOKE)
+        bi = _make_binary_input(
+            vdsd, ds_index=2, group=3, sensor_function=BinaryInputType.SMOKE
+        )
         vdsd.add_binary_input(bi)
 
         session = _make_mock_session()

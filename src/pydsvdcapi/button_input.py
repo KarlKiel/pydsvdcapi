@@ -1068,7 +1068,9 @@ class ButtonInput:
         return self._on_settings_changed
 
     @on_settings_changed.setter
-    def on_settings_changed(self, callback: ButtonInputSettingsChangedCallback | None) -> None:
+    def on_settings_changed(
+        self, callback: ButtonInputSettingsChangedCallback | None
+    ) -> None:
         self._on_settings_changed = callback
 
     # ---- persistence -------------------------------------------------
