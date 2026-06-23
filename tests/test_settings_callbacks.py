@@ -15,10 +15,10 @@ from pydsvdcapi.enums import (
     ButtonElementID,
     ButtonType,
     ColorGroup,
-    SensorType,
-    SensorUsage,
     OutputFunction,
     OutputUsage,
+    SensorType,
+    SensorUsage,
 )
 from pydsvdcapi.output import Output
 from pydsvdcapi.property_handling import elements_to_dict
