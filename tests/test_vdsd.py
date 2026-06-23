@@ -1167,7 +1167,7 @@ class TestVdcHostVdsdPropertyDispatch:
         resp = host._handle_get_property(req)
         assert resp.type == pb.VDC_RESPONSE_GET_PROPERTY
 
-    def test_set_property_name_for_vdsd(self):
+    async def test_set_property_name_for_vdsd(self):
         host = _make_host()
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
@@ -1188,11 +1188,11 @@ class TestVdcHostVdsdPropertyDispatch:
         elem.name = "name"
         elem.value.v_string = "New Name"
 
-        resp = host._handle_set_property(req)
+        resp = await host._handle_set_property(req)
         assert resp.generic_response.code == pb.ERR_OK
         assert vdsd.name == "New Name"
 
-    def test_set_property_zone_for_vdsd(self):
+    async def test_set_property_zone_for_vdsd(self):
         host = _make_host()
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
@@ -1212,7 +1212,7 @@ class TestVdcHostVdsdPropertyDispatch:
         elem.name = "zoneID"
         elem.value.v_uint64 = 42
 
-        resp = host._handle_set_property(req)
+        resp = await host._handle_set_property(req)
         assert resp.generic_response.code == pb.ERR_OK
         assert vdsd.zone_id == 42
 
@@ -1380,7 +1380,7 @@ class TestW3OptionalProperties:
 
     # --- setProperty (r/w progMode via vdc_host) -----------------------
 
-    def test_set_property_prog_mode(self):
+    async def test_set_property_prog_mode(self):
         host = _make_host()
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
@@ -1400,7 +1400,7 @@ class TestW3OptionalProperties:
         elem.name = "progMode"
         elem.value.v_bool = True
 
-        resp = host._handle_set_property(req)
+        resp = await host._handle_set_property(req)
         assert resp.generic_response.code == pb.ERR_OK
         assert vdsd.prog_mode is True
 

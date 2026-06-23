@@ -102,10 +102,13 @@ __all__ = [
     "StandardAction",
     # Inputs
     "BinaryInput",
+    "BinaryInputSettingsChangedCallback",
     "BUTTON_TYPE_ELEMENTS",
     "ButtonInput",
+    "ButtonInputSettingsChangedCallback",
     "ClickDetector",
     "SensorInput",
+    "SensorInputSettingsChangedCallback",
     "create_button_group",
     "get_required_elements",
     # Events / States / Properties
@@ -118,6 +121,7 @@ __all__ = [
     "DeviceProperty",
     # Output
     "DimChannelCallback",
+    "OutputSettingsChangedCallback",
     "FUNCTION_CHANNELS",
     "Output",
     "CHANNEL_SPECS",
@@ -151,10 +155,14 @@ from pydsvdcapi.addons.converter import (  # noqa: F401
     apply_converter,
     compile_converter,
 )
-from pydsvdcapi.binary_input import BinaryInput  # noqa: F401
+from pydsvdcapi.binary_input import (  # noqa: F401
+    BinaryInput,
+    BinaryInputSettingsChangedCallback,
+)
 from pydsvdcapi.button_input import (  # noqa: F401
     BUTTON_TYPE_ELEMENTS,
     ButtonInput,
+    ButtonInputSettingsChangedCallback,
     ClickDetector,
     create_button_group,
     get_required_elements,
@@ -239,6 +247,7 @@ from pydsvdcapi.output import (  # noqa: F401
     FUNCTION_CHANNELS,
     DimChannelCallback,
     Output,
+    OutputSettingsChangedCallback,
 )
 from pydsvdcapi.output_channel import (  # noqa: F401
     CHANNEL_SPECS,
@@ -255,7 +264,10 @@ from pydsvdcapi.property_handling import (  # noqa: F401
     expand_setproperty_wildcards,
     match_query,
 )
-from pydsvdcapi.sensor_input import SensorInput  # noqa: F401
+from pydsvdcapi.sensor_input import (  # noqa: F401
+    SensorInput,
+    SensorInputSettingsChangedCallback,
+)
 from pydsvdcapi.session import (  # noqa: F401
     SUPPORTED_API_VERSION,
     HelloCallback,

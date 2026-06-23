@@ -75,7 +75,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -97,6 +97,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+
+#: Type alias for the sensor-input-settings-changed callback.
+#: ``async def callback(sensor_input: SensorInput, changed: dict[str, Any]) -> None``
+SensorInputSettingsChangedCallback = Callable[
+    ["SensorInput", dict[str, Any]],
+    Coroutine[Any, Any, None],
+]
 
 # ---------------------------------------------------------------------------
 # SensorInput
@@ -233,6 +244,7 @@ class SensorInput:
 
         # ---- push throttling / alive timer state ---------------------
         self._session: VdcSession | None = None
+        self._on_settings_changed: SensorInputSettingsChangedCallback | None = None
         self._last_push_time: float | None = None
         self._last_pushed_state: tuple | None = None
         self._alive_timer_handle: asyncio.TimerHandle | None = None
@@ -601,6 +613,17 @@ class SensorInput:
             )
             self._schedule_auto_save()
 
+    @property
+    def on_settings_changed(self) -> SensorInputSettingsChangedCallback | None:
+        """Callback invoked when the vdSM writes ``sensorSettings``."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(
+        self, callback: SensorInputSettingsChangedCallback | None
+    ) -> None:
+        self._on_settings_changed = callback
+
     # ---- persistence -------------------------------------------------
 
     def get_property_tree(self) -> dict[str, Any]:
@@ -776,6 +799,54 @@ class SensorInput:
 
         # (Re-)schedule the alive timer after every push attempt.
         self._reschedule_alive_timer()
+
+    async def push_settings(self, session: VdcSession | None = None) -> None:
+        """Push the current ``sensorSettings`` to the vdSM.
+
+        Sends a ``VDC_SEND_PUSH_NOTIFICATION`` carrying the full
+        ``sensorSettings`` subtree for this sensor input.  A no-op if no
+        session is active or the vdSD is not announced.
+        """
+        session = session or self._session
+        if session is None:
+            logger.debug(
+                "SensorInput[%d]: no active session — skipping push_settings",
+                self._ds_index,
+            )
+            return
+        if not self._vdsd.is_announced:
+            logger.debug(
+                "SensorInput[%d]: vdSD not announced — skipping push_settings",
+                self._ds_index,
+            )
+            return
+
+        settings_dict = self.get_settings_properties()
+        push_tree: dict[str, Any] = {
+            "sensorSettings": {str(self._ds_index): settings_dict}
+        }
+
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._vdsd.dsuid)
+        for elem in dict_to_elements(push_tree):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+
+        try:
+            await session.send_notification(msg)
+            logger.debug(
+                "SensorInput[%d] '%s': pushed settings for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
+            )
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "SensorInput[%d] '%s': failed to push settings: %s",
+                self._ds_index,
+                self._name,
+                exc,
+            )
 
     # ---- deferred push (minPushInterval rate limiting) ---------------
 

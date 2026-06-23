@@ -440,7 +440,7 @@ class TestVdcHostPropertyDispatch:
         assert resp.type == pb.GENERIC_RESPONSE
         assert resp.generic_response.code == pb.ERR_NOT_FOUND
 
-    def test_set_property_host_name(self):
+    async def test_set_property_host_name(self):
         host = self._make_host()
         req = pb.Message()
         req.type = pb.VDSM_REQUEST_SET_PROPERTY
@@ -450,11 +450,11 @@ class TestVdcHostPropertyDispatch:
         p.name = "name"
         p.value.v_string = "New Host Name"
 
-        resp = host._handle_set_property(req)
+        resp = await host._handle_set_property(req)
         assert resp.generic_response.code == pb.ERR_OK
         assert host.name == "New Host Name"
 
-    def test_set_property_vdc_zone_id(self):
+    async def test_set_property_vdc_zone_id(self):
         from pydsvdcapi.vdc import Vdc
 
         host = self._make_host()
@@ -475,11 +475,11 @@ class TestVdcHostPropertyDispatch:
         p.name = "zoneID"
         p.value.v_int64 = 55
 
-        resp = host._handle_set_property(req)
+        resp = await host._handle_set_property(req)
         assert resp.generic_response.code == pb.ERR_OK
         assert vdc.zone_id == 55
 
-    def test_set_property_unknown_dsuid(self):
+    async def test_set_property_unknown_dsuid(self):
         host = self._make_host()
         req = pb.Message()
         req.type = pb.VDSM_REQUEST_SET_PROPERTY
@@ -489,7 +489,7 @@ class TestVdcHostPropertyDispatch:
         p.name = "name"
         p.value.v_string = "whatever"
 
-        resp = host._handle_set_property(req)
+        resp = await host._handle_set_property(req)
         assert resp.generic_response.code == pb.ERR_NOT_FOUND
 
     async def test_dispatch_routes_get_property(self):

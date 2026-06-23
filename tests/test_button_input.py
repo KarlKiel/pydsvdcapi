@@ -900,7 +900,7 @@ class TestButtonInputSessionManagement:
 class TestVdcHostButtonInputSetProperty:
     """buttonInputSettings via _apply_vdsd_set_property."""
 
-    def test_set_button_settings(self):
+    async def test_set_button_settings(self):
         host, vdc, device, vdsd = _scaffold()
         host.add_vdc(vdc)
         vdc.add_device(device)
@@ -919,7 +919,7 @@ class TestVdcHostButtonInputSetProperty:
                 },
             },
         }
-        host._apply_vdsd_set_property(vdsd, incoming)
+        await host._apply_vdsd_set_property(vdsd, incoming)
 
         assert btn.group == 3
         assert btn.function == ButtonFunction.AREA_1

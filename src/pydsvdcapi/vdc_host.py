@@ -247,7 +247,7 @@ class VdcHost:
         self,
         *,
         mac: str | None = None,
-        port: int = DEFAULT_VDC_PORT,
+        port: int | None = None,
         dsuid: DsUid | None = None,
         name: str | None = None,
         model: str = "pydsvdcapi vDC host",
@@ -277,8 +277,9 @@ class VdcHost:
 
         # --- network --------------------------------------------------
         self._mac: str = mac or host_state.get("mac") or _get_default_mac()
+        # Explicit port wins; otherwise restore from saved state; fall back to default.
         self._port: int = (
-            port if port != DEFAULT_VDC_PORT else host_state.get("port", port)
+            port if port is not None else host_state.get("port", DEFAULT_VDC_PORT)
         )
 
         # --- identity -------------------------------------------------
@@ -331,7 +332,7 @@ class VdcHost:
         # --- TCP server / session state --------------------------------
         self._server: asyncio.AbstractServer | None = None
         self._session: VdcSession | None = None
-        self._session_task: asyncio.Task | None = None
+        self._reannounce_task: asyncio.Task | None = None
         self._on_message: MessageCallback | None = None
         self._on_remove: RemoveCallback | None = None
         self._on_identify: IdentifyCallback | None = None
@@ -791,8 +792,10 @@ class VdcHost:
                 pass
 
         browser = AsyncServiceBrowser(zc.zeroconf, VDC_SERVICE_TYPE, _Listener())
-        await asyncio.sleep(1.0)
-        await browser.async_cancel()
+        try:
+            await asyncio.sleep(1.0)
+        finally:
+            await browser.async_cancel()
 
         for name in discovered_names:
             info = AsyncServiceInfo(VDC_SERVICE_TYPE, name)
@@ -844,8 +847,14 @@ class VdcHost:
         )
 
         self._zeroconf = AsyncZeroconf()
-        await self._evict_stale_vdc_entries(self._zeroconf)
-        await self._zeroconf.async_register_service(self._service_info)
+        try:
+            await self._evict_stale_vdc_entries(self._zeroconf)
+            await self._zeroconf.async_register_service(self._service_info)
+        except Exception:
+            await self._zeroconf.async_close()
+            self._zeroconf = None
+            self._service_info = None
+            raise
         logger.info(
             "Announced vDC host '%s' on port %d (dSUID %s)",
             service_name,
@@ -990,6 +999,11 @@ class VdcHost:
         # Flush any pending auto-save so no property changes are lost.
         self.flush()
 
+        # Cancel any in-flight re-announce task so it cannot race with shutdown.
+        if self._reannounce_task is not None and not self._reannounce_task.done():
+            self._reannounce_task.cancel()
+            self._reannounce_task = None
+
         # Unannounce the DNS-SD service *before* dropping the TCP
         # connection.  This gives the vdSM's Avahi watcher a chance to
         # notice the service is gone so it does not immediately attempt
@@ -1059,7 +1073,6 @@ class VdcHost:
         finally:
             if self._session is session:
                 self._session = None
-                self._session_task = None
             # Reset announcement state for all vDCs so they will be
             # re-announced on the next session.
             for vdc in self._vdcs.values():
@@ -1068,7 +1081,7 @@ class VdcHost:
             if not self._stopping:
                 # Trigger re-announcement in background so vdSM can rediscover
                 # and reconnect to this host after a session ends unexpectedly.
-                asyncio.create_task(
+                self._reannounce_task = asyncio.create_task(
                     self._reannounce_after_disconnect(),
                     name="vdc-reannounce",
                 )
@@ -1084,16 +1097,20 @@ class VdcHost:
         A brief pause followed by an unannounce/announce cycle makes the
         vdSM see the service as new, prompting it to reconnect.
         """
-        await asyncio.sleep(5.0)
-        if self._stopping:
-            return
         try:
+            await asyncio.sleep(5.0)
+            if self._stopping:
+                return
             logger.info("Re-announcing after session disconnect")
             await self.unannounce()
             await asyncio.sleep(1.0)
             await self.announce()
+        except asyncio.CancelledError:
+            pass
         except Exception:  # noqa: BLE001
             logger.exception("Re-announce after disconnect failed")
+        finally:
+            self._reannounce_task = None
 
     async def _close_session(self) -> None:
         """Close the active session if there is one."""
@@ -1101,7 +1118,6 @@ class VdcHost:
             logger.info("Closing existing session with %s", self._session.vdsm_dsuid)
             await self._session.close()
             self._session = None
-            self._session_task = None
 
     async def _flush_pending_vanish(self, session: VdcSession) -> None:
         """Send VDC_SEND_VANISH for every dSUID in _pending_vanish, then clear.
@@ -1179,7 +1195,7 @@ class VdcHost:
             return self._handle_get_property(msg)
 
         if msg_type == pb.VDSM_REQUEST_SET_PROPERTY:
-            return self._handle_set_property(msg)
+            return await self._handle_set_property(msg)
 
         if msg_type == pb.VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE:
             await self._handle_set_output_channel_value(session, msg)
@@ -1229,8 +1245,8 @@ class VdcHost:
         return None
 
     def _resolve_entity(self, dsuid_str: str) -> dict[str, Any] | None:
-        """Return ``(properties_dict, entity)`` for the entity with
-        the given dSUID string, or ``None`` if not found."""
+        """Return the property dict for the entity with the given dSUID,
+        or ``None`` if no matching host / vDC / vdSD is found."""
         # Normalise to upper-case — the vdSM may send lower-case hex.
         dsuid_str = dsuid_str.upper()
         if dsuid_str == str(self._dsuid):
@@ -1323,7 +1339,7 @@ class VdcHost:
 
         return resp
 
-    def _handle_set_property(self, msg: pb.Message) -> pb.Message:
+    async def _handle_set_property(self, msg: pb.Message) -> pb.Message:
         """Handle a ``VDSM_REQUEST_SET_PROPERTY``."""
         # Normalise to upper-case — the vdSM may send lower-case hex.
         target_dsuid = msg.vdsm_request_set_property.dSUID.upper()
@@ -1354,7 +1370,7 @@ class VdcHost:
         for vdc in self._vdcs.values():
             vdsd = vdc.get_vdsd_by_dsuid(DsUid.from_string(target_dsuid))
             if vdsd is not None:
-                self._apply_vdsd_set_property(vdsd, incoming)
+                await self._apply_vdsd_set_property(vdsd, incoming)
                 resp.generic_response.code = pb.ERR_OK
                 return resp
 
@@ -1377,7 +1393,9 @@ class VdcHost:
             vdc.zone_id = int(incoming["zoneID"])
             logger.info("vDC '%s' zoneID set to %d", vdc.dsuid, vdc.zone_id)
 
-    def _apply_vdsd_set_property(self, vdsd: Any, incoming: dict[str, Any]) -> None:
+    async def _apply_vdsd_set_property(
+        self, vdsd: Any, incoming: dict[str, Any]
+    ) -> None:
         """Apply writable properties to a vdSD.
 
         Supports wildcard expansion per §7.1.2: if a container property
@@ -1414,6 +1432,15 @@ class VdcHost:
                                 vdsd.dsuid,
                                 idx,
                             )
+                            if btn.on_settings_changed is not None:
+                                try:
+                                    await btn.on_settings_changed(btn, settings)
+                                except Exception:
+                                    logger.exception(
+                                        "on_settings_changed callback raised for buttonInput[%d] on vdSD '%s'",
+                                        idx,
+                                        vdsd.dsuid,
+                                    )
         # Binary input settings (§4.3.2).
         if "binaryInputSettings" in incoming:
             bi_settings = incoming["binaryInputSettings"]
@@ -1433,6 +1460,15 @@ class VdcHost:
                                 vdsd.dsuid,
                                 idx,
                             )
+                            if bi.on_settings_changed is not None:
+                                try:
+                                    await bi.on_settings_changed(bi, settings)
+                                except Exception:
+                                    logger.exception(
+                                        "on_settings_changed callback raised for binaryInput[%d] on vdSD '%s'",
+                                        idx,
+                                        vdsd.dsuid,
+                                    )
         # Sensor input settings (§4.3.2).
         if "sensorSettings" in incoming:
             si_settings = incoming["sensorSettings"]
@@ -1452,6 +1488,15 @@ class VdcHost:
                                 vdsd.dsuid,
                                 idx,
                             )
+                            if si.on_settings_changed is not None:
+                                try:
+                                    await si.on_settings_changed(si, settings)
+                                except Exception:
+                                    logger.exception(
+                                        "on_settings_changed callback raised for sensorInput[%d] on vdSD '%s'",
+                                        idx,
+                                        vdsd.dsuid,
+                                    )
         # Output settings (§4.8.2).
         if "outputSettings" in incoming:
             out_settings = incoming["outputSettings"]
@@ -1463,6 +1508,14 @@ class VdcHost:
                         "vdSD '%s' outputSettings updated",
                         vdsd.dsuid,
                     )
+                    if output.on_settings_changed is not None:
+                        try:
+                            await output.on_settings_changed(output, out_settings)
+                        except Exception:
+                            logger.exception(
+                                "on_settings_changed callback raised for output on vdSD '%s'",
+                                vdsd.dsuid,
+                            )
         # Output state (§4.8.3) — only localPriority is writable.
         if "outputState" in incoming:
             out_state = incoming["outputState"]
@@ -1813,7 +1866,7 @@ class VdcHost:
                             vdc.dsuid,
                         )
 
-            asyncio.ensure_future(_do_scan(vdcs_to_scan, session, dsuid_str))
+            asyncio.create_task(_do_scan(vdcs_to_scan, session, dsuid_str))
             resp.generic_response.code = pb.ERR_OK
             return resp
 

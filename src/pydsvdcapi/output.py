@@ -119,6 +119,14 @@ DimChannelCallback = Callable[
     Coroutine[Any, Any, None],
 ]
 
+#: Type alias for the output-settings-changed callback.
+#: ``async def callback(output: Output, changed: dict[str, Any]) -> None``
+#: *changed* is the dict of keys that arrived in the ``setProperty`` request.
+OutputSettingsChangedCallback = Callable[
+    ["Output", dict[str, Any]],
+    Coroutine[Any, Any, None],
+]
+
 
 # ---------------------------------------------------------------------------
 # Output function → auto-created channel types
@@ -664,6 +672,8 @@ class Output:
         self._on_channel_applied: ChannelAppliedCallback | None = None
         #: Callback invoked for dimChannel notifications (§7.3.5).
         self._on_dim_channel: DimChannelCallback | None = None
+        #: Callback invoked when vdSM writes outputSettings.
+        self._on_settings_changed: OutputSettingsChangedCallback | None = None
         #: Last stepping direction for AREA_STEPPING_CONTINUE: -1 down, +1 up, 0 unknown.
         self._last_step_direction: int = 0
         #: Area of last directional step (for AREA_STEPPING_CONTINUE).
@@ -1011,6 +1021,17 @@ class Output:
     @on_dim_channel.setter
     def on_dim_channel(self, callback: DimChannelCallback | None) -> None:
         self._on_dim_channel = callback
+
+    @property
+    def on_settings_changed(self) -> OutputSettingsChangedCallback | None:
+        """Callback invoked when the vdSM writes ``outputSettings``."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(
+        self, callback: OutputSettingsChangedCallback | None
+    ) -> None:
+        self._on_settings_changed = callback
 
     def add_channel(
         self,
@@ -1648,6 +1669,50 @@ class Output:
             logger.warning(
                 "Failed to push channelStates[%s] for vdSD %s: %s",
                 channel.name,
+                self._vdsd.dsuid,
+                exc,
+            )
+
+    async def push_settings(self) -> None:
+        """Push the current ``outputSettings`` to the vdSM.
+
+        Sends a ``VDC_SEND_PUSH_NOTIFICATION`` with the full
+        ``outputSettings`` property subtree.  A no-op if the session is
+        not active or the vdSD has not been announced.
+        """
+        session = self._session
+        if session is None:
+            logger.debug(
+                "No active session — skipping push_settings for output '%s'",
+                self._name,
+            )
+            return
+        if not self._vdsd.is_announced:
+            logger.debug(
+                "vdSD not announced — skipping push_settings for output '%s'",
+                self._name,
+            )
+            return
+
+        settings_dict = self.get_settings_properties()
+        push_tree: dict[str, Any] = {"outputSettings": settings_dict}
+
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._vdsd.dsuid)
+        for elem in dict_to_elements(push_tree):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+
+        try:
+            await session.send_notification(msg)
+            logger.debug(
+                "Pushed outputSettings for vdSD %s: %s",
+                self._vdsd.dsuid,
+                settings_dict,
+            )
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "Failed to push outputSettings for vdSD %s: %s",
                 self._vdsd.dsuid,
                 exc,
             )

@@ -50,7 +50,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -74,6 +74,13 @@ logger = logging.getLogger(__name__)
 #: Input type identifiers for the ``inputType`` description property.
 INPUT_TYPE_POLL_ONLY: int = 0
 INPUT_TYPE_DETECTS_CHANGES: int = 1
+
+#: Type alias for the binary-input-settings-changed callback.
+#: ``async def callback(binary_input: BinaryInput, changed: dict[str, Any]) -> None``
+BinaryInputSettingsChangedCallback = Callable[
+    ["BinaryInput", dict[str, Any]],
+    Coroutine[Any, Any, None],
+]
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +156,7 @@ class BinaryInput:
 
         # ---- session (stored by start_alive_timer for push fallback) -
         self._session: VdcSession | None = None
+        self._on_settings_changed: BinaryInputSettingsChangedCallback | None = None
 
         # ---- value converter (optional, persisted) -------------------
         self._uplink_converter_code: str | None = None
@@ -458,6 +466,17 @@ class BinaryInput:
             )
             self._schedule_auto_save()
 
+    @property
+    def on_settings_changed(self) -> BinaryInputSettingsChangedCallback | None:
+        """Callback invoked when the vdSM writes ``binaryInputSettings``."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(
+        self, callback: BinaryInputSettingsChangedCallback | None
+    ) -> None:
+        self._on_settings_changed = callback
+
     # ---- persistence -------------------------------------------------
 
     def get_property_tree(self) -> dict[str, Any]:
@@ -564,6 +583,54 @@ class BinaryInput:
         except (ConnectionError, OSError) as exc:
             logger.warning(
                 "BinaryInput[%d] '%s': failed to push state: %s",
+                self._ds_index,
+                self._name,
+                exc,
+            )
+
+    async def push_settings(self, session: VdcSession | None = None) -> None:
+        """Push the current ``binaryInputSettings`` to the vdSM.
+
+        Sends a ``VDC_SEND_PUSH_NOTIFICATION`` carrying the full
+        ``binaryInputSettings`` subtree for this input.  A no-op if no
+        session is active or the vdSD is not announced.
+        """
+        session = session or self._session
+        if session is None:
+            logger.debug(
+                "BinaryInput[%d]: no active session — skipping push_settings",
+                self._ds_index,
+            )
+            return
+        if not self._vdsd.is_announced:
+            logger.debug(
+                "BinaryInput[%d]: vdSD not announced — skipping push_settings",
+                self._ds_index,
+            )
+            return
+
+        settings_dict = self.get_settings_properties()
+        push_tree: dict[str, Any] = {
+            "binaryInputSettings": {str(self._ds_index): settings_dict}
+        }
+
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._vdsd.dsuid)
+        for elem in dict_to_elements(push_tree):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+
+        try:
+            await session.send_notification(msg)
+            logger.debug(
+                "BinaryInput[%d] '%s': pushed settings for vdSD %s",
+                self._ds_index,
+                self._name,
+                self._vdsd.dsuid,
+            )
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "BinaryInput[%d] '%s': failed to push settings: %s",
                 self._ds_index,
                 self._name,
                 exc,
