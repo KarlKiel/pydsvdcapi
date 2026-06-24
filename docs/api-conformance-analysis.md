@@ -28,6 +28,30 @@ additional parameters not present in the protobuf schema. Several findings from 
 analysis were based on the C++ handler code without cross-checking the proto; those findings
 are re-classified below.
 
+### Why the proto schema is conclusive — typed fields vs. PropertyElement
+
+The vDC API uses two fundamentally different wire structures, and only one of them is generic:
+
+**Typed proto fields** — used by all notification messages (`setOutputChannelValue`, `dimChannel`,
+`callScene`, etc.). Each field has a fixed field number and a concrete type (`int32`, `double`,
+`bool`, `string`). The vdSM serialises only defined fields at their assigned field numbers. A
+field like `move` has no assigned field number in `vdsm_NotificationSetOutputChannelValue`, so
+the vdSM has no way to include it in the binary encoding. On the p44vdc side,
+`getObjectFromMessageFields()` iterates the compiled C proto descriptor, reading only the typed
+fields the proto defines — it cannot see a key named `"move"` because no such typed field exists.
+
+**PropertyElement trees** — the generic `{ name: string, value: PropertyValue, elements: [...] }`
+structure that IS arbitrary key-value. But PropertyElement appears only in:
+`getProperty` (query + response), `setProperty` (properties), `genericRequest` (params), and
+`pushNotification` (changedproperties/deviceevents). It is absent from every notification message.
+
+The extra parameters (`move`, `rate`, `dimPerMS`, `transitionTime`, `duration`, `preload`, etc.)
+appear in p44vdc's C++ handler functions because the **same handler is called from both the typed
+protobuf path and the JSON/genericRequest path**. When invoked from a standard vdSM typed
+notification, `aParams->get("move")` returns null and the branch is never taken. The C++ comment
+`// TODO: implement "direction" (as sent by p44mbrd)` explicitly identifies `p44mbrd` (the Matter
+bridge daemon, which uses the JSON API) as the source — not the vdSM.
+
 **Protobuf schema of the most-affected messages:**
 
 ```protobuf
