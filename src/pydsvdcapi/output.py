@@ -162,6 +162,14 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
 
 logger = logging.getLogger(__name__)
 
+# Default motor timing values for shadow devices (primaryGroup 2, function POSITIONAL).
+# Rounded approximations of p44vdc ShadowBehaviour compiled-in defaults.
+_SHADOW_DEFAULT_OPEN_TIME: float = 50.0
+_SHADOW_DEFAULT_CLOSE_TIME: float = 50.0
+_SHADOW_DEFAULT_ANGLE_OPEN_TIME: float = 1.0
+_SHADOW_DEFAULT_ANGLE_CLOSE_TIME: float = 1.0
+_SHADOW_DEFAULT_STOP_DELAY_TIME: float = 0.0
+
 #: All setting keys that :meth:`Output.apply_settings` handles explicitly.
 #: Any key arriving via ``setProperty`` that is **not** in this set is stored
 #: in :attr:`Output._extra_settings` and round-tripped through persistence.
@@ -1936,18 +1944,29 @@ class Output:
             if self._heating_system_type is not None:
                 settings["heatingSystemType"] = int(self._heating_system_type)
 
-        # Shadow motor timing settings (primaryGroup 2 = grey/shadow).
-        if pg == 2:
-            if self._open_time is not None:
-                settings["openTime"] = self._open_time
-            if self._close_time is not None:
-                settings["closeTime"] = self._close_time
-            if self._angle_open_time is not None:
-                settings["angleOpenTime"] = self._angle_open_time
-            if self._angle_close_time is not None:
-                settings["angleCloseTime"] = self._angle_close_time
-            if self._stop_delay_time is not None:
-                settings["stopDelayTime"] = self._stop_delay_time
+        # Shadow motor timing settings: only for grey positional outputs.
+        # Always emitted when both conditions hold; falls back to p44-compatible defaults.
+        if pg == 2 and int(self._function) == int(OutputFunction.POSITIONAL):
+            settings["openTime"] = (
+                self._open_time if self._open_time is not None
+                else _SHADOW_DEFAULT_OPEN_TIME
+            )
+            settings["closeTime"] = (
+                self._close_time if self._close_time is not None
+                else _SHADOW_DEFAULT_CLOSE_TIME
+            )
+            settings["angleOpenTime"] = (
+                self._angle_open_time if self._angle_open_time is not None
+                else _SHADOW_DEFAULT_ANGLE_OPEN_TIME
+            )
+            settings["angleCloseTime"] = (
+                self._angle_close_time if self._angle_close_time is not None
+                else _SHADOW_DEFAULT_ANGLE_CLOSE_TIME
+            )
+            settings["stopDelayTime"] = (
+                self._stop_delay_time if self._stop_delay_time is not None
+                else _SHADOW_DEFAULT_STOP_DELAY_TIME
+            )
 
         # Include any extra (firmware-specific) settings that arrived via
         # setProperty but are not in the standard known-key set.

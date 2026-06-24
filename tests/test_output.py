@@ -3346,9 +3346,9 @@ class TestShadowTimingFields:
     """Tests for shadow motor timing fields in outputSettings."""
 
     def test_shadow_timing_fields_in_settings(self):
-        """Shadow timing fields appear in outputSettings when set (primaryGroup=GREY=2)."""
+        """Shadow timing fields appear in outputSettings when set (primaryGroup=GREY=2, function=POSITIONAL)."""
         host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
-        out = _make_output(vdsd)
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out._open_time = 60.0
         out._close_time = 55.0
         out._angle_open_time = 1.5
@@ -3361,9 +3361,9 @@ class TestShadowTimingFields:
         assert s["angleCloseTime"] == 1.5
         assert s["stopDelayTime"] == 0.5
 
-    def test_shadow_timing_absent_when_not_set(self):
-        """Shadow timing fields are absent when not configured."""
-        host, vdc, device, vdsd = _make_stack()
+    def test_shadow_timing_absent_for_non_shadow_device(self):
+        """Shadow timing fields are absent for non-shadow devices (primaryGroup != 2)."""
+        host, vdc, device, vdsd = _make_stack()  # primaryGroup=YELLOW
         out = _make_output(vdsd)
         s = out.get_settings_properties()
         assert "openTime" not in s
@@ -3373,9 +3373,9 @@ class TestShadowTimingFields:
         assert "stopDelayTime" not in s
 
     def test_apply_settings_stores_shadow_timing(self):
-        """apply_settings stores shadow timing values correctly (primaryGroup=GREY=2)."""
+        """apply_settings stores shadow timing values correctly (primaryGroup=GREY=2, function=POSITIONAL)."""
         host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
-        out = _make_output(vdsd)
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
         out.apply_settings(
             {
                 "openTime": 45.0,
@@ -3502,6 +3502,71 @@ class TestShadowTimingFields:
         out.apply_settings({"openTime": None})
         assert out.open_time is None
         assert "openTime" not in out.get_settings_properties()
+
+
+# ===========================================================================
+# Shadow motor timing defaults (Task 5)
+# ===========================================================================
+
+
+class TestShadowTimingDefaults:
+    """Shadow timing fields are always emitted for shadow devices with p44-compatible defaults."""
+
+    def test_timing_defaults_emitted_when_nothing_set(self):
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
+        s = out.get_settings_properties()
+        assert s["openTime"] == 50.0
+        assert s["closeTime"] == 50.0
+        assert s["angleOpenTime"] == 1.0
+        assert s["angleCloseTime"] == 1.0
+        assert s["stopDelayTime"] == 0.0
+
+    def test_explicit_value_overrides_default(self):
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
+        out = _make_output(vdsd, function=OutputFunction.POSITIONAL, open_time=30.0)
+        s = out.get_settings_properties()
+        assert s["openTime"] == 30.0
+        assert s["closeTime"] == 50.0   # still default
+
+    def test_all_explicit_values_preserved(self):
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
+        out = _make_output(
+            vdsd,
+            function=OutputFunction.POSITIONAL,
+            open_time=60.0,
+            close_time=55.0,
+            angle_open_time=2.0,
+            angle_close_time=2.0,
+            stop_delay_time=0.5,
+        )
+        s = out.get_settings_properties()
+        assert s["openTime"] == 60.0
+        assert s["closeTime"] == 55.0
+        assert s["angleOpenTime"] == 2.0
+        assert s["angleCloseTime"] == 2.0
+        assert s["stopDelayTime"] == 0.5
+
+    def test_timing_absent_for_non_shadow_device(self):
+        host, vdc, device, vdsd = _make_stack()  # primaryGroup=YELLOW
+        out = _make_output(vdsd)
+        s = out.get_settings_properties()
+        assert "openTime" not in s
+        assert "closeTime" not in s
+        assert "angleOpenTime" not in s
+        assert "angleCloseTime" not in s
+        assert "stopDelayTime" not in s
+
+    def test_timing_absent_for_grey_non_positional_device(self):
+        # Grey group but ON_OFF function (e.g. simple pulse actuator) — no motor timing.
+        host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)
+        out = _make_output(vdsd, function=OutputFunction.ON_OFF)
+        s = out.get_settings_properties()
+        assert "openTime" not in s
+        assert "closeTime" not in s
+        assert "angleOpenTime" not in s
+        assert "angleCloseTime" not in s
+        assert "stopDelayTime" not in s
 
 
 # ===========================================================================
