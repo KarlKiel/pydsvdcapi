@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `DeviceLifecycleState` enum with five states (`ACTIVE`, `INACTIVE`, `MAINTENANCE`, `ERROR`, `REMOVED`) for expressing device health from library user code.
+- `Vdsd.set_lifecycle_state(state: DeviceLifecycleState)` async method — sets the lifecycle state and handles all vdSM communication automatically: pushes `active` property changes to dSS, suppresses pong responses for non-ACTIVE devices, and triggers `VDC_SEND_VANISH` for `REMOVED` devices (re-triggered on every subsequent ping).
+- `Vdsd.lifecycle_state` read-only property — returns the current `DeviceLifecycleState`.
+- `VdcSession.set_presence_checker(checker)` method — registers an async `(dsuid: str) -> bool` callback that gates pong responses. Pass `None` to clear. Used internally by `VdcHost`; can be used directly in custom session setups.
+
+### Removed
+- `Vdsd.active` setter (write access via `vdsd.active = True/False`). The read-only `active` property is retained (derived from `lifecycle_state`). **Migration:** replace `vdsd.active = False` with `await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)`.
+
 ## [0.8.9] - 2026-06-15
 
 ### Added

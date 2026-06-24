@@ -3025,6 +3025,24 @@ class TestVdsdLifecycleState:
         assert calls[0][0][0].type == pb.VDC_SEND_PUSH_NOTIFICATION  # push first
         assert calls[1][0][0].type == pb.VDC_SEND_VANISH             # vanish second
 
+    @pytest.mark.asyncio
+    async def test_set_removed_from_inactive_sends_vanish_only(self):
+        """INACTIVE → REMOVED: active flag unchanged (False→False) so no push, only vanish."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+
+        calls = session.send_notification.call_args_list
+        assert len(calls) == 1  # only vanish, no push
+        assert calls[0][0][0].type == pb.VDC_SEND_VANISH
+
     # ---- active property is derived, not stored directly ----------------
 
     def test_active_property_reflects_lifecycle_state(self):

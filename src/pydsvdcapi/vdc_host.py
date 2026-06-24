@@ -521,7 +521,7 @@ class VdcHost:
         for vdc in self._vdcs.values():
             for device in vdc.devices.values():
                 for vdsd in device.vdsds.values():
-                    if str(vdsd.dsuid) == dsuid:
+                    if str(vdsd.dsuid).upper() == dsuid.upper():
                         return vdsd
         return None
 
