@@ -1956,3 +1956,111 @@ class TestChannelByKey:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         assert out.channel_by_key("unknown") is None
         assert out.channel_by_key("99") is None
+
+
+# ===========================================================================
+# display_name — free label for channelDescriptions["name"]
+# ===========================================================================
+
+
+class TestDisplayName:
+    """display_name sets channelDescriptions 'name' independently of the channelId key."""
+
+    def test_default_name_subfield_equals_spec_name(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "brightness"
+
+    def test_display_name_overrides_name_subfield(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+            display_name="Living Room Light",
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "Living Room Light"
+
+    def test_display_name_does_not_change_container_key(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.SHADE_POSITION_OUTSIDE,
+            ds_index=0,
+            display_name="Living Room Shade",
+        )
+        # channelId (container key) is the canonical name, not the display_name
+        assert ch.name == "shadePositionOutside"
+        # but the "name" sub-field in the description uses display_name
+        assert ch.get_description_properties()["name"] == "Living Room Shade"
+
+    def test_display_name_setter_and_clear(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        ch.display_name = "My Label"
+        assert ch.get_description_properties()["name"] == "My Label"
+        ch.display_name = None
+        assert ch.get_description_properties()["name"] == "brightness"
+
+    def test_display_name_persisted_in_property_tree(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+            display_name="Ceiling Light",
+        )
+        tree = ch.get_property_tree()
+        assert tree["displayName"] == "Ceiling Light"
+
+    def test_display_name_absent_from_tree_when_not_set(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        tree = ch.get_property_tree()
+        assert "displayName" not in tree
+
+    def test_display_name_restored_from_property_tree(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        ch._apply_state({"displayName": "Restored Label"})
+        assert ch.get_description_properties()["name"] == "Restored Label"
+
+    def test_custom_channel_display_name(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=255,
+            ds_index=2,
+            name="myMode",
+            display_name="Operating Mode",
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "Operating Mode"
+        # container key (channelId) is still the channel's name, not display_name
+        assert ch.name == "myMode"
