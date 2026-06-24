@@ -458,7 +458,7 @@ class TestVdsdAutoSave:
         vdc.add_device(device)
         host._cancel_auto_save()
 
-        vdsd._active = False  # not tracked
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE  # not tracked
         assert host._save_timer is None
 
 
@@ -2865,3 +2865,163 @@ class TestWaitForInitialValues:
         # Should not raise — the restored value satisfies the requirement.
         await vdsd._wait_for_initial_values(timeout=0.05)
         assert "windprotectionconfigawning" not in vdsd.model_features
+
+
+# ===========================================================================
+# Vdsd — lifecycle state
+# ===========================================================================
+
+
+class TestVdsdLifecycleState:
+    """Vdsd.set_lifecycle_state manages state, active property, push, and vanish."""
+
+    # ---- default state ---------------------------------------------------
+
+    def test_default_lifecycle_state_is_active(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        assert vdsd.lifecycle_state == DeviceLifecycleState.ACTIVE
+        assert vdsd.active is True
+
+    # ---- active derivation -----------------------------------------------
+
+    def test_active_true_when_active_state(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        assert vdsd.active is True
+
+    # ---- transitions before announcement (no session) --------------------
+
+    @pytest.mark.asyncio
+    async def test_set_inactive_before_announced_stores_state_silently(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        # Should not raise even without a session
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+        assert vdsd.lifecycle_state == DeviceLifecycleState.INACTIVE
+        assert vdsd.active is False
+
+    @pytest.mark.asyncio
+    async def test_set_removed_before_announced_stores_state_silently(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+        assert vdsd.lifecycle_state == DeviceLifecycleState.REMOVED
+
+    # ---- transitions after announcement (with session) -------------------
+
+    @pytest.mark.asyncio
+    async def test_set_inactive_pushes_active_false(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_PUSH_NOTIFICATION
+        assert msg.vdc_send_push_notification.dSUID == str(vdsd.dsuid)
+        elem = msg.vdc_send_push_notification.changedproperties[0]
+        assert elem.name == "active"
+        assert elem.value.v_bool is False
+
+    @pytest.mark.asyncio
+    async def test_set_active_pushes_active_true(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        # Start from inactive
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        elem = msg.vdc_send_push_notification.changedproperties[0]
+        assert elem.name == "active"
+        assert elem.value.v_bool is True
+
+    @pytest.mark.asyncio
+    async def test_no_push_when_active_flag_unchanged(self):
+        """INACTIVE → MAINTENANCE: both active=False, no push needed."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.MAINTENANCE)
+
+        session.send_notification.assert_not_called()
+        assert vdsd.lifecycle_state == DeviceLifecycleState.MAINTENANCE
+
+    @pytest.mark.asyncio
+    async def test_no_push_when_same_state_repeated(self):
+        """Setting ACTIVE when already ACTIVE: no push."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
+
+        session.send_notification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_set_removed_sends_vanish(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+
+        # send_notification is called for both push(active=False) and vanish
+        calls = session.send_notification.call_args_list
+        msg_types = [c[0][0].type for c in calls]
+        assert pb.VDC_SEND_PUSH_NOTIFICATION in msg_types
+        assert pb.VDC_SEND_VANISH in msg_types
+
+    # ---- active property is derived, not stored directly ----------------
+
+    def test_active_property_reflects_lifecycle_state(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        for state in [
+            DeviceLifecycleState.INACTIVE,
+            DeviceLifecycleState.MAINTENANCE,
+            DeviceLifecycleState.ERROR,
+            DeviceLifecycleState.REMOVED,
+        ]:
+            vdsd._lifecycle_state = state
+            assert vdsd.active is False
+        vdsd._lifecycle_state = DeviceLifecycleState.ACTIVE
+        assert vdsd.active is True

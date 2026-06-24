@@ -75,7 +75,8 @@ from typing import (
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid
-from pydsvdcapi.enums import ColorGroup
+from pydsvdcapi.enums import ColorGroup, DeviceLifecycleState
+from pydsvdcapi.property_handling import dict_to_elements
 
 if TYPE_CHECKING:
     from pydsvdcapi.actions import (
@@ -355,7 +356,7 @@ class Vdsd:
         self._output: Output | None = None
 
         # --- runtime state --------------------------------------------
-        self._active: bool = True
+        self._lifecycle_state: DeviceLifecycleState = DeviceLifecycleState.ACTIVE
         self._announced: bool = False
         self._session: VdcSession | None = None
 
@@ -410,12 +411,18 @@ class Vdsd:
 
     @property
     def active(self) -> bool:
-        """Whether this vdSD is currently active / operational."""
-        return self._active
+        """Whether this vdSD is currently active / operational.
 
-    @active.setter
-    def active(self, value: bool) -> None:
-        self._active = bool(value)
+        Derived from :attr:`lifecycle_state`.  ``True`` only when
+        ``lifecycle_state == DeviceLifecycleState.ACTIVE``.
+        Use :meth:`set_lifecycle_state` to change this value.
+        """
+        return self._lifecycle_state == DeviceLifecycleState.ACTIVE
+
+    @property
+    def lifecycle_state(self) -> DeviceLifecycleState:
+        """Current lifecycle state of this vdSD."""
+        return self._lifecycle_state
 
     @property
     def model_features(self) -> set[str]:
@@ -1511,6 +1518,49 @@ class Vdsd:
             if device is not None:
                 device._schedule_auto_save()
 
+    # ---- lifecycle state management ----------------------------------
+
+    async def _push_active(self, active: bool) -> None:
+        """Push a ``VDC_SEND_PUSH_NOTIFICATION`` for the ``active`` property."""
+        if self._session is None:
+            return
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._dsuid)
+        for elem in dict_to_elements({"active": active}):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+        try:
+            await self._session.send_notification(msg)
+            logger.debug(
+                "vdSD '%s': pushed active=%s", self.name, active
+            )
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "vdSD '%s': failed to push active: %s", self.name, exc
+            )
+
+    async def set_lifecycle_state(
+        self, state: DeviceLifecycleState
+    ) -> None:
+        """Set the lifecycle state and handle all vdSM communication.
+
+        * If ``active`` changes (``True`` ↔ ``False``) and the device is
+          announced, pushes ``VDC_SEND_PUSH_NOTIFICATION`` with the new
+          ``active`` value.
+        * If *state* is ``REMOVED`` and the device is announced, also
+          sends ``VDC_SEND_VANISH``.
+        * If the device is not yet announced, stores the state silently.
+        """
+        was_active = self._lifecycle_state == DeviceLifecycleState.ACTIVE
+        self._lifecycle_state = state
+        now_active = state == DeviceLifecycleState.ACTIVE
+
+        if self._announced and self._session is not None:
+            if was_active != now_active:
+                await self._push_active(now_active)
+            if state == DeviceLifecycleState.REMOVED:
+                await self.vanish(self._session)
+
     # ---- property dict (for getProperty responses) -------------------
 
     def get_properties(self) -> dict[str, Any]:
@@ -1543,7 +1593,7 @@ class Vdsd:
             "name": self.name,
             "deviceClass": self.device_class,
             "deviceClassVersion": self.device_class_version,
-            "active": self._active,
+            "active": self._lifecycle_state == DeviceLifecycleState.ACTIVE,
             # vdSD-specific properties
             "primaryGroup": int(self._primary_group),
             "zoneID": self.zone_id,
