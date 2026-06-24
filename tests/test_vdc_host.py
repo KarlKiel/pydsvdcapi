@@ -1309,19 +1309,24 @@ class TestPresenceCheckerRegistration:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_removed_device_revanishes_on_ping(self):
-        """A REMOVED vdSD re-triggers vanish on every subsequent ping."""
+    async def test_removed_device_triggers_vanish_on_ping(self):
+        """A REMOVED vdSD always triggers vanish and suppresses pong when pinged."""
         host, session, vdsd = await _make_host_session_vdsd()
-        # Bypass set_lifecycle_state to avoid it calling vanish (needs a real session)
         vdsd._lifecycle_state = DeviceLifecycleState.REMOVED
         vdsd._announced = True
 
         checker = session.set_presence_checker.call_args[0][0]
         session.send_notification.reset_mock()
 
-        result = await checker(str(vdsd.dsuid))
+        # First ping — vanish + pong suppressed
+        result1 = await checker(str(vdsd.dsuid))
+        assert result1 is False
+        first_calls = session.send_notification.call_args_list
+        assert any(c[0][0].type == pb.VDC_SEND_VANISH for c in first_calls)
 
-        assert result is False  # pong suppressed
-        session.send_notification.assert_called_once()
-        msg = session.send_notification.call_args[0][0]
-        assert msg.type == pb.VDC_SEND_VANISH
+        # Second ping — vanish sent again, pong still suppressed
+        session.send_notification.reset_mock()
+        result2 = await checker(str(vdsd.dsuid))
+        assert result2 is False
+        second_calls = session.send_notification.call_args_list
+        assert any(c[0][0].type == pb.VDC_SEND_VANISH for c in second_calls)

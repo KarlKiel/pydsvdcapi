@@ -1176,8 +1176,7 @@ class VdcHost:
             if vdsd is None:
                 return True  # unknown dSUID → pong (backward compat)
             if vdsd.lifecycle_state == DeviceLifecycleState.REMOVED:
-                if vdsd.is_announced:
-                    await vdsd.vanish(session)
+                await vdsd.vanish(session)
             return vdsd.lifecycle_state == DeviceLifecycleState.ACTIVE
 
         session.set_presence_checker(_presence_check)
