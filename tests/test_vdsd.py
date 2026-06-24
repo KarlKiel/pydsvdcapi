@@ -21,6 +21,7 @@ from pydsvdcapi.enums import (
     BinaryInputUsage,
     ButtonType,
     ColorGroup,
+    DeviceLifecycleState,
     OutputChannelType,
     OutputFunction,
     OutputMode,
@@ -204,6 +205,26 @@ class TestVdsdConstruction:
         )
 
         assert vdsd.primary_group == ColorGroup.BLACK
+
+
+# ===========================================================================
+# DeviceLifecycleState enum
+# ===========================================================================
+
+
+class TestDeviceLifecycleStateEnum:
+    """DeviceLifecycleState enum has all required values."""
+
+    def test_all_states_exist(self):
+        assert DeviceLifecycleState.ACTIVE == "active"
+        assert DeviceLifecycleState.INACTIVE == "inactive"
+        assert DeviceLifecycleState.MAINTENANCE == "maintenance"
+        assert DeviceLifecycleState.ERROR == "error"
+        assert DeviceLifecycleState.REMOVED == "removed"
+
+    def test_active_is_truthy_active(self):
+        assert DeviceLifecycleState.ACTIVE == DeviceLifecycleState.ACTIVE
+        assert DeviceLifecycleState.INACTIVE != DeviceLifecycleState.ACTIVE
 
 
 # ===========================================================================
