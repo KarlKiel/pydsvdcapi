@@ -1964,6 +1964,9 @@ class Output:
 
         ``error`` is included for all device types (not in p44vdc base but
         useful for diagnostics).
+
+        ``movingState`` is device-reported state (motor moving/stopped, etc.)
+        and is read-only from the vdSM perspective.
         """
         return {
             "localPriority": self._local_priority,
@@ -2070,6 +2073,8 @@ class Output:
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for ``outputState``.
 
         Recognised keys: ``localPriority``, ``transitionTime``.
+        ``movingState`` is device-side-only (the device reports it; the vdSM
+        does not write it) and is intentionally not handled here.
         Unknown keys are silently ignored.
         """
         if "localPriority" in state:
