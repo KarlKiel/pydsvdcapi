@@ -7,7 +7,7 @@ import pytest
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
-from pydsvdcapi.enums import ColorGroup
+from pydsvdcapi.enums import ColorGroup, DeviceLifecycleState
 from pydsvdcapi.session import VdcSession
 from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import (
@@ -1231,3 +1231,97 @@ class TestSetPropertyChannelStatesNumericKey:
         # The channel value must have been set to 80.0
         # (apply_pending_channels clears the dict after applying, so we check the actual value)
         assert brightness_ch.value == 80.0
+
+
+# ---------------------------------------------------------------------------
+# Presence checker registration
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_session() -> MagicMock:
+    """Session mock with send_notification and send_request as AsyncMock."""
+    ok_resp = pb.Message()
+    ok_resp.generic_response.code = pb.ERR_OK
+    session = MagicMock(spec=VdcSession)
+    session.is_active = True
+    session.send_notification = AsyncMock()
+    session.send_request = AsyncMock(return_value=ok_resp)
+    return session
+
+
+async def _make_host_session_vdsd():
+    """Create a VdcHost with one vDC/device/vdsd, simulate session ready."""
+    host = VdcHost(mac=TEST_MAC, name="Presence Test Host")
+    host._cancel_auto_save()
+
+    vdc = Vdc(
+        host=host,
+        implementation_id="x-test-presence",
+        name="Presence vDC",
+        model="PV v1",
+    )
+    base = DsUid.from_name_in_space("presence-test-device", DsUidNamespace.VDC)
+    device = Device(vdc=vdc, dsuid=base)
+    vdsd = Vdsd(
+        device=device,
+        primary_group=ColorGroup.YELLOW,
+        name="PresenceDev",
+        model="Test vdSD",
+    )
+    device.add_vdsd(vdsd)
+    vdc.add_device(device)
+    host.add_vdc(vdc)
+
+    session = _make_mock_session()
+    host._session = session
+    await host._on_session_ready(session)
+    return host, session, vdsd
+
+
+class TestPresenceCheckerRegistration:
+    """VdcHost registers presence checker; pings respect device lifecycle state."""
+
+    @pytest.mark.asyncio
+    async def test_active_device_answers_ping(self):
+        host, session, vdsd = await _make_host_session_vdsd()
+        assert vdsd.lifecycle_state == DeviceLifecycleState.ACTIVE
+
+        checker = session.set_presence_checker.call_args[0][0]
+        result = await checker(str(vdsd.dsuid))
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_inactive_device_suppresses_pong(self):
+        host, session, vdsd = await _make_host_session_vdsd()
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+
+        checker = session.set_presence_checker.call_args[0][0]
+        result = await checker(str(vdsd.dsuid))
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_unknown_dsuid_answers_ping(self):
+        """Unknown dSUID falls back to always-pong (backward compat)."""
+        host, session, vdsd = await _make_host_session_vdsd()
+
+        checker = session.set_presence_checker.call_args[0][0]
+        result = await checker("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00")
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_removed_device_revanishes_on_ping(self):
+        """A REMOVED vdSD re-triggers vanish on every subsequent ping."""
+        host, session, vdsd = await _make_host_session_vdsd()
+        # Bypass set_lifecycle_state to avoid it calling vanish (needs a real session)
+        vdsd._lifecycle_state = DeviceLifecycleState.REMOVED
+        vdsd._announced = True
+
+        checker = session.set_presence_checker.call_args[0][0]
+        session.send_notification.reset_mock()
+
+        result = await checker(str(vdsd.dsuid))
+
+        assert result is False  # pong suppressed
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_VANISH

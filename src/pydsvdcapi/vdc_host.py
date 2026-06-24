@@ -43,6 +43,7 @@ from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZerocon
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
+from pydsvdcapi.enums import DeviceLifecycleState
 from pydsvdcapi.persistence import PropertyStore
 from pydsvdcapi.property_handling import (
     build_get_property_response,
@@ -510,6 +511,19 @@ class VdcHost:
         Returns ``None`` if no vDC is registered with that dSUID.
         """
         return self._vdcs.get(str(dsuid))
+
+    def _find_vdsd(self, dsuid: str) -> "Vdsd | None":
+        """Find a :class:`Vdsd` by its dSUID string.
+
+        Traverses all registered vDCs → devices → vdSDs.
+        Returns ``None`` if no vdSD with the given dSUID is found.
+        """
+        for vdc in self._vdcs.values():
+            for device in vdc.devices.values():
+                for vdsd in device.vdsds.values():
+                    if str(vdsd.dsuid) == dsuid:
+                        return vdsd
+        return None
 
     @property
     def vdcs(self) -> dict[str, Vdc]:
@@ -1152,6 +1166,22 @@ class VdcHost:
         the new session — without requiring the caller to re-drive
         the announcement manually.
         """
+        # Register presence checker so ping/pong respects device lifecycle state.
+        host_dsuid = str(self._dsuid)
+
+        async def _presence_check(dsuid: str) -> bool:
+            if not dsuid or dsuid == host_dsuid:
+                return True
+            vdsd = self._find_vdsd(dsuid)
+            if vdsd is None:
+                return True  # unknown dSUID → pong (backward compat)
+            if vdsd.lifecycle_state == DeviceLifecycleState.REMOVED:
+                if vdsd.is_announced:
+                    await vdsd.vanish(session)
+            return vdsd.lifecycle_state == DeviceLifecycleState.ACTIVE
+
+        session.set_presence_checker(_presence_check)
+
         await self._flush_pending_vanish(session)
         logger.info(
             "Session ready — auto-announcing %d vDC(s)",
