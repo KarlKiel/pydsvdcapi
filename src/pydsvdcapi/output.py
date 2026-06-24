@@ -658,6 +658,7 @@ class Output:
         self._local_priority: bool = False
         self._error: OutputError = OutputError.OK
         self._transition_time: float = 0.0
+        self._moving_state: int = 0
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
@@ -994,6 +995,15 @@ class Output:
     @transition_time.setter
     def transition_time(self, value: float) -> None:
         self._transition_time = float(value)
+
+    @property
+    def moving_state(self) -> int:
+        """Motor movement state: 0=idle, 1=moving up/opening, -1=moving down/closing."""
+        return self._moving_state
+
+    @moving_state.setter
+    def moving_state(self, value: int) -> None:
+        self._moving_state = int(value)
 
     # ==================================================================
     # Channel management
@@ -1958,6 +1968,7 @@ class Output:
         return {
             "localPriority": self._local_priority,
             "transitionTime": self._transition_time,
+            "movingState": self._moving_state,
             "error": int(self._error),
         }
 
