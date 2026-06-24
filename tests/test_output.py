@@ -524,7 +524,7 @@ class TestOutputSettingsProperties:
         assert settings["mode"] == int(OutputMode.GRADUAL)
         assert settings["activeGroup"] == 1
         assert settings["pushChanges"] is False
-        assert settings["groups"] == {"1": True}
+        assert settings["groups"] == {"0": True, "1": True}
         assert "onThreshold" not in settings
         assert "minBrightness" not in settings
 
@@ -534,7 +534,7 @@ class TestOutputSettingsProperties:
         settings = out.get_settings_properties()
 
         assert "groups" in settings
-        assert settings["groups"] == {"1": True, "3": True, "5": True}
+        assert settings["groups"] == {"0": True, "1": True, "3": True, "5": True}
 
     def test_with_all_optional_fields(self):
         # vdsd is YELLOW (primaryGroup=1) — light-specific settings are emitted
@@ -1512,7 +1512,7 @@ class TestOutputEdgeCases:
         host, vdc, device, vdsd = _make_stack()
         out = _make_output(vdsd, groups=set())
         settings = out.get_settings_properties()
-        assert settings["groups"] == {}
+        assert settings["groups"] == {"0": True}
 
     def test_empty_groups_not_in_tree(self):
         host, vdc, device, vdsd = _make_stack()
@@ -1531,7 +1531,7 @@ class TestOutputEdgeCases:
         out = _make_output(vdsd, groups={10, 3, 7, 1})
         settings = out.get_settings_properties()
         keys = list(settings["groups"].keys())
-        assert keys == ["1", "3", "7", "10"]
+        assert keys == ["0", "1", "3", "7", "10"]
 
     def test_on_off_output(self):
         """Basic on/off output (relay, socket)."""
@@ -3502,3 +3502,40 @@ class TestShadowTimingFields:
         out.apply_settings({"openTime": None})
         assert out.open_time is None
         assert "openTime" not in out.get_settings_properties()
+
+
+# ===========================================================================
+# Group 0 always present in wire response
+# ===========================================================================
+
+
+class TestGroupZeroAlwaysPresent:
+    """Group 0 must always appear in the serialised groups dict."""
+
+    def test_empty_internal_groups_still_emits_group_0(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd, groups=set())
+        settings = out.get_settings_properties()
+        assert settings["groups"] == {"0": True}
+
+    def test_group_0_present_alongside_other_groups(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd, groups={2, 5})
+        settings = out.get_settings_properties()
+        assert settings["groups"]["0"] is True
+        assert settings["groups"]["2"] is True
+        assert settings["groups"]["5"] is True
+
+    def test_group_0_not_added_to_internal_set(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd, groups={2})
+        _ = out.get_settings_properties()
+        assert 0 not in out.groups  # _groups is not mutated
+
+    def test_group_0_already_in_internal_set_no_duplication(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd, groups={0, 2})
+        settings = out.get_settings_properties()
+        keys = list(settings["groups"].keys())
+        assert keys.count("0") == 1  # appears exactly once
+        assert settings["groups"] == {"0": True, "2": True}

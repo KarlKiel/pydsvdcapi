@@ -1897,7 +1897,8 @@ class Output:
         if self._active_group is not None:
             settings["activeGroup"] = self._active_group
 
-        settings["groups"] = {str(gid): True for gid in sorted(self._groups)}
+        all_groups = self._groups | {0}
+        settings["groups"] = {str(gid): True for gid in sorted(all_groups)}
 
         pg = (
             int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
