@@ -104,7 +104,7 @@ message vdsm_RequestSetProperty {
 
 | # | Message / Area | Severity | Direction of gap |
 |---|----------------|----------|-----------------|
-| 1 | `VDSM_SEND_PING` — pydsvdcapi skips presence check, always pongs | 🟠 | behavior difference |
+| 1 | `VDSM_SEND_PING` — presence check implemented via `DeviceLifecycleState` | ✅ | **resolved in v0.9.0** |
 | 2 | `hello` — no upper bound on `api_version` | 🟠 | pydsvdcapi more permissive |
 | 3 | `VDC_SEND_IDENTIFY` outbound not implemented | 🟡 | pydsvdcapi missing |
 | 4 | `x-p44-*` device methods not implemented | 🟡 | pydsvdcapi missing |
@@ -125,7 +125,7 @@ message vdsm_RequestSetProperty {
 
 ---
 
-### 🟠 #1 — `VDSM_SEND_PING`: presence check skipped; pong always sent
+### ✅ #1 — `VDSM_SEND_PING`: presence check implemented via `DeviceLifecycleState` *(resolved v0.9.0)*
 
 **p44vdc** (`dsaddressable.cpp:390` → `pingResultHandler`):
 1. Audience-resolves the target device by dSUID
@@ -133,19 +133,18 @@ message vdsm_RequestSetProperty {
 3. Sends `VDC_SEND_PONG` **only** if the device reports itself as present
 4. Updates `mPresent` state; if changed, pushes `"active"` property to vdSM
 
-**pydsvdcapi** (`session.py`):
-1. Reads `dSUID` from ping
-2. Immediately sends `VDC_SEND_PONG` with that dSUID (or host dSUID if empty)
-3. No presence check; no `"active"` push
+**pydsvdcapi** (v0.9.0+, `vdsd.py` / `session.py` / `vdc_host.py`):
+1. Library user calls `await vdsd.set_lifecycle_state(DeviceLifecycleState.X)` when device health changes
+2. `VdcHost` registers an async presence checker on each session that resolves the target dSUID to a `Vdsd`
+3. `_handle_ping` calls the checker before sending pong:
+   - `ACTIVE` → pong sent + no push (no change)
+   - `INACTIVE` / `MAINTENANCE` / `ERROR` → pong suppressed
+   - `REMOVED` → `VDC_SEND_VANISH` sent (re-triggered on every subsequent ping) + pong suppressed
+4. On any `active` state change (true↔false), `VDC_SEND_PUSH_NOTIFICATION` with `changedproperties.active` is sent immediately — dSS does not need to poll
 
-**Impact**: The vdSM uses ping/pong to determine whether a device is reachable. pydsvdcapi always
-answers pong regardless of actual device reachability. The vdSM can never detect that a device is
-offline/unreachable via the ping mechanism. This affects device health monitoring and may delay
-vdSM fault detection.
+**Remaining difference**: p44vdc's `checkPresence()` can actively query hardware (the device decides its own presence). pydsvdcapi instead requires the library user to poll their hardware and call `set_lifecycle_state()`. This is by design: the library user owns the device-level health check; the library owns the protocol communication.
 
-The pong dSUID behaviour also differs: p44vdc sends pong from the addressed device's `sendRequest()`
-(which prepends the device's own dSUID); pydsvdcapi echoes the incoming dSUID field directly.
-The wire value is the same, but the routing path is different.
+The pong dSUID behaviour is unchanged: pydsvdcapi echoes the incoming dSUID field directly. The wire value is the same as p44vdc.
 
 ---
 
@@ -323,13 +322,15 @@ standard vdSM does not send this via protobuf.
 
 ## Cross-cutting observations
 
-### Presence / liveness model is the most significant behavioral gap
+### Presence / liveness model — resolved in v0.9.0
 
 p44vdc models device presence as a queryable hardware state: ping triggers `checkPresence()`, which
 can query the physical device, and the result is pushed as an `"active"` property change. pydsvdcapi
-has no device-level presence model; it always reports present by responding to pong immediately.
-This means the vdSM cannot detect offline/unavailable devices through the ping/pong mechanism when
-using pydsvdcapi.
+now implements equivalent semantics via `DeviceLifecycleState`: library users call
+`await vdsd.set_lifecycle_state(...)` when device health changes, and the library handles all
+vdSM communication (pong suppression, `active` push, vanish). The model is push-based rather than
+query-based, which is appropriate for a Python library where hardware access belongs to the
+application layer.
 
 ### JSON-API-only parameters are not a conformance gap
 
@@ -341,6 +342,6 @@ issue is essential — the handler code and the proto schema do not always match
 ### Protobuf API coverage is essentially complete
 
 For all message types and fields defined in `vdcapi.proto`, pydsvdcapi correctly handles the
-mandatory and optional fields that the standard vdSM sends. The remaining real gaps (#1–#4) are
-behavioral (ping/pong presence semantics), future-proofing (api_version upper bound), and missing
-outbound/inbound genericRequest support for p44-proprietary extensions.
+mandatory and optional fields that the standard vdSM sends. The remaining real gaps (#2–#4) are
+future-proofing (api_version upper bound) and missing outbound/inbound genericRequest support for
+p44-proprietary extensions. Finding #1 (ping/pong presence semantics) is resolved in v0.9.0.
