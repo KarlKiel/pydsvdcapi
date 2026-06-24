@@ -2954,6 +2954,7 @@ class TestVdsdLifecycleState:
 
         session.send_notification.assert_called_once()
         msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_PUSH_NOTIFICATION
         elem = msg.vdc_send_push_notification.changedproperties[0]
         assert elem.name == "active"
         assert elem.value.v_bool is True
@@ -2991,6 +2992,23 @@ class TestVdsdLifecycleState:
         session.send_notification.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_push_error_suppressed_state_still_stored(self):
+        """ConnectionError during push is suppressed; lifecycle state is still updated."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        session.send_notification.side_effect = ConnectionError("closed")
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+
+        assert vdsd.lifecycle_state == DeviceLifecycleState.INACTIVE
+        assert vdsd.active is False
+
+    @pytest.mark.asyncio
     async def test_set_removed_sends_vanish(self):
         host = _make_host()
         vdc = _make_vdc(host)
@@ -3002,11 +3020,10 @@ class TestVdsdLifecycleState:
 
         await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
 
-        # send_notification is called for both push(active=False) and vanish
         calls = session.send_notification.call_args_list
-        msg_types = [c[0][0].type for c in calls]
-        assert pb.VDC_SEND_PUSH_NOTIFICATION in msg_types
-        assert pb.VDC_SEND_VANISH in msg_types
+        assert len(calls) == 2
+        assert calls[0][0][0].type == pb.VDC_SEND_PUSH_NOTIFICATION  # push first
+        assert calls[1][0][0].type == pb.VDC_SEND_VANISH             # vanish second
 
     # ---- active property is derived, not stored directly ----------------
 

@@ -1546,9 +1546,11 @@ class Vdsd:
 
         * If ``active`` changes (``True`` ↔ ``False``) and the device is
           announced, pushes ``VDC_SEND_PUSH_NOTIFICATION`` with the new
-          ``active`` value.
+          ``active`` value.  Push errors (``ConnectionError``, ``OSError``) are
+          logged and suppressed.
         * If *state* is ``REMOVED`` and the device is announced, also
-          sends ``VDC_SEND_VANISH``.
+          sends ``VDC_SEND_VANISH``.  Errors from ``vanish`` propagate to the
+          caller.
         * If the device is not yet announced, stores the state silently.
         """
         was_active = self._lifecycle_state == DeviceLifecycleState.ACTIVE
