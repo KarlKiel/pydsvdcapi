@@ -151,25 +151,26 @@ descriptions for the connected device.
 
 ---
 
-### 1.6 Which entity types carry these properties
+### 1.6 Which entity types carry these properties in p44vdc
 
-In p44vdc's class hierarchy:
+In p44vdc's **C++ class hierarchy**, `deviceClass` and `deviceClassVersion` are virtual methods on
+the `Device` class (the vdSD equivalent). The `Vdc` class is a separate hierarchy and does not
+inherit from `Device`, so it does not carry these properties:
 
-| Entity | Has `deviceClass`/`deviceClassVersion`? | Note |
+| p44vdc class | Has `deviceClass`/`deviceClassVersion`? | Note |
 |---|---|---|
 | `Device` (vdSD equivalent) | **Base class default** (`""` / `0`) | Omitted from API if at default |
 | `CustomDevice` extends `Device` | **Yes — the only override** | Set from JSON init params |
 | DALI device | No | Inherits base class → empty/zero → omitted |
 | Hue device | No | Same |
 | EnOcean device | No | Same |
-| Light behaviour | No | Not a `Device` subclass for this purpose |
-| Shadow behaviour | No | Same |
-| `Vdc` (vDC connector class) | **No** | `Vdc` does not inherit from `Device` |
+| `Vdc` (vDC connector class) | **No** | Separate class hierarchy, not a `Device` subclass |
 | `VdcHost` | **No** | Same |
 
-**Key architectural point:** In p44vdc, `deviceClass` and `deviceClassVersion` are exclusively a
-`Device`-level concept. The vDC connector (`Vdc`) does not carry these fields. They are designed for
-external/custom devices configured via JSON — not for built-in protocol bridges.
+**Important framing note:** This is a p44vdc **implementation choice**, not a protocol constraint.
+The vDC API protocol has no "device" concept distinct from vdSD — the three first-class protocol
+entities are vdc-host, vdc, and vdSD, each of which can carry properties. p44vdc simply does not
+implement `deviceClass`/`deviceClassVersion` on its `Vdc` objects.
 
 ---
 
@@ -405,17 +406,20 @@ established pattern.
 
 ---
 
-### 3.3 Scope: `Vdc` vs. `Device` only
+### 3.3 Scope: `Vdc` entity
 
 | Entity | p44vdc | pydsvdcapi |
 |---|---|---|
 | vdSD equivalent (`Device` / `Vdsd`) | Yes | Yes |
-| vDC connector (`Vdc`) | **No** — `Vdc` does not inherit from `Device` | **Yes** — `Vdc` has `device_class` |
+| vDC connector (`Vdc`) | **No** — p44vdc's `Vdc` is a separate class hierarchy | **Yes** — `Vdc` has `device_class` |
 
-In p44vdc, the vDC connector has no concept of `deviceClass` or `deviceClassVersion` at all. These
-fields are exclusively on the device (vdSD) level. pydsvdcapi exposes them on `Vdc` too, which
-means a pydsvdcapi `Vdc` can advertise a `deviceClass` that the dSS will receive but p44vdc never
-sends. Whether the dSS ignores or uses such a value is untested.
+The vDC API protocol treats vdc-host, vdc, and vdSD as three distinct first-class entities — none
+of them is a sub-concept of another. p44vdc's internal C++ class hierarchy happens to put
+`deviceClass` only on `Device` (vdSD), not on `Vdc`, but this is a p44vdc implementation detail.
+
+pydsvdcapi exposing `device_class`/`device_class_version` on `Vdc` is therefore **consistent with
+the protocol** — the protocol does not restrict these properties to vdSD. p44vdc simply does not
+implement them there.
 
 ---
 
@@ -440,7 +444,7 @@ the correct dSS-defined `deviceClass` strings for their devices without guidance
 |---|---|---|---|---|
 | 1 | **`deviceClassVersion` wire type** | `v_uint64` (integer) | `v_string` (string) | 🔴 **Critical** — type mismatch on the wire |
 | 2 | **Omission when at default** | Property omitted (not sent) | Explicit NULL sent | 🟡 Medium — behavioural divergence, likely benign in practice |
-| 3 | **`Vdc` entity carries `deviceClass`** | No | Yes | 🟢 Low — extra data sent that p44vdc never sends |
+| 3 | **`Vdc` entity carries `deviceClass`** | No (p44vdc implementation choice) | Yes | 🟢 Low — pydsvdcapi is protocol-correct; p44vdc simply doesn't implement it on `Vdc` |
 | 4 | **Built-in device types always omit** | Yes (DALI, Hue, etc. return `""`) | N/A | ⚪ N/A — architectural difference, not a conformance issue |
 | 5 | **Type validation / enum** | None (free-form JSON string) | None | 🟢 Low — equally unvalidated |
 
