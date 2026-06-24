@@ -774,6 +774,7 @@ class OutputChannel:
             "name": self._display_name if self._display_name is not None else self._name,
             "channelType": int(self._channel_type),
             "dsIndex": self._ds_index,
+            "channelIndex": self._ds_index,
             "min": self._min_value,
             "max": self._max_value,
             "resolution": self._resolution,

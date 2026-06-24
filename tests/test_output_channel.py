@@ -1963,6 +1963,55 @@ class TestChannelByKey:
 # ===========================================================================
 
 
+class TestChannelIndex:
+    """channelIndex is emitted alongside dsIndex for backward compatibility."""
+
+    def test_channel_index_present_in_description(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        desc = ch.get_description_properties()
+        assert "channelIndex" in desc
+
+    def test_channel_index_equals_ds_index_for_primary(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        desc = ch.get_description_properties()
+        assert desc["channelIndex"] == desc["dsIndex"] == 0
+
+    def test_channel_index_equals_ds_index_for_secondary(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE,
+            ds_index=1,
+        )
+        desc = ch.get_description_properties()
+        assert desc["channelIndex"] == desc["dsIndex"] == 1
+
+    def test_channel_index_for_custom_channel(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=250,
+            ds_index=3,
+            name="customSensor",
+        )
+        desc = ch.get_description_properties()
+        assert desc["channelIndex"] == 3
+
+
 class TestDisplayName:
     """display_name sets channelDescriptions 'name' independently of the channelId key."""
 
