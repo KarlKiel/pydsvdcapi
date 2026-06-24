@@ -207,21 +207,22 @@ class VdcSession:
 
     @property
     def ping_count(self) -> int:
-        """Number of ping/pong exchanges completed in this session."""
+        """Number of pings received in this session."""
         return self._ping_count
 
     def set_presence_checker(
         self,
-        checker: Callable[[str], Awaitable[bool]],
+        checker: Callable[[str], Awaitable[bool]] | None,
     ) -> None:
         """Register an async callback that gates pong responses.
 
         The callback receives the dSUID from the ping message and must
         return ``True`` if the device is present (pong will be sent) or
-        ``False`` to suppress the pong.
+        ``False`` to suppress the pong.  An empty-string dSUID indicates
+        a host-level ping; the callback should return ``True`` for these.
 
-        If no checker is registered, every ping receives a pong
-        (backward-compatible default).
+        If no checker is registered (or ``None`` is passed), every ping
+        receives a pong (backward-compatible default).
         """
         self._presence_checker = checker
 

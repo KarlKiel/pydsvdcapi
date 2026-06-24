@@ -974,7 +974,7 @@ class TestPingPresenceChecker:
 
         task = asyncio.create_task(session.run())
         await vdsm.receive()  # hello response
-        # Next message should be bye ack, NOT a pong
+        # No pong is sent for the suppressed ping; bye triggers the next (and only) response
         msg = await vdsm.receive()
         assert msg is not None
         assert msg.type == pb.GENERIC_RESPONSE  # bye ack, not pong
@@ -1017,3 +1017,22 @@ class TestPingPresenceChecker:
         await task
 
         checker.assert_called_once_with(DEVICE_DSUID)
+
+    @pytest.mark.asyncio
+    async def test_ping_count_incremented_even_when_pong_suppressed(self):
+        """ping_count reflects pings received, not pongs sent."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        session.set_presence_checker(AsyncMock(return_value=False))
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        await vdsm.send(_bye_msg())
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        await vdsm.receive()  # bye ack (pong was suppressed)
+        await task
+
+        assert session.ping_count == 1
