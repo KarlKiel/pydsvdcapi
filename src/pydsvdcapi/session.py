@@ -166,6 +166,13 @@ class VdcSession:
 
         self.disconnect_reason: Exception | None = None
 
+        # Optional async callback for ping presence checks.
+        # Signature: async (dsuid: str) -> bool
+        # If None, all pings receive a pong (backward-compatible default).
+        self._presence_checker: (
+            Callable[[str], Awaitable[bool]] | None
+        ) = None
+
     # ---- public properties -------------------------------------------
 
     @property
@@ -202,6 +209,21 @@ class VdcSession:
     def ping_count(self) -> int:
         """Number of ping/pong exchanges completed in this session."""
         return self._ping_count
+
+    def set_presence_checker(
+        self,
+        checker: Callable[[str], Awaitable[bool]],
+    ) -> None:
+        """Register an async callback that gates pong responses.
+
+        The callback receives the dSUID from the ping message and must
+        return ``True`` if the device is present (pong will be sent) or
+        ``False`` to suppress the pong.
+
+        If no checker is registered, every ping receives a pong
+        (backward-compatible default).
+        """
+        self._presence_checker = checker
 
     # ---- message-ID helpers ------------------------------------------
 
@@ -453,16 +475,34 @@ class VdcSession:
     # ---- ping / pong -------------------------------------------------
 
     async def _handle_ping(self, msg: pb.Message) -> None:
-        """Respond to a ``VDSM_SEND_PING`` with a ``VDC_SEND_PONG``."""
+        """Respond to a ``VDSM_SEND_PING`` with ``VDC_SEND_PONG``.
+
+        If a presence checker has been registered via
+        :meth:`set_presence_checker`, it is called first; the pong is only
+        sent if the checker returns ``True``.  With no checker registered,
+        all pings receive a pong (backward-compatible behaviour).
+        """
         target_dsuid = msg.vdsm_send_ping.dSUID
         self._ping_count += 1
+
+        if self._presence_checker is not None:
+            present = await self._presence_checker(target_dsuid)
+        else:
+            present = True
+
+        if not present:
+            logger.debug(
+                "Ping #%d for %s — device not present, suppressing pong",
+                self._ping_count,
+                target_dsuid,
+            )
+            return
 
         logger.info(
             "Ping #%d for %s — sending pong",
             self._ping_count,
             target_dsuid,
         )
-
         pong = pb.Message()
         pong.type = pb.VDC_SEND_PONG
         pong.message_id = 0  # pong is a notification, no msg_id

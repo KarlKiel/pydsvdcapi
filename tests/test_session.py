@@ -934,3 +934,86 @@ class TestDisconnectReason:
             await session.run()
 
         assert session.disconnect_reason is None
+
+
+# ---------------------------------------------------------------------------
+# Ping presence checker
+# ---------------------------------------------------------------------------
+
+
+class TestPingPresenceChecker:
+    """VdcSession respects a registered presence checker for ping/pong."""
+
+    @pytest.mark.asyncio
+    async def test_presence_checker_returning_true_sends_pong(self):
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        session.set_presence_checker(AsyncMock(return_value=True))
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        pong = await vdsm.receive()
+        assert pong is not None
+        assert pong.type == pb.VDC_SEND_PONG
+        await task
+
+    @pytest.mark.asyncio
+    async def test_presence_checker_returning_false_suppresses_pong(self):
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        session.set_presence_checker(AsyncMock(return_value=False))
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        await vdsm.send(_bye_msg())
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        # Next message should be bye ack, NOT a pong
+        msg = await vdsm.receive()
+        assert msg is not None
+        assert msg.type == pb.GENERIC_RESPONSE  # bye ack, not pong
+        await task
+
+    @pytest.mark.asyncio
+    async def test_no_presence_checker_always_pongs(self):
+        """Backward compat: no checker registered → always pong."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        # No set_presence_checker call
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        pong = await vdsm.receive()
+        assert pong is not None
+        assert pong.type == pb.VDC_SEND_PONG
+        await task
+
+    @pytest.mark.asyncio
+    async def test_presence_checker_receives_target_dsuid(self):
+        """The checker is called with the exact dSUID from the ping."""
+        DEVICE_DSUID = "198C033E330755E78015F97AD093DD1C01"
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        checker = AsyncMock(return_value=True)
+        session.set_presence_checker(checker)
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(DEVICE_DSUID))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        await vdsm.receive()  # pong
+        await task
+
+        checker.assert_called_once_with(DEVICE_DSUID)
