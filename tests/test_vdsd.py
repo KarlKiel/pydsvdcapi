@@ -222,9 +222,14 @@ class TestDeviceLifecycleStateEnum:
         assert DeviceLifecycleState.ERROR == "error"
         assert DeviceLifecycleState.REMOVED == "removed"
 
-    def test_active_is_truthy_active(self):
-        assert DeviceLifecycleState.ACTIVE == DeviceLifecycleState.ACTIVE
-        assert DeviceLifecycleState.INACTIVE != DeviceLifecycleState.ACTIVE
+    def test_is_str_subclass(self):
+        """Enum values are str instances, enabling direct string comparison."""
+        assert isinstance(DeviceLifecycleState.ACTIVE, str)
+
+    def test_str_returns_value(self):
+        """str() on any state returns the wire-format string value."""
+        for state in DeviceLifecycleState:
+            assert str(state) == state.value
 
 
 # ===========================================================================

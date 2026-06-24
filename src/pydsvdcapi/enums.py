@@ -1441,6 +1441,9 @@ class DeviceLifecycleState(str, Enum):
       one-way: there is no meaningful return from this state.
     """
 
+    def __str__(self) -> str:
+        return self.value
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     MAINTENANCE = "maintenance"
