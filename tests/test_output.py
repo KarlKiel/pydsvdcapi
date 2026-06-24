@@ -3539,3 +3539,11 @@ class TestGroupZeroAlwaysPresent:
         keys = list(settings["groups"].keys())
         assert keys.count("0") == 1  # appears exactly once
         assert settings["groups"] == {"0": True, "2": True}
+
+    def test_group_0_not_stored_when_echoed_back_via_apply_settings(self):
+        host, vdc, device, vdsd = _make_stack()
+        out = _make_output(vdsd, groups={2})
+        # Simulate vdSM echoing back the wire response (which contains group 0)
+        wire = out.get_settings_properties()
+        out.apply_settings(wire)
+        assert 0 not in out.groups  # group 0 must not be added to _groups

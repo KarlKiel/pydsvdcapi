@@ -1876,9 +1876,9 @@ class Output:
 
         ``activeGroup`` is **optional** — included only when explicitly set.
 
-        ``groups`` follows p44vdc behaviour: all 64 group IDs (0–63) are
-        emitted as boolean elements (``true`` for members, ``false`` for
-        non-members).
+        ``groups`` follows p44vdc behaviour: group 0 (the standard/implicit
+        group) is always emitted as ``true``. Member groups (1–63) are emitted
+        as ``true`` if in :attr:`groups`, ``false`` (or omitted) if not.
 
         ``onThreshold`` is included if and only if ``function`` is ON_OFF (0);
         when function is ON_OFF and no value was supplied the spec default of
@@ -2004,6 +2004,8 @@ class Output:
             if isinstance(grp_data, dict):
                 for gid_str, val in grp_data.items():
                     gid = int(gid_str)
+                    if gid == 0:
+                        continue  # group 0 is implicit in the wire format; never store it
                     if val:
                         self._groups.add(gid)
                     else:
