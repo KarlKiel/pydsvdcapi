@@ -2196,3 +2196,388 @@ is firmware behaviour that occurs outside library control. The features declared
 the vDC via `modelFeatures` and the firmware-injected features are merged by the dSS;
 the result visible in the configurator may therefore include flags that were never
 explicitly set in your code.
+
+---
+
+## Part 7 — Advanced Topics
+
+---
+
+## Section 19: Device Lifecycle
+
+### DeviceLifecycleState
+
+`DeviceLifecycleState` is a `str` enum defined in `pydsvdcapi.enums`. Each vdSD
+starts in `ACTIVE` state and can transition to any other state at runtime via
+`set_lifecycle_state()`.
+
+| State | String value | Meaning |
+|---|---|---|
+| `ACTIVE` | `"active"` | Device is fully operational. Responds to ping with pong. Reports `active=true`. |
+| `INACTIVE` | `"inactive"` | Device is temporarily unavailable (e.g. powered off). Ping suppressed, `active=false` pushed to dSS. |
+| `MAINTENANCE` | `"maintenance"` | Device is in a maintenance or update mode. Ping suppressed, `active=false` pushed. |
+| `ERROR` | `"error"` | Device has encountered an error condition. Ping suppressed, `active=false` pushed. |
+| `REMOVED` | `"removed"` | Device has been decommissioned. `VDC_SEND_VANISH` is sent to dSS and ping is suppressed. Transitioning to `REMOVED` is effectively one-way. |
+
+### set_lifecycle_state()
+
+```python
+await vdsd.set_lifecycle_state(state: DeviceLifecycleState) -> None
+```
+
+Sets the lifecycle state and handles all required vdSM wire-protocol communication
+automatically:
+
+- If the `active` boolean changes (`True` ↔ `False`) and the device is already
+  announced, a `VDC_SEND_PUSH_NOTIFICATION` is sent to dSS carrying the new
+  `active` value. Push errors (`ConnectionError`, `OSError`) are logged and
+  suppressed.
+- If `state` is `REMOVED` and the device is announced, `VDC_SEND_VANISH` is also
+  sent. Errors from the vanish call propagate to the caller.
+- If the device has not yet been announced, the state is stored silently without
+  any network communication.
+
+### vdsd.lifecycle_state
+
+Read-only property returning the current `DeviceLifecycleState`.
+
+### vdsd.active
+
+Computed read-only bool. Returns `True` only when
+`lifecycle_state == DeviceLifecycleState.ACTIVE`. Do not set this directly; use
+`set_lifecycle_state()`.
+
+### vdsd.send_identify()
+
+```python
+await vdsd.send_identify() -> None
+```
+
+Sends a `VDC_SEND_IDENTIFY` notification to the vdSM, identifying this specific
+vdSD by its dSUID. This is a fire-and-forget call — no response is expected. Use
+it when the physical hardware signals a user-identification gesture (for example,
+the user presses a pairing button on the device). The vdSM uses the incoming dSUID
+to associate the physical device with a slot in the configurator without requiring
+manual dSUID entry.
+
+If the device is not yet announced or has no active session, the call is a no-op.
+
+### Example: state transitions
+
+```python
+from pydsvdcapi.enums import DeviceLifecycleState
+
+# Device starts ACTIVE by default after announce.
+
+# Signal a temporary outage:
+await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+
+# Recover:
+await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
+
+# Signal an error (e.g. hardware fault detected):
+await vdsd.set_lifecycle_state(DeviceLifecycleState.ERROR)
+
+# Permanently remove the device from dSS:
+await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+# VDC_SEND_VANISH has been sent; do not re-announce this device.
+```
+
+---
+
+## Section 20: Persistence (PropertyStore)
+
+### Enabling auto-save
+
+Pass a file path as `state_path` to `VdcHost` at construction time to enable
+automatic YAML persistence:
+
+```python
+host = VdcHost(
+    dsuid=host_dsuid,
+    implementation_id="x-myintegration",
+    state_path="/var/lib/myvdc/state.yaml",
+)
+```
+
+When `state_path` is set, any change to a tracked property (device names, sensor
+descriptions, output settings, etc.) triggers a debounced write. Rapid successive
+changes are coalesced into a single write. The default debounce delay is
+`AUTO_SAVE_DELAY = 1.0` second.
+
+### flush()
+
+To force an immediate write without waiting for the debounce delay:
+
+```python
+host.flush()
+```
+
+`flush()` is a no-op when no `state_path` was provided.
+
+### What is persisted
+
+The YAML file stores a complete structural snapshot of the entire vDC host:
+
+- `VdcHost` common properties (name, model, version, etc.)
+- `Vdc` properties (implementation ID, name, etc.)
+- Device structure: which devices exist, their base dSUIDs, sub-device indices
+- vdSD common properties (name, model, primary group, zone ID, model features, etc.)
+- Output and output-channel descriptions and settings
+- Sensor input descriptions and settings
+- Binary input descriptions and settings
+- Button input descriptions and settings
+- Device state descriptions and device property descriptions and values
+- Device event descriptions
+- Action descriptions, standard actions, custom actions
+
+### What is NOT persisted
+
+The following values are volatile runtime state and are intentionally excluded from
+the YAML file:
+
+- Sensor readings (current sensor values) — these change continuously and are
+  re-acquired from the physical device after reconnection
+- Output channel current values after a session disconnect
+- Binary input state (current high/low readings)
+- Button click state
+- Dynamic actions (always runtime-only)
+- Control values received from dSS
+
+### PropertyStore class
+
+`PropertyStore` (in `pydsvdcapi.persistence`) is the underlying YAML store used
+by `VdcHost` internally. It implements atomic writes with a backup/recovery
+strategy:
+
+- Writes go through a `.tmp` intermediate file, then atomically replace the
+  primary file via `os.replace()`.
+- Before each write the previous primary file is copied to `<file>.bak`.
+- On load, if the primary file is missing or corrupt, the backup is tried
+  automatically.
+
+Users typically do not instantiate `PropertyStore` directly. Configure persistence
+through `VdcHost(state_path=...)` and call `host.flush()` as needed.
+
+### Caution: do not edit the YAML file while the library is running
+
+The YAML file is human-readable and can be inspected at any time. However, do not
+modify it by hand while the library is running: the next auto-save will overwrite
+your changes.
+
+---
+
+## Section 21: Value Converters
+
+### Purpose
+
+Converters scale or transform values between the digitalSTROM protocol range and
+the physical device range. They are small Python code snippets evaluated at
+runtime. The converter system is available on:
+
+- `OutputChannel` — uplink and downlink
+- `SensorInput` — uplink
+- `BinaryInput` — uplink
+- `DeviceProperty` — uplink and downlink
+- `DeviceState` — uplink and downlink
+
+### Two directions
+
+- **Uplink** (device → dS): applied when a value arrives from the physical
+  device and is about to be reported to the dSS.
+- **Downlink** (dS → device): applied when a value is received from the dSS
+  and is about to be forwarded to the physical device.
+
+### Snippet format
+
+A converter is a string of Python code. The snippet operates on a pre-bound
+variable `value` and may reassign it any number of times. The library
+automatically appends `return value`, so no return statement is needed:
+
+```python
+# Single-line expression:
+"value = value * 100.0 / 255.0"
+
+# Multi-line block:
+"""
+mapping = {"stopped": 0, "paused": 1, "playing": 2}
+value = mapping.get(str(value), 0)
+"""
+
+# None-guarded conversion:
+"""
+if value is None:
+    value = 0.0
+else:
+    value = float(value) * 2.0
+"""
+```
+
+Standard library modules can be imported inside the snippet if needed
+(`import math`). The snippet is compiled eagerly at configuration time so syntax
+errors surface immediately.
+
+### API
+
+```python
+# On OutputChannel, SensorInput, BinaryInput, DeviceProperty, DeviceState:
+component.set_uplink_converter(code: str | None)    # device → dS
+component.set_downlink_converter(code: str | None)  # dS → device
+```
+
+Pass `None` to remove a converter and revert to pass-through.
+
+The internal function `compile_converter(code)` in `pydsvdcapi.addons.converter`
+compiles a snippet string into a callable. It is used internally and is not part
+of the public component API, but can be called directly if custom converter logic
+is needed.
+
+### Concrete examples
+
+```python
+# Temperature: Fahrenheit from the device → Celsius for dS (uplink)
+sensor.set_uplink_converter("value = (value - 32) / 1.8")
+
+# Brightness: dS percentage (0–100) → device byte (0–255) (downlink)
+channel.set_downlink_converter("value = int(round(value * 255.0 / 100.0))")
+
+# Clamp a sensor reading to a valid range (uplink)
+sensor.set_uplink_converter("value = max(0.0, min(100.0, value))")
+
+# Remove a converter:
+sensor.set_uplink_converter(None)
+```
+
+### Error handling
+
+If the converter snippet raises an exception at runtime, a `WARNING` is logged
+(including the component identity, direction, and error) and the **original
+unconverted value** is returned unchanged. This fail-open behaviour ensures data
+is never silently dropped.
+
+---
+
+## Section 22: Device Templates
+
+### Purpose
+
+A device template is a structural snapshot of a `Device` configuration (component
+types, descriptions, settings, model features) with instance-specific values
+stripped out. Templates allow you to save a device configuration once and later
+restore it quickly, providing the per-instance details at restore time without
+re-building the entire structure from scratch.
+
+Templates are stored as YAML files on disk. The `template_path` parameter on
+`Vdc` specifies the base directory.
+
+### Saving a template
+
+```python
+vdc = Vdc(
+    host=host,
+    implementation_id="x-acme-light",
+    template_path="/var/lib/myvdc/templates",
+)
+
+# After building and announcing a device, save its structural configuration:
+vdc.save_template(
+    device,
+    template_type="generic",        # "generic" or "model"
+    integration="x-acme-light",     # used as a sub-folder
+    name="dimmable-light",          # file stem
+    description="Standard dimmable light bulb",
+)
+# Saves to: /var/lib/myvdc/templates/generic_templates/x-acme-light/dimmable-light.yaml
+```
+
+`save_template()` raises `RuntimeError` if `template_path` was not set on the
+`Vdc` instance.
+
+### Loading and instantiating a template
+
+```python
+# Load the structural snapshot from disk:
+tmpl = vdc.load_template(
+    template_type="generic",
+    integration="x-acme-light",
+    name="dimmable-light",
+)
+
+# Supply per-instance required fields (at minimum: vdsd names):
+tmpl.configure({"vdsds[0].name": "Kitchen Light"})
+
+# Check that all required fields are set before instantiating:
+if tmpl.is_ready():
+    device = tmpl.instantiate(vdc=vdc, dsuid=my_dsuid)
+
+    # Attach runtime callbacks (required callbacks are enumerated in
+    # tmpl.required_callbacks):
+    device.vdsds[0].output.on_channel_applied = my_channel_handler
+    device.vdsds[0].on_identify = my_identify_handler
+
+    await device.announce(session)
+```
+
+`instantiate()` raises `TemplateNotConfiguredError` if `is_ready()` is `False`.
+
+### TemplateNotConfiguredError
+
+Raised when `DeviceTemplate.instantiate()` is called before all required fields
+have been supplied via `configure()`. The exception's `missing_fields` attribute
+lists the field-path strings that are still `None`.
+
+### AnnouncementNotReadyError
+
+Raised by `Device.announce()` when required callbacks (recorded in the template's
+`requiredCallbacks` manifest) have not been set on the instantiated device. The
+exception's `missing_callbacks` attribute lists the callback-path strings that
+are still unset.
+
+Required callbacks are determined from the device structure at template-save time:
+
+- `vdsds[N].on_invoke_action` — if the vdSD has action descriptions or standard actions
+- `vdsds[N].on_identify` — if `"identification"` is in model features
+- `vdsds[N].on_control_value` — if the vdSD uses control values
+- `vdsds[N].output.on_channel_applied` — if the vdSD has an output
+
+### When templates are useful
+
+- **Multiple identical devices**: configure once, instantiate many times with
+  different dSUIDs and names.
+- **Devices re-created on restart**: use `state_path` (see Section 20) for full
+  state persistence, or use templates to restore the device structure and re-attach
+  callbacks without re-building components manually.
+
+---
+
+## Section 23: Session Constants
+
+The following module-level constants are defined in `pydsvdcapi.vdc_host` and
+`pydsvdcapi.session`. They can be imported directly if needed.
+
+### From pydsvdcapi.vdc_host
+
+```python
+from pydsvdcapi.vdc_host import DEFAULT_VDC_PORT, AUTO_SAVE_DELAY
+```
+
+| Constant | Value | Description |
+|---|---|---|
+| `DEFAULT_VDC_PORT` | `8444` | Default TCP port the `VdcHost` listens on when no `port` argument is passed. |
+| `AUTO_SAVE_DELAY` | `1.0` | Debounce delay in seconds before a triggered auto-save is written to disk. |
+
+### From pydsvdcapi.session
+
+```python
+from pydsvdcapi.session import SUPPORTED_API_VERSION, MAX_SUPPORTED_API_VERSION
+```
+
+| Constant | Value | Description |
+|---|---|---|
+| `SUPPORTED_API_VERSION` | `2` | Minimum vDC API version accepted during the hello handshake. |
+| `MAX_SUPPORTED_API_VERSION` | `4` | Maximum vDC API version accepted. Versions above this are rejected with `ERR_INCOMPATIBLE_API`. |
+
+The library negotiates the API version during every new session. If the vdSM
+announces an API version outside the range
+`[SUPPORTED_API_VERSION, MAX_SUPPORTED_API_VERSION]` the session is immediately
+closed with an incompatible-API error.
