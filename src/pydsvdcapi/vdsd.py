@@ -1630,7 +1630,7 @@ class Vdsd:
             "progMode": self.prog_mode,
             "currentConfigId": self.current_config_id,
         }
-        # modelFeatures — sorted by canonical ModelFeatureId enum index (as p44vdc).
+        # modelFeatures — sorted by canonical ModelFeatureId enum index.
         _MODEL_FEATURE_ORDER = {
             "dontcare": 0,
             "blink": 1,
@@ -1719,9 +1719,9 @@ class Vdsd:
         # ------------------------------------------------------------------
         # SingleDevice extensions (§4.5 / §4.6 / §4.7)
         # ------------------------------------------------------------------
-        # In p44-vdc, enableAsSingleDevice() always creates ALL
-        # SingleDevice containers together (deviceActions, dynamicActions,
-        # customActions, standardActions, states, events, properties).
+        # Always create ALL SingleDevice containers together
+        # (deviceActions, dynamicActions, customActions, standardActions,
+        # states, events, properties).
         # The vdSM may rely on the presence of the action description
         # properties to recognise a device as a SingleDevice.  We
         # therefore include empty action descriptions whenever ANY
@@ -2316,7 +2316,7 @@ class Vdsd:
             for si in self._sensor_inputs.values():
                 si.start_alive_timer(session)
             # Push initial state for inputs that already have a value
-            # (mirrors vdSMAnnouncementAcknowledged in p44vdc device.cpp).
+            # (implements the vdSMAnnouncementAcknowledged protocol step).
             for si in self._sensor_inputs.values():
                 if si.value is not None:
                     await si._push_state(session, force=True)

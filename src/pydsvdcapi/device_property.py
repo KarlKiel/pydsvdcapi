@@ -473,7 +473,7 @@ class DeviceProperty:
 
         For enumeration properties an integer key is automatically
         resolved to the corresponding text label via the *options*
-        dictionary, matching p44-vdc behaviour.
+        dictionary, matching the vDC API specification.
         """
         # Per §4.6.4 all property values are strings on the wire.
         # We keep numeric values as float internally for convenience
@@ -513,7 +513,7 @@ class DeviceProperty:
             )
             return
 
-        # Push direct scalar value (p44-vdc compatible).
+        # Push direct scalar value (vDC API compatible).
         push_tree: dict[str, Any] = {
             "deviceProperties": {
                 self._name: self._value,
@@ -557,7 +557,7 @@ class DeviceProperty:
     def _resolve_enum_label(self, value: float | int | str) -> str:
         """Resolve *value* to a string label for enumeration properties.
 
-        p44-vdc always sends the text label for enumeration values.
+        The vDC API specification always sends the text label for enumeration values.
         This method resolves:
 
         * ``int`` → label via options dictionary (key → label).

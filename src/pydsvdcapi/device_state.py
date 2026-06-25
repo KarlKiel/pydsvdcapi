@@ -307,7 +307,7 @@ class DeviceState:
     def _value_as_label(self) -> str | None:
         """Return the current value as a string label.
 
-        p44-vdc sends the text label (e.g. ``"Running"``) for
+        The vDC API specification requires the text label (e.g. ``"Running"``) for
         enumeration state values, not the integer key.  This method
         performs the key → label lookup.
 

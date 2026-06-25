@@ -56,7 +56,7 @@ class _NoValue:
     Use this as a dict value when building property trees where the
     resulting ``PropertyElement`` must have its ``name`` set but its
     ``value`` field completely absent (not even an empty
-    ``PropertyValue``).  This matches the p44-vdc behaviour for
+    ``PropertyValue``).  This matches the vDC API specification for
     enumeration value-list entries in state/property descriptions.
     """
 
