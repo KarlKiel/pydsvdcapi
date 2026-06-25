@@ -7,4 +7,5 @@ Python library for the digitalSTROM virtual Device Connector (vDC) API.
    :maxdepth: 2
    :caption: Contents
 
+   guide
    api
