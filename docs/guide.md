@@ -73,7 +73,7 @@ import asyncio
 from pydsvdcapi import (
     VdcHost, Vdc, Device, Vdsd,
     DsUid,
-    Output, OutputFunction, OutputMode, OutputUsage,
+    Output, OutputFunction, OutputUsage,
     ColorGroup, DeviceLifecycleState,
 )
 
@@ -87,48 +87,50 @@ async def main():
 
     # 2. Logical connector — one per integration type
     vdc = Vdc(
+        host=host,
         implementation_id="x-myapp-lights",
         name="My Lights",
         model="Python Light Controller",
     )
     host.add_vdc(vdc)
 
-    # 3. Physical device and its virtual representation
-    device = Device(dsuid=DsUid.new_gtin_based("0000000000001", 0))
+    # 3. Hardware device (base dSUID) and its virtual representation
+    device = Device(vdc=vdc, dsuid=DsUid.from_gtin_serial("0000000000001", "001"))
     vdsd = Vdsd(
-        dsuid=DsUid.new_uuid_based(),
+        device=device,
+        primary_group=ColorGroup.YELLOW,   # yellow = light group
         name="Living Room Light",
+        model="My Light v1",
     )
 
     # 4. Output: the single controllable output of this device
     output = Output(
+        vdsd=vdsd,
         function=OutputFunction.DIMMER,
-        mode=OutputMode.PWM,
-        usage=OutputUsage.ROOM,
-        group=ColorGroup.YELLOW,   # yellow = light group
+        output_usage=OutputUsage.ROOM,
     )
     vdsd.set_output(output)
 
-    # 5. React to dSS commands
-    brightness = output.channels["brightness"]
-
-    @brightness.on_apply
-    async def apply_brightness(value: float) -> None:
-        print(f"Set brightness to {value:.1f}%")
-        # → send to your physical hardware here
+    # 5. React to dSS commands (updates: {dsIndex: value}, brightness = dsIndex 0)
+    async def apply_channels(out: Output, updates: dict) -> None:
+        if 0 in updates:
+            print(f"Set brightness to {updates[0]:.1f}%")
+            # → send to your physical hardware here
+    output.on_channel_applied = apply_channels
 
     # 6. React to identify (user touches device in configurator)
     async def on_identify(v: Vdsd) -> None:
         print(f"Identify: {v.name}")
     vdsd.on_identify = on_identify
 
-    # 7. Report device health
+    # 7. Set initial device health
     await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
 
     # 8. Assemble and run
     device.add_vdsd(vdsd)
     vdc.add_device(device)
-    await host.run()   # connects to dSS, blocks until stopped
+    await host.start()           # start TCP server + DNS-SD announce
+    await asyncio.Event().wait() # run forever (until process is killed)
 
 
 asyncio.run(main())
