@@ -162,7 +162,6 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
 
 logger = logging.getLogger(__name__)
 
-# Default motor timing values for shadow devices (primaryGroup 2, function POSITIONAL).
 # Default motor timing values for shade outputs (per vDC API specification).
 _SHADOW_DEFAULT_OPEN_TIME: float = 50.0
 _SHADOW_DEFAULT_CLOSE_TIME: float = 50.0
