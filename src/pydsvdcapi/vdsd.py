@@ -1563,6 +1563,34 @@ class Vdsd:
             if state == DeviceLifecycleState.REMOVED:
                 await self.vanish(self._session)
 
+    async def send_identify(self) -> None:
+        """Notify the vdSM that the user physically identified this device.
+
+        Sends ``VDC_SEND_IDENTIFY`` with this vdSD's dSUID — fire-and-forget,
+        no response is expected or awaited.
+
+        Use this when the physical device signals a user-identification gesture
+        (e.g. the user presses a pairing/identify button on the hardware).  The
+        vdSM uses the incoming dSUID to know *which* physical device the user
+        touched, enabling the dSS configurator to proceed with pairing or
+        assignment without the user having to enter a dSUID manually.
+
+        If the device is not yet announced or has no active session, the call
+        is a no-op.
+        """
+        if not self._announced or self._session is None:
+            return
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_IDENTIFY
+        msg.vdc_send_identify.dSUID = str(self._dsuid)
+        try:
+            await self._session.send_notification(msg)
+            logger.debug("vdSD '%s': sent VDC_SEND_IDENTIFY", self.name)
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "vdSD '%s': failed to send VDC_SEND_IDENTIFY: %s", self.name, exc
+            )
+
     # ---- property dict (for getProperty responses) -------------------
 
     def get_properties(self) -> dict[str, Any]:

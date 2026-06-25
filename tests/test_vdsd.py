@@ -3060,3 +3060,66 @@ class TestVdsdLifecycleState:
             assert vdsd.active is False
         vdsd._lifecycle_state = DeviceLifecycleState.ACTIVE
         assert vdsd.active is True
+
+
+class TestVdsdSendIdentify:
+    """VDC_SEND_IDENTIFY — physical user-identification notification."""
+
+    @pytest.mark.asyncio
+    async def test_send_identify_sends_correct_message(self):
+        """send_identify() sends VDC_SEND_IDENTIFY with the vdSD's dSUID."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.send_identify()
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_IDENTIFY
+        assert msg.vdc_send_identify.dSUID == str(vdsd.dsuid)
+
+    @pytest.mark.asyncio
+    async def test_send_identify_noop_when_not_announced(self):
+        """send_identify() is a no-op when the device is not yet announced."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = False
+        vdsd._session = session
+
+        await vdsd.send_identify()
+
+        session.send_notification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_identify_noop_when_no_session(self):
+        """send_identify() is a no-op when there is no active session."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        vdsd._announced = True
+        vdsd._session = None
+
+        await vdsd.send_identify()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_send_identify_suppresses_connection_error(self):
+        """send_identify() logs and suppresses ConnectionError."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        session.send_notification.side_effect = ConnectionError("gone")
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.send_identify()  # must not raise
