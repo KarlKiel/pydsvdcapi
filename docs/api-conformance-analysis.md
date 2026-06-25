@@ -105,7 +105,7 @@ message vdsm_RequestSetProperty {
 | # | Message / Area | Severity | Direction of gap |
 |---|----------------|----------|-----------------|
 | 1 | `VDSM_SEND_PING` — presence check implemented via `DeviceLifecycleState` | ✅ | **resolved in v0.9.0** |
-| 2 | `hello` — no upper bound on `api_version` | 🟠 | pydsvdcapi more permissive |
+| 2 | `hello` — API version bounds + vdSM identity check | ✅ | **resolved in v0.9.0** |
 | 3 | `VDC_SEND_IDENTIFY` outbound not implemented | 🟡 | pydsvdcapi missing |
 | 4 | `x-p44-*` device methods not implemented | 🟡 | pydsvdcapi missing |
 | 5 | `channelStates` push — p44vdc explicitly not implemented for DS API | 🟢 | p44vdc missing (pydsvdcapi correct) |
@@ -148,25 +148,21 @@ The pong dSUID behaviour is unchanged: pydsvdcapi echoes the incoming dSUID fiel
 
 ---
 
-### 🟠 #2 — `hello`: no upper bound on `api_version`
+### ✅ #2 — `hello`: API version bounds + vdSM identity check *(resolved v0.9.0)*
 
 **p44vdc** (`vdchost.cpp:1310`):
-Accepts `VDC_API_VERSION_MIN (2) ≤ api_version ≤ VDC_API_VERSION_MAX (3)`. A version of 4 or
-higher is rejected with `ERR_INCOMPATIBLE_API`.
+Accepts `VDC_API_VERSION_MIN (2) ≤ api_version ≤ VDC_API_VERSION_MAX (3)`. Versions outside
+that range are rejected with `ERR_INCOMPATIBLE_API`. Same-dSUID re-hello resets the session
+and re-announces; different-dSUID hello during an active session is rejected with
+`ERR_SERVICE_NOT_AVAILABLE`.
 
-**pydsvdcapi** (`session.py`):
-Accepts `api_version ≥ SUPPORTED_API_VERSION (2)`. No upper bound. A version of 4 would be
-accepted and the session would proceed using API v2 semantics.
+**pydsvdcapi** (v0.9.0+, `session.py`):
 
-**Impact**: If the vdSM ever negotiates a higher API version (e.g. v4 with breaking changes),
-pydsvdcapi will accept the session and silently mishandle new message formats or semantics.
-The failure would be silent rather than an explicit version rejection. This is a
-forward-compatibility risk, not a current interoperability failure.
+1. **API version range** — `SUPPORTED_API_VERSION (2) ≤ api_version ≤ MAX_SUPPORTED_API_VERSION (4)`. Both bounds are enforced with `ERR_INCOMPATIBLE_API`. The upper bound is set to 4 (one beyond p44vdc's current maximum of 3) to allow for imminent protocol updates while preventing silent mishandling of further-future breaking versions.
 
-**Additional hello difference**: p44vdc allows the same vdSM (same `dSUID`) to restart a session
-while one is already active — it resets and re-announces. A different vdSM's hello while a session
-is active is rejected with `ERR_SERVICE_NOT_AVAILABLE`. pydsvdcapi's session model does not
-distinguish same vs. different vdSM reconnects.
+2. **Unknown vdSM during active session** — a hello from a dSUID that does not match the currently connected vdSM is rejected with `ERR_SERVICE_NOT_AVAILABLE`. The existing session is preserved.
+
+3. **Same vdSM reconnect** — a re-hello from the same dSUID signals the vdSM has lost track of the still-open connection. The session is reset (`_reset_session_state`: pending requests cancelled, counters zeroed) and `on_hello` fires again so `VdcHost` re-announces all vDCs and devices, restoring stable communication.
 
 ---
 
@@ -342,6 +338,5 @@ issue is essential — the handler code and the proto schema do not always match
 ### Protobuf API coverage is essentially complete
 
 For all message types and fields defined in `vdcapi.proto`, pydsvdcapi correctly handles the
-mandatory and optional fields that the standard vdSM sends. The remaining real gaps (#2–#4) are
-future-proofing (api_version upper bound) and missing outbound/inbound genericRequest support for
-p44-proprietary extensions. Finding #1 (ping/pong presence semantics) is resolved in v0.9.0.
+mandatory and optional fields that the standard vdSM sends. The remaining real gaps (#3–#4) are missing outbound/inbound genericRequest support for
+p44-proprietary extensions. Findings #1 and #2 are resolved in v0.9.0.
