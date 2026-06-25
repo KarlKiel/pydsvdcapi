@@ -37,7 +37,10 @@ import socket
 import threading
 from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from pydsvdcapi.vdsd import Vdsd
 
 from zeroconf import ServiceInfo, ServiceListener
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
@@ -514,7 +517,7 @@ class VdcHost:
         """
         return self._vdcs.get(str(dsuid))
 
-    def _find_vdsd(self, dsuid: str) -> "Vdsd | None":
+    def _find_vdsd(self, dsuid: str) -> Vdsd | None:
         """Find a :class:`Vdsd` by its dSUID string.
 
         Traverses all registered vDCs → devices → vdSDs.
