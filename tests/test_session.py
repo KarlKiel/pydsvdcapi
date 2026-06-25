@@ -136,8 +136,8 @@ class TestHello:
         await task
 
     @pytest.mark.asyncio
-    async def test_incompatible_api_version(self):
-        """API version < SUPPORTED should be rejected."""
+    async def test_incompatible_api_version_too_low(self):
+        """API version < SUPPORTED_API_VERSION should be rejected."""
         vdsm, vdc = _make_pair()
         session = VdcSession(vdc, HOST_DSUID)
 
@@ -155,32 +155,86 @@ class TestHello:
         assert session.state is SessionState.CLOSED
 
     @pytest.mark.asyncio
-    async def test_re_hello_resets_session(self):
-        """A second hello on the same connection resets the session."""
+    async def test_incompatible_api_version_too_high(self):
+        """API version > MAX_SUPPORTED_API_VERSION should be rejected."""
         vdsm, vdc = _make_pair()
         session = VdcSession(vdc, HOST_DSUID)
 
-        # First hello.
-        await vdsm.send(_hello_msg(msg_id=1))
-        # Second hello with different dsuid.
-        new_dsuid = "1122334455667788990011223344556677"
-        await vdsm.send(_hello_msg(dsuid=new_dsuid, msg_id=2))
+        await vdsm.send(_hello_msg(api_version=5))
         vdsm._writer.close()
 
         task = asyncio.create_task(session.run())
 
-        # Read both responses.
-        r1 = await vdsm.receive()
-        r2 = await vdsm.receive()
-        assert r1 is not None
-        assert r2 is not None
-        assert r1.type == pb.VDC_RESPONSE_HELLO
-        assert r2.type == pb.VDC_RESPONSE_HELLO
-        assert r2.message_id == 2
+        response = await vdsm.receive()
+        assert response is not None
+        assert response.type == pb.GENERIC_RESPONSE
+        assert response.generic_response.code == pb.ERR_INCOMPATIBLE_API
 
         await task
-        # Session should reflect the second hello.
-        assert session.vdsm_dsuid == new_dsuid
+        assert session.state is SessionState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_re_hello_same_dsuid_resets_session(self):
+        """A re-hello from the same vdSM resets session state and re-fires on_hello."""
+        vdsm, vdc = _make_pair()
+        calls = []
+        second_call = asyncio.Event()
+
+        async def hello_cb(sess):
+            calls.append(True)
+            if len(calls) == 2:
+                second_call.set()
+
+        session = VdcSession(vdc, HOST_DSUID, on_hello=hello_cb)
+
+        task = asyncio.create_task(session.run())
+
+        # First hello.
+        await vdsm.send(_hello_msg(msg_id=1))
+        r1 = await vdsm.receive()
+        assert r1 is not None and r1.type == pb.VDC_RESPONSE_HELLO
+
+        # Second hello — same dSUID, simulating vdSM losing track of connection.
+        await vdsm.send(_hello_msg(msg_id=2))
+        r2 = await vdsm.receive()
+        assert r2 is not None and r2.type == pb.VDC_RESPONSE_HELLO
+        assert r2.message_id == 2
+
+        # on_hello must fire a second time (re-announcement).
+        await asyncio.wait_for(second_call.wait(), timeout=2.0)
+
+        vdsm._writer.close()
+        await task
+        assert session.vdsm_dsuid == VDSM_DSUID
+
+    @pytest.mark.asyncio
+    async def test_re_hello_different_dsuid_rejected(self):
+        """A hello from a different vdSM while a session is active is rejected."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        # First hello from the known vdSM.
+        await vdsm.send(_hello_msg(dsuid=VDSM_DSUID, msg_id=1))
+        # Second hello from a different vdSM.
+        other_dsuid = "1122334455667788990011223344556677"
+        await vdsm.send(_hello_msg(dsuid=other_dsuid, msg_id=2))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+
+        # First hello succeeds.
+        r1 = await vdsm.receive()
+        assert r1 is not None and r1.type == pb.VDC_RESPONSE_HELLO
+
+        # Second hello is rejected.
+        r2 = await vdsm.receive()
+        assert r2 is not None
+        assert r2.type == pb.GENERIC_RESPONSE
+        assert r2.generic_response.code == pb.ERR_SERVICE_NOT_AVAILABLE
+
+        await task
+        # Session remains bound to the original vdSM.
+        assert session.vdsm_dsuid == VDSM_DSUID
 
     @pytest.mark.asyncio
     async def test_on_hello_callback_is_invoked(self):

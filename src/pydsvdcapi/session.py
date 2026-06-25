@@ -52,8 +52,14 @@ from pydsvdcapi.connection import VdcConnection
 
 logger = logging.getLogger(__name__)
 
-#: The API version implemented by this library.
+#: Minimum API version accepted during hello handshake.
 SUPPORTED_API_VERSION: int = 2
+
+#: Maximum API version accepted during hello handshake.
+#: Versions higher than this are rejected with ERR_INCOMPATIBLE_API so that
+#: a future vdSM speaking a breaking protocol version does not silently
+#: interoperate using stale v2 semantics.
+MAX_SUPPORTED_API_VERSION: int = 4
 
 #: Default inactivity watchdog timeout in seconds.  vdSM sends pings
 #: every ~45 s when the session is otherwise idle; 90 s ≈ 2× that
@@ -419,27 +425,45 @@ class VdcSession:
             self._conn.peername,
         )
 
-        # Check API version compatibility.
-        if api_version < SUPPORTED_API_VERSION:
+        # Check API version range: [SUPPORTED_API_VERSION, MAX_SUPPORTED_API_VERSION].
+        if not (SUPPORTED_API_VERSION <= api_version <= MAX_SUPPORTED_API_VERSION):
             logger.warning(
-                "Incompatible API version %d (need >= %d)",
+                "Incompatible API version %d (need %d–%d)",
                 api_version,
                 SUPPORTED_API_VERSION,
+                MAX_SUPPORTED_API_VERSION,
             )
             await self._send_error(
                 msg,
                 pb.ERR_INCOMPATIBLE_API,
                 f"Incompatible API version {api_version} "
-                f"(need >= {SUPPORTED_API_VERSION})",
+                f"(need {SUPPORTED_API_VERSION}–{MAX_SUPPORTED_API_VERSION})",
             )
             self._state = SessionState.CLOSED
             return
 
-        # If we were already active, this is an implicit re-hello from
-        # the same vdSM (the spec says a new Hello implicitly
-        # terminates the old session — we just reset).
         if self._state is SessionState.ACTIVE:
-            logger.info("Re-hello — resetting session")
+            if vdsm_dsuid.upper() != (self._vdsm_dsuid or "").upper():
+                # A *different* vdSM is trying to take over an active session.
+                # Reject it — the original vdSM may still be using this connection.
+                logger.warning(
+                    "Rejecting hello from unknown vdSM %s: session already active with %s",
+                    vdsm_dsuid,
+                    self._vdsm_dsuid,
+                )
+                await self._send_error(
+                    msg,
+                    pb.ERR_SERVICE_NOT_AVAILABLE,
+                    f"Session already active with vdSM {self._vdsm_dsuid}",
+                )
+                return
+            # Same vdSM reconnecting — it lost track of the still-open connection.
+            # Reset and re-announce so communication is stable again.
+            logger.warning(
+                "Re-hello from same vdSM %s — resetting session for re-announcement",
+                vdsm_dsuid,
+            )
+            self._reset_session_state()
 
         self._vdsm_dsuid = vdsm_dsuid
         self._api_version = api_version
@@ -464,6 +488,20 @@ class VdcSession:
                 self._invoke_on_hello(),
                 name=f"on_hello-{vdsm_dsuid}",
             )
+
+    def _reset_session_state(self) -> None:
+        """Clear per-session runtime state before accepting a re-hello.
+
+        Pending outgoing requests will never receive a response (the vdSM
+        lost track of them), so their futures are cancelled.  Counters are
+        reset so the new session starts clean.
+        """
+        for future in self._pending_requests.values():
+            if not future.done():
+                future.cancel()
+        self._pending_requests.clear()
+        self._ping_count = 0
+        self._last_known_id = 0
 
     async def _invoke_on_hello(self) -> None:
         """Wrapper that invokes *_on_hello* with error handling."""

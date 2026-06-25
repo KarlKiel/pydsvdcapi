@@ -69,6 +69,7 @@ __all__ = [
     "PropertyStore",
     # Session
     "SUPPORTED_API_VERSION",
+    "MAX_SUPPORTED_API_VERSION",
     "HelloCallback",
     "MessageCallback",
     "SessionState",
@@ -272,6 +273,7 @@ from pydsvdcapi.sensor_input import (  # noqa: F401
 )
 from pydsvdcapi.session import (  # noqa: F401
     SUPPORTED_API_VERSION,
+    MAX_SUPPORTED_API_VERSION,
     HelloCallback,
     MessageCallback,
     SessionState,
