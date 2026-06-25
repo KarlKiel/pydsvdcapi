@@ -1441,3 +1441,565 @@ async def on_sensor_update(temperature: float, co2: float) -> None:
     await si_temp.update_value(temperature)
     await si_co2.update_value(co2)
 ```
+
+---
+
+## 14. DeviceState Reference
+
+`DeviceState` models one discrete enumerated device state on a vdSD. States
+are used to report device-specific status information to the dSS — for example
+an operating mode, an error code, or any other multi-valued status. Unlike
+sensors (which carry continuous readings), a device state has a fixed set of
+labeled options (e.g. `{0: "Off", 1: "Running", 2: "Error"}`).
+
+Device states map to the vDC API `deviceStates` property group (comprising
+`deviceStateDescriptions` and `deviceStates`). State descriptions are
+persisted; current values are volatile and not saved across restarts.
+
+Attach to a vdSD with `vdsd.add_device_state(st)`.
+
+### Constructor
+
+All parameters are keyword-only.
+
+```python
+from pydsvdcapi.device_state import DeviceState
+
+st = DeviceState(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="operatingState",
+    options={0: "Off", 1: "Initializing", 2: "Running", 3: "Shutdown"},
+    description="Current operating state of the device",
+)
+my_vdsd.add_device_state(st)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all device states of this device; must be unique |
+| `name` | `str` | `""` | State name as reported to the dSS (e.g. `"operatingState"`) |
+| `options` | `dict[int \| str, str] \| None` | `None` | Mapping of integer or string keys to human-readable labels (e.g. `{0: "Off", 1: "Running"}`) |
+| `description` | `str \| None` | `None` | Optional human-readable description |
+
+### Key attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `ds_index` | `int` | Zero-based index (read-only) |
+| `name` | `str` | State name; writable |
+| `options` | `dict` | Option key → label mapping; writable (returns a copy) |
+| `description` | `str \| None` | Human-readable description; writable |
+| `value` | `int \| None` | Current state as integer option key; `None` = unknown; volatile (not persisted) |
+| `uplink_converter_code` | `str \| None` | Stored uplink converter snippet, or `None` |
+
+### Key methods
+
+#### `async update_value(value: int | str, session=None) -> None`
+
+Update the state value and push a `deviceStates` notification to the vdSM.
+
+- `value` accepts an integer option key or a text label (resolved via the
+  `options` dictionary). Passing a label string (e.g. `"Running"`) performs a
+  reverse lookup and stores the corresponding integer key.
+- If `session` is `None`, the owning vdSD's current session is used.
+- If no active session is available, the value is recorded locally but the push
+  is skipped with a warning.
+- If an uplink converter is set, it is applied before option resolution.
+
+```python
+await st.update_value(2)          # by integer key
+await st.update_value("Running")  # by label — resolved to key 2
+```
+
+#### `set_uplink_converter(code: str | None) -> None`
+
+Set or clear an uplink converter. The snippet manipulates `value` (the raw
+incoming int or str) before option resolution. The library appends
+`return value` automatically. Pass `None` to remove. Raises `SyntaxError` if
+the snippet cannot be compiled. The code is persisted to YAML.
+
+```python
+st.set_uplink_converter("""
+mapping = {"STOPPED": 0, "PLAYING": 2}
+value = mapping.get(str(value), 0)
+""")
+```
+
+### Code example
+
+```python
+from pydsvdcapi.device_state import DeviceState
+
+# Declare the state
+st = DeviceState(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="operatingState",
+    options={0: "Off", 1: "Initializing", 2: "Running", 3: "Error"},
+    description="Device operating state",
+)
+my_vdsd.add_device_state(st)
+
+# When the hardware reports a state change:
+async def on_hardware_state_changed(raw_state: int) -> None:
+    await st.update_value(raw_state)
+```
+
+---
+
+## 15. DeviceEvent Reference
+
+`DeviceEvent` models one stateless one-shot event on a vdSD. Device events are
+push notifications sent from the device to the dSS when something notable
+happens — for example a doorbell press, an alarm trigger, or a protocol-level
+button event. Unlike device states, events carry no persistent state; each
+invocation is a distinct occurrence.
+
+Device events map to the vDC API `deviceEventDescriptions` property group and
+are sent via `VDC_SEND_PUSH_NOTIFICATION` with a `deviceevents` payload. Only
+the event description (name and optional description) is persisted; occurrences
+are transient.
+
+Attach to a vdSD with `vdsd.add_device_event(evt)`.
+
+### Constructor
+
+All parameters are keyword-only.
+
+```python
+from pydsvdcapi.device_event import DeviceEvent
+
+evt = DeviceEvent(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="doorbell",
+    description="Doorbell button pressed",
+)
+my_vdsd.add_device_event(evt)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all device events of this device; must be unique |
+| `name` | `str` | `""` | Event name as reported to the dSS (e.g. `"doorbell"`) |
+| `description` | `str \| None` | `None` | Optional human-readable description |
+
+### Key attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `ds_index` | `int` | Zero-based index (read-only) |
+| `name` | `str` | Event name; writable |
+| `description` | `str \| None` | Human-readable description; writable |
+
+### `async raise_event(session=None) -> None`
+
+Fire the event — sends a `VDC_SEND_PUSH_NOTIFICATION` to the vdSM with the
+`deviceevents` payload containing this event's name.
+
+- If `session` is `None`, the owning vdSD's current session is used.
+- If no active session is available, the call is silently skipped with a
+  warning.
+
+### Code example
+
+```python
+from pydsvdcapi.device_event import DeviceEvent
+
+evt = DeviceEvent(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="alarmTriggered",
+    description="Motion alarm was triggered",
+)
+my_vdsd.add_device_event(evt)
+
+# When the physical device fires the alarm:
+async def on_alarm() -> None:
+    await evt.raise_event()
+```
+
+---
+
+## 16. DeviceProperty Reference
+
+`DeviceProperty` models one generic device property on a vdSD. Properties
+differ from device states in that they are not limited to a fixed set of
+labeled options — they can be numeric, enumeration, or free-form string values.
+Property values are read/write from the dSS perspective and are **persisted**
+across restarts (unlike device state values, which are volatile).
+
+Device properties map to the vDC API `deviceProperties` property group
+(comprising `devicePropertyDescriptions` and `deviceProperties`). The dSS can
+display and edit these properties in the configurator.
+
+Attach to a vdSD with `vdsd.add_device_property(prop)`.
+
+### Constructor
+
+All parameters are keyword-only.
+
+```python
+from pydsvdcapi.device_property import DeviceProperty
+
+prop = DeviceProperty(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="batteryLevel",
+    type="numeric",
+    min_value=0.0,
+    max_value=100.0,
+    resolution=1.0,
+    siunit="%",
+    default=100.0,
+    description="Battery charge level",
+)
+my_vdsd.add_device_property(prop)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all device properties of this device; must be unique |
+| `name` | `str` | `""` | Property name as reported to the dSS (e.g. `"batteryLevel"`) |
+| `type` | `str` | `"string"` | Data type: `"numeric"`, `"enumeration"`, or `"string"` |
+| `min_value` | `float \| None` | `None` | Minimum value (numeric only) |
+| `max_value` | `float \| None` | `None` | Maximum value (numeric only) |
+| `resolution` | `float \| None` | `None` | Resolution / LSB size (numeric only) |
+| `siunit` | `str \| None` | `None` | SI unit string, e.g. `"%"` or `"°C"` (numeric only) |
+| `options` | `dict[int \| str, str] \| None` | `None` | Option key → label mapping (enumeration only) |
+| `default` | `float \| str \| None` | `None` | Default value (all types) |
+| `description` | `str \| None` | `None` | Optional human-readable description |
+
+### Key attributes and methods
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `ds_index` | `int` | Zero-based index (read-only) |
+| `name` | `str` | Property name; writable |
+| `type` | `str` | Data type identifier; writable |
+| `min_value` / `max_value` | `float \| None` | Range bounds (numeric); writable |
+| `resolution` | `float \| None` | Resolution (numeric); writable |
+| `siunit` | `str \| None` | SI unit (numeric); writable |
+| `options` | `dict \| None` | Enumeration options; writable (returns a copy) |
+| `default` | `float \| str \| None` | Default value; writable |
+| `description` | `str \| None` | Human-readable description; writable |
+| `value` | `float \| str \| None` | Current value (persisted); settable directly |
+| `uplink_converter_code` | `str \| None` | Stored uplink converter snippet, or `None` |
+
+#### `async update_value(value: float | int | str, session=None) -> None`
+
+Update the property value, persist it, and push a `deviceProperties`
+notification to the vdSM.
+
+- For `"numeric"` properties the value is stored as `float`.
+- For `"enumeration"` properties an integer key is automatically resolved to
+  the corresponding text label via the `options` dictionary.
+- For `"string"` properties the value is stored as `str`.
+- If `session` is `None`, the owning vdSD's current session is used.
+- If no active session is available, the value is still saved locally but the
+  push is skipped with a warning.
+- Also triggers an auto-save since property values are persisted.
+
+#### `set_uplink_converter(code: str | None) -> None`
+
+Set or clear an uplink converter applied in `update_value()` before type
+conversion. Same mechanics as for `DeviceState` and `OutputChannel`. Pass
+`None` to remove. Raises `SyntaxError` if the snippet cannot be compiled.
+
+```python
+prop.set_uplink_converter("value = round(float(value), 2)")
+```
+
+### Code example
+
+```python
+from pydsvdcapi.device_property import DeviceProperty
+
+# Numeric property — battery level
+prop = DeviceProperty(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="batteryLevel",
+    type="numeric",
+    min_value=0.0,
+    max_value=100.0,
+    resolution=1.0,
+    siunit="%",
+    default=100.0,
+    description="Battery charge level",
+)
+my_vdsd.add_device_property(prop)
+
+# Enumeration property — connection status
+prop_conn = DeviceProperty(
+    vdsd=my_vdsd,
+    ds_index=1,
+    name="connectionStatus",
+    type="enumeration",
+    options={0: "Disconnected", 1: "Connected", 2: "Pairing"},
+    description="Device connection status",
+)
+my_vdsd.add_device_property(prop_conn)
+
+# When hardware reports a new battery reading:
+async def on_battery_update(percent: float) -> None:
+    await prop.update_value(percent)
+```
+
+---
+
+## 17. Actions Reference
+
+Actions are operations that the dSS can invoke on the device. The vdSM sends
+action requests via `VDSM_REQUEST_GENERIC_REQUEST` with
+`methodname="invokeDeviceAction"`. Each action is identified by a string ID and
+may carry parameters.
+
+The actions system has four layers:
+
+| Class | Protocol group | Prefix | Notes |
+|-------|---------------|--------|-------|
+| `DeviceActionDescription` | `deviceActionDescriptions` | (none) | Template: describes a callable operation and its parameter schema |
+| `StandardAction` | `standardActions` | `"std."` | Static pre-defined action based on a template; persisted |
+| `CustomAction` | `customActions` | `"custom."` | User-configurable action; persisted |
+| `DynamicAction` | `dynamicDeviceActions` | `"dynamic."` | Device-managed action; transient (recreated after restart) |
+
+All action-related classes are in `pydsvdcapi.actions`.
+
+### ActionParameter
+
+`ActionParameter` describes one input parameter of an action template.
+
+```python
+from pydsvdcapi.actions import ActionParameter
+
+param = ActionParameter(
+    name="volume",
+    type="numeric",
+    min_value=0,
+    max_value=100,
+    default=50.0,
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | `""` | Parameter name (used as the key in `params`) |
+| `type` | `str` | `"string"` | Data type: `"numeric"`, `"enumeration"`, or `"string"` |
+| `min_value` | `float \| None` | `None` | Minimum value (numeric only) |
+| `max_value` | `float \| None` | `None` | Maximum value (numeric only) |
+| `resolution` | `float \| None` | `None` | Resolution / LSB size (numeric only) |
+| `siunit` | `str \| None` | `None` | SI unit string (numeric only) |
+| `options` | `dict[int \| str, str] \| None` | `None` | Option key → label mapping (enumeration only) |
+| `default` | `float \| str \| None` | `None` | Default value (all types) |
+
+### DeviceActionDescription
+
+`DeviceActionDescription` is an action template — it describes an operation the
+device supports, including its parameter schema. Action instances
+(`StandardAction`, `CustomAction`) reference templates by name.
+
+```python
+from pydsvdcapi.actions import ActionParameter, DeviceActionDescription
+
+param = ActionParameter(name="volume", type="numeric", min_value=0, max_value=100)
+tmpl = DeviceActionDescription(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="play",
+    params=[param],
+    description="Play media on the device",
+)
+my_vdsd.add_device_action_description(tmpl)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all action descriptions; must be unique |
+| `name` | `str` | `""` | Action template name (e.g. `"play"`) |
+| `params` | `list[ActionParameter] \| None` | `None` | Optional list of parameter descriptors |
+| `description` | `str \| None` | `None` | Optional human-readable description |
+
+Attach with **`vdsd.add_device_action_description(desc)`**.
+
+### StandardAction
+
+`StandardAction` is a static, immutable pre-defined action based on a template.
+Its name must be prefixed `"std."`. Standard actions are defined by the device
+and persisted.
+
+```python
+from pydsvdcapi.actions import StandardAction
+
+std = StandardAction(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="std.play-loud",
+    action="play",       # references the template name
+    params={"volume": 100},
+)
+my_vdsd.add_standard_action(std)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all standard actions; must be unique |
+| `name` | `str` | `""` | Unique action ID, must start with `"std."` |
+| `action` | `str` | `""` | Name of the template action this standard action is based on |
+| `params` | `dict[str, Any] \| None` | `None` | Parameter value overrides relative to the template defaults |
+
+Attach with **`vdsd.add_standard_action(std)`**.
+
+### CustomAction
+
+`CustomAction` is a user-configurable action based on a template. Its name must
+be prefixed `"custom."`. Custom actions can be created and modified via the dSS
+API and are persisted.
+
+```python
+from pydsvdcapi.actions import CustomAction
+
+cust = CustomAction(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="custom.morning-play",
+    action="play",
+    title="Morning Playlist",
+    params={"volume": 60},
+)
+my_vdsd.add_custom_action(cust)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all custom actions; must be unique |
+| `name` | `str` | `""` | Unique action ID, must start with `"custom."` |
+| `action` | `str` | `""` | Reference name of the template action |
+| `title` | `str` | `""` | Human-readable name assigned by the user |
+| `params` | `dict[str, Any] \| None` | `None` | Parameter value overrides |
+
+Attach with **`vdsd.add_custom_action(cust)`**.
+
+### DynamicAction
+
+`DynamicAction` is an action created and managed by the device itself at
+runtime. Its name must be prefixed `"dynamic."`. Dynamic actions can appear,
+change, or disappear based on device state. They are transient — not persisted
+across restarts and must be re-registered after startup.
+
+```python
+from pydsvdcapi.actions import DynamicAction
+
+dyn = DynamicAction(
+    vdsd=my_vdsd,
+    ds_index=0,
+    name="dynamic.special-mode",
+    title="Special Mode",
+)
+my_vdsd.add_dynamic_action(dyn)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all dynamic actions; must be unique |
+| `name` | `str` | `""` | Unique action ID, must start with `"dynamic."` |
+| `title` | `str` | `""` | Human-readable name |
+
+Attach with **`vdsd.add_dynamic_action(dyn)`**.
+
+### Handling action invocations
+
+When the vdSM invokes an action on a device (`invokeDeviceAction`), the library
+calls the `on_invoke_action` callback on the `Vdsd`. Set this callback to react
+to all action invocations:
+
+```python
+async def handle_action(vdsd: Vdsd, action_id: str, params: dict) -> None:
+    if action_id in ("std.play-loud", "custom.morning-play"):
+        volume = params.get("volume", 50)
+        await my_player.play(volume=volume)
+    elif action_id == "dynamic.special-mode":
+        await my_device.enter_special_mode()
+
+vdsd.on_invoke_action = handle_action
+```
+
+**Callback signature:**
+
+```python
+async def callback(vdsd: Vdsd, action_id: str, params: dict[str, Any]) -> None: ...
+# sync is also accepted:
+def callback(vdsd: Vdsd, action_id: str, params: dict[str, Any]) -> None: ...
+```
+
+- `vdsd` — the `Vdsd` instance that received the invocation
+- `action_id` — the action name string (e.g. `"std.play-loud"`, `"custom.morning-play"`)
+- `params` — dict of parameter name → value pairs (may be empty)
+
+### Complete code example
+
+```python
+from pydsvdcapi.actions import (
+    ActionParameter,
+    DeviceActionDescription,
+    StandardAction,
+    CustomAction,
+    DynamicAction,
+)
+
+# 1. Define a parameter and a template action
+vol_param = ActionParameter(
+    name="volume", type="numeric",
+    min_value=0, max_value=100, default=50.0,
+)
+tmpl = DeviceActionDescription(
+    vdsd=my_vdsd, ds_index=0,
+    name="play",
+    params=[vol_param],
+    description="Play audio on the device",
+)
+my_vdsd.add_device_action_description(tmpl)
+
+# 2. A standard action — always available at full volume
+std = StandardAction(
+    vdsd=my_vdsd, ds_index=0,
+    name="std.play-max",
+    action="play",
+    params={"volume": 100},
+)
+my_vdsd.add_standard_action(std)
+
+# 3. A custom action — user-configurable name and parameters
+cust = CustomAction(
+    vdsd=my_vdsd, ds_index=0,
+    name="custom.evening",
+    action="play",
+    title="Evening Mode",
+    params={"volume": 40},
+)
+my_vdsd.add_custom_action(cust)
+
+# 4. A dynamic action — available only when device reports a special state
+dyn = DynamicAction(
+    vdsd=my_vdsd, ds_index=0,
+    name="dynamic.alarm",
+    title="Alarm Tone",
+)
+my_vdsd.add_dynamic_action(dyn)
+
+# 5. Handle all invocations via a single callback
+async def handle_action(vdsd, action_id: str, params: dict) -> None:
+    volume = params.get("volume", 50)
+    if action_id.startswith(("std.play", "custom.", "dynamic.alarm")):
+        await my_player.play(volume=volume)
+
+my_vdsd.on_invoke_action = handle_action
+```
