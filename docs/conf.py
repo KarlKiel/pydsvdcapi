@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath("../src"))
 from pydsvdcapi import __version__
 
 project = "pydsvdcapi"
-copyright = "2024, KarlKiel"
+copyright = "2026, KarlKiel"
 author = "KarlKiel"
 release = __version__
 
