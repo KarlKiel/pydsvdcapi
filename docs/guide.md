@@ -816,3 +816,628 @@ Both methods raise `SyntaxError` if the snippet cannot be compiled.
 
 The converter code is persisted alongside the channel description in the YAML state
 file, so converters survive restarts without re-registration.
+
+---
+
+## 11. BinaryInput Reference
+
+`BinaryInput` models one binary (two-state) sensor input on a vdSD. Typical uses
+include contact sensors, motion detectors, door/window sensors, smoke alarms, and
+tamper switches. It maps to the vDC API `binaryInputs` property group (comprising
+`binaryInputDescriptions`, `binaryInputSettings`, and `binaryInputStates`).
+
+Attach to a vdSD with `vdsd.add_binary_input(bi)`. A device can have multiple binary
+inputs; each must have a unique `ds_index`.
+
+### Constructor
+
+All parameters are keyword-only.
+
+```python
+from pydsvdcapi.binary_input import BinaryInput
+from pydsvdcapi.enums import BinaryInputType, BinaryInputUsage
+
+bi = BinaryInput(
+    vdsd=my_vdsd,
+    ds_index=0,
+    sensor_function=BinaryInputType.PRESENCE,
+    input_usage=BinaryInputUsage.ROOM_CLIMATE,
+    name="PIR Sensor",
+)
+my_vdsd.add_binary_input(bi)
+```
+
+#### Description parameters (read-only after construction)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all binary inputs of this device; must be unique |
+| `sensor_function` | `BinaryInputType` | `GENERIC` | The configured sensor function (writable setting, persisted; set the user-facing function here) |
+| `input_type` | `int` | `1` | `0` = poll-only, `1` = detects changes (default) |
+| `input_usage` | `BinaryInputUsage` | `UNDEFINED` | Usage context |
+| `name` | `str` | `""` | Human-readable label |
+| `update_interval` | `float` | `0.0` | Physical tracking interval in seconds; `0.0` = on-change only |
+| `hardwired_function` | `BinaryInputType` | `GENERIC` | If the function is fixed in hardware, set this to the matching type; `GENERIC` means freely configurable |
+
+#### Settings parameters (writable, persisted)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `group` | `int` | `0` | dS group number |
+
+### Key attributes and methods
+
+| Attribute / method | Description |
+|--------------------|-------------|
+| `ds_index` | Zero-based index (read-only) |
+| `sensor_function` | Configured sensor function; writable, persisted |
+| `input_usage` | Usage context (read-only) |
+| `update_interval` | Physical tracking interval in seconds (read-only) |
+| `group` | dS group number; writable, persisted |
+| `value` | Current boolean value (`True` / `False` / `None` = unknown); volatile |
+| `extended_value` | Current integer extended value (`None` = unknown); takes precedence over `value` when set |
+| `age` | Seconds since the last value update (`None` = unknown) |
+| `error` | Current `InputError` status; writable |
+| `on_settings_changed` | Settable async callback `(bi: BinaryInput, changed: dict) -> None`; called when the vdSM writes `binaryInputSettings` |
+
+#### `async update_value(value: bool | None, session: VdcSession | None = None) -> None`
+
+Set the boolean state and push a `binaryInputStates` notification to the vdSM. Pass
+`True` for active/detected, `False` for inactive, `None` for unknown. If `session`
+is `None` the stored session is used (set automatically when the vdSD is announced).
+
+#### `async update_extended_value(value: int | None, session: VdcSession | None = None) -> None`
+
+Set an integer extended value and push state. Used for sensors with more than two
+states (e.g. window handle: 0 = closed, 1 = open, 2 = tilted). Extended value takes
+precedence over `value` in the push payload.
+
+#### `async update_error(error: InputError | int, session: VdcSession | None = None) -> None`
+
+Set the error status and push state.
+
+### Uplink converter
+
+An optional Python snippet can transform the raw incoming value before it is stored
+and pushed. The snippet receives `value` and must assign the result back to `value`;
+the library appends `return value` automatically.
+
+```python
+# Invert a normally-closed contact sensor
+bi.set_uplink_converter("value = not value")
+```
+
+Pass `None` to `set_uplink_converter()` to remove a previously set converter. Raises
+`SyntaxError` if the snippet cannot be compiled. The code is persisted to YAML.
+
+### BinaryInputType enum
+
+| Member | Int | Typical sensor |
+|--------|-----|----------------|
+| `GENERIC` | 0 | Freely configurable / app-mode input |
+| `PRESENCE` | 1 | Presence detector (room occupancy) |
+| `BRIGHTNESS` | 2 | Light level threshold |
+| `PRESENCE_IN_DARKNESS` | 3 | Presence in darkness |
+| `TWILIGHT` | 4 | Twilight / dusk detector |
+| `MOTION` | 5 | Motion detector |
+| `MOTION_IN_DARKNESS` | 6 | Motion in darkness |
+| `SMOKE` | 7 | Smoke / fire alarm |
+| `WIND` | 8 | Wind alarm |
+| `RAIN` | 9 | Rain detector |
+| `SUN_RADIATION` | 10 | Solar radiation threshold |
+| `THERMOSTAT` | 11 | Thermostat contact |
+| `BATTERY_LOW` | 12 | Low battery indicator |
+| `WINDOW_OPEN` | 13 | Window open sensor |
+| `DOOR_OPEN` | 14 | Door open sensor |
+| `WINDOW_TILTED` | 15 | Window tilted (tilt position) |
+| `GARAGE_DOOR_OPEN` | 16 | Garage door open |
+| `SUN_PROTECTION` | 17 | Sun protection active |
+| `FROST` | 18 | Frost alarm |
+| `HEATING_SYSTEM_ENABLED` | 19 | Heating system enabled |
+| `HEATING_CHANGE_OVER` | 20 | Heating/cooling changeover |
+| `INITIALIZATION` | 21 | Sensor initialising |
+| `MALFUNCTION` | 22 | Sensor malfunction |
+| `SERVICE` | 23 | Service required |
+
+### BinaryInputUsage enum
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `UNDEFINED` | 0 | Not specified |
+| `ROOM_CLIMATE` | 1 | Indoor climate input |
+| `OUTDOOR_CLIMATE` | 2 | Outdoor climate input |
+| `CLIMATE_SETTING` | 3 | Climate configuration input |
+
+### Code example
+
+```python
+import asyncio
+from pydsvdcapi.binary_input import BinaryInput
+from pydsvdcapi.enums import BinaryInputType, BinaryInputUsage
+
+bi = BinaryInput(
+    vdsd=my_vdsd,
+    ds_index=0,
+    sensor_function=BinaryInputType.DOOR_OPEN,
+    input_usage=BinaryInputUsage.ROOM_CLIMATE,
+    name="Front Door",
+)
+my_vdsd.add_binary_input(bi)
+
+# When the physical sensor reports a change:
+async def on_door_state_changed(is_open: bool) -> None:
+    await bi.update_value(is_open)
+```
+
+---
+
+## 12. ButtonInput Reference
+
+`ButtonInput` models one button element on a vdSD. A single physical button can
+have one element (single pushbutton) or multiple elements (two-way rocker, 4-way
+navigation pad, etc.). Each element is a separate `ButtonInput` instance. Maps to
+the vDC API `buttonInputs` property group.
+
+Attach to a vdSD with `vdsd.add_button_input(btn)`.
+
+### Constructor
+
+All parameters are keyword-only.
+
+```python
+from pydsvdcapi.button_input import ButtonInput
+from pydsvdcapi.enums import ButtonType, ButtonElementID, ButtonFunction, ButtonMode
+
+btn = ButtonInput(
+    vdsd=my_vdsd,
+    ds_index=0,
+    button_id=0,
+    button_type=ButtonType.SINGLE_PUSHBUTTON,
+    button_element_id=ButtonElementID.CENTER,
+    name="Main Button",
+)
+my_vdsd.add_button_input(btn)
+```
+
+#### Description parameters (read-only after construction)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `ds_index` | `int` | `0` | Zero-based index among all button inputs of this device; must be unique |
+| `name` | `str` | `""` | Human-readable label for this element |
+| `supports_local_key_mode` | `bool` | `False` | Whether this button can act as a local button |
+| `button_id` | `int \| None` | `None` | Physical button ID; all elements of a multi-contact button share the same `button_id` |
+| `button_type` | `ButtonType` | `UNDEFINED` | Physical button type; determines element arrangement |
+| `button_element_id` | `ButtonElementID` | `CENTER` | Which element of the button this instance represents |
+
+#### Settings parameters (writable, persisted)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `group` | `int` | `0` | dS group this button controls |
+| `function` | `ButtonFunction \| ButtonFunctionJoker \| int` | `DEVICE` | Button function / LTNUM |
+| `mode` | `ButtonMode \| int` | `STANDARD` | Button input mode / LTMODE |
+| `channel` | `int` | `0` | Output channel this button controls; `0` = default channel |
+| `sets_local_priority` | `bool` | `False` | Whether button sets local priority |
+| `calls_present` | `bool` | `False` | Whether button calls present when system state is absent |
+
+### Key attributes and methods
+
+| Attribute / method | Description |
+|--------------------|-------------|
+| `ds_index` | Zero-based index (read-only) |
+| `button_type` | Physical button type (read-only) |
+| `button_element_id` | Element identifier (read-only) |
+| `button_id` | Physical button ID shared by all elements (read-only) |
+| `click_detector` | The built-in `ClickDetector` state machine (read-only) |
+| `value` | Current pressed state (`True` = pressed, `False` = released, `None` = unknown); volatile |
+| `click_type` | Most recent resolved click type (`ButtonClickType`); volatile |
+| `action_id` | Scene number of the most recent direct action call; `None` when last event was a click |
+| `action_mode` | `ActionMode` of the most recent direct action call |
+| `age` | Seconds since the last state event (`None` = unknown) |
+| `error` | Current `InputError` status; writable |
+| `on_settings_changed` | Settable async callback `(btn: ButtonInput, changed: dict) -> None` |
+
+#### State machine mode — `press()` / `release()`
+
+Feed raw press/release events into the built-in `ClickDetector`. The state machine
+resolves timing patterns and automatically pushes the resulting `ButtonClickType` to
+the vdSM:
+
+```python
+# Called by hardware interrupt:
+btn.press()    # button physically pressed
+btn.release()  # button physically released — ClickDetector resolves and pushes
+```
+
+#### `async update_click(click_type: ButtonClickType | int, value: bool | None = None, session: VdcSession | None = None) -> None`
+
+Push a pre-resolved click event directly, bypassing the `ClickDetector`. Use when
+the physical device can already determine click types:
+
+```python
+await btn.update_click(ButtonClickType.CLICK_1X)
+```
+
+#### `async update_action(action_id: int, action_mode: ActionMode | int = ActionMode.NORMAL, session: VdcSession | None = None) -> None`
+
+Push a direct scene call. The push payload uses `actionId` / `actionMode` instead of
+`clickType`. Use this when the button directly calls a scene:
+
+```python
+await btn.update_action(action_id=5, action_mode=ActionMode.NORMAL)
+```
+
+### ClickDetector
+
+The built-in `ClickDetector` state machine converts raw press/release timings into
+`ButtonClickType` events. It is created automatically with each `ButtonInput`.
+
+Timing can be customised via `click_detector_config` (a dict passed to the
+constructor):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `tip_timeout` | `0.25` s | Maximum press duration for a short press; longer presses start a hold sequence |
+| `multi_click_window` | `0.3` s | Maximum gap between presses in a multi-click sequence |
+| `hold_repeat_interval` | `1.0` s | Interval between `HOLD_REPEAT` events while button is held |
+| `use_tip_events` | `False` | When `True`, emits `TIP_1X`/`TIP_2X`/`TIP_3X`/`TIP_4X` instead of `CLICK_1X`/`CLICK_2X`/`CLICK_3X` |
+
+Click patterns the state machine can produce:
+
+| Pattern | Event emitted |
+|---------|---------------|
+| 1 short press | `CLICK_1X` (or `TIP_1X`) |
+| 2 short presses | `CLICK_2X` (or `TIP_2X`) |
+| 3+ short presses | `CLICK_3X` (or `TIP_3X`/`TIP_4X`) |
+| Hold (no short press before) | `HOLD_START` → repeated `HOLD_REPEAT` → `HOLD_END` |
+| 1 short press + hold | `SHORT_LONG` |
+| 2+ short presses + hold | `SHORT_SHORT_LONG` |
+
+### Multi-element buttons — `create_button_group()`
+
+For multi-contact buttons (e.g. two-way rocker) use the `create_button_group()`
+helper, which creates all required `ButtonInput` instances automatically:
+
+```python
+from pydsvdcapi.button_input import create_button_group
+from pydsvdcapi.enums import ButtonType
+
+buttons = create_button_group(
+    vdsd=my_vdsd,
+    button_id=0,
+    button_type=ButtonType.TWO_WAY_PUSHBUTTON,
+    start_index=0,
+    name_prefix="Rocker",
+)
+for btn in buttons:
+    my_vdsd.add_button_input(btn)
+# Creates: ButtonInput(ds_index=0, element=DOWN) and ButtonInput(ds_index=1, element=UP)
+```
+
+### ButtonType enum
+
+| Member | Int | Elements | Description |
+|--------|-----|---------|-------------|
+| `UNDEFINED` | 0 | — | No standard layout; create elements manually |
+| `SINGLE_PUSHBUTTON` | 1 | CENTER | Single momentary pushbutton |
+| `TWO_WAY_PUSHBUTTON` | 2 | DOWN, UP | Two-way rocker switch |
+| `FOUR_WAY_NAVIGATION` | 3 | DOWN, UP, LEFT, RIGHT | Four-direction pad (no center) |
+| `FOUR_WAY_WITH_CENTER` | 4 | CENTER, DOWN, UP, LEFT, RIGHT | Four-direction pad with center press |
+| `EIGHT_WAY_WITH_CENTER` | 5 | CENTER + 8 directions | Eight-direction pad with center |
+| `ON_OFF_SWITCH` | 6 | DOWN (off), UP (on) | Dedicated on/off switch |
+
+### ButtonElementID enum
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `CENTER` | 0 | Center element |
+| `DOWN` | 1 | Down / lower element |
+| `UP` | 2 | Up / upper element |
+| `LEFT` | 3 | Left element |
+| `RIGHT` | 4 | Right element |
+| `UPPER_LEFT` | 5 | Upper-left diagonal |
+| `LOWER_LEFT` | 6 | Lower-left diagonal |
+| `UPPER_RIGHT` | 7 | Upper-right diagonal |
+| `LOWER_RIGHT` | 8 | Lower-right diagonal |
+
+### ButtonClickType enum
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `TIP_1X` | 0 | Single short press (tip variant) |
+| `TIP_2X` | 1 | Double short press (tip variant) |
+| `TIP_3X` | 2 | Triple short press (tip variant) |
+| `TIP_4X` | 3 | Quadruple (or more) short press (tip variant) |
+| `HOLD_START` | 4 | Hold started (no prior short press) |
+| `HOLD_REPEAT` | 5 | Periodic repeat while button is held |
+| `HOLD_END` | 6 | Button released after hold |
+| `CLICK_1X` | 7 | Single click |
+| `CLICK_2X` | 8 | Double click |
+| `CLICK_3X` | 9 | Triple (or more) click |
+| `SHORT_LONG` | 10 | One short press followed by a hold |
+| `LOCAL_OFF` | 11 | Local off event |
+| `LOCAL_ON` | 12 | Local on event |
+| `SHORT_SHORT_LONG` | 13 | Two short presses followed by a hold |
+| `LOCAL_STOP` | 14 | Local stop event |
+| `LOCAL_DIM` | 15 | Local dim event |
+| `IDLE` | 255 | No recent event (initial / reset state) |
+
+### ButtonMode enum (selection)
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `STANDARD` | 0 | Standard 1-way pushbutton |
+| `TURBO` | 1 | 1-way turbo mode |
+| `SWITCHED` | 2 | Toggle / switched mode |
+| `TWO_WAY` | 13 | 2-way mode |
+| `ONE_WAY` | 14 | 1-way (explicit) |
+| `HEATING_PUSHBUTTON` | 65 | 1-way heating pushbutton |
+| `DEACTIVATED` | 255 | Deactivated |
+
+Additional paired two-way modes (`TWO_WAY_DOWN_PAIRED_1` – `TWO_WAY_DOWN_PAIRED_4`,
+`TWO_WAY_UP_PAIRED_1` – `TWO_WAY_UP_PAIRED_4`) and AKM contact-module modes
+(`AKM_STANDARD` through `AKM_FALLING_EDGE`) are also available.
+
+### Code example — two-way rocker with click detection
+
+```python
+import asyncio
+from pydsvdcapi.button_input import ButtonInput
+from pydsvdcapi.enums import ButtonType, ButtonElementID, ButtonClickType
+
+# Down element (index 0)
+btn_down = ButtonInput(
+    vdsd=my_vdsd,
+    ds_index=0,
+    button_id=0,
+    button_type=ButtonType.TWO_WAY_PUSHBUTTON,
+    button_element_id=ButtonElementID.DOWN,
+    name="Rocker Down",
+)
+# Up element (index 1)
+btn_up = ButtonInput(
+    vdsd=my_vdsd,
+    ds_index=1,
+    button_id=0,
+    button_type=ButtonType.TWO_WAY_PUSHBUTTON,
+    button_element_id=ButtonElementID.UP,
+    name="Rocker Up",
+)
+my_vdsd.add_button_input(btn_down)
+my_vdsd.add_button_input(btn_up)
+
+# Hardware events feed the ClickDetector:
+async def on_button_event(element: str, pressed: bool) -> None:
+    btn = btn_down if element == "down" else btn_up
+    if pressed:
+        btn.press()
+    else:
+        btn.release()
+
+# Or push a pre-resolved click directly:
+async def send_single_click_up() -> None:
+    await btn_up.update_click(ButtonClickType.CLICK_1X)
+```
+
+---
+
+## 13. SensorInput Reference
+
+`SensorInput` models one analogue (continuous-value) sensor on a vdSD. Typical uses
+include temperature, humidity, CO₂, illuminance, power consumption, air pressure,
+and similar continuous readings. Maps to the vDC API `sensorInputs` property group
+(comprising `sensorDescriptions`, `sensorSettings`, and `sensorStates`).
+
+Attach to a vdSD with `vdsd.add_sensor_input(si)`.
+
+### Constructor
+
+All parameters are keyword-only. `sensor_type`, `min_value`, `max_value`, and
+`resolution` are required.
+
+```python
+from pydsvdcapi.sensor_input import SensorInput
+from pydsvdcapi.enums import SensorType, SensorUsage
+
+si = SensorInput(
+    vdsd=my_vdsd,
+    ds_index=0,
+    sensor_type=SensorType.TEMPERATURE,
+    sensor_usage=SensorUsage.ROOM,
+    name="Room Temperature",
+    min_value=-20.0,
+    max_value=60.0,
+    resolution=0.1,
+)
+my_vdsd.add_sensor_input(si)
+```
+
+The constructor validates the `(sensor_type, sensor_usage)` combination against
+ds-basics Table 23 and raises `ValueError` if they are incompatible (e.g.
+`SensorType.CO_CONCENTRATION` with `SensorUsage.OUTDOOR`).
+
+#### Description parameters (read-only after construction)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `sensor_type` | `SensorType` | — | Physical quantity measured (required); `SensorType.NONE` is not valid |
+| `sensor_usage` | `SensorUsage` | `UNDEFINED` | Usage context; `UNDEFINED` is not valid for deployed sensors |
+| `ds_index` | `int` | `0` | Zero-based index among all sensor inputs of this device; must be unique |
+| `name` | `str` | `""` | Human-readable label |
+| `min_value` | `float` | — | Minimum value in the sensor's unit (required) |
+| `max_value` | `float` | — | Maximum value in the sensor's unit (required) |
+| `resolution` | `float` | — | Hardware resolution (LSB size) in the sensor's unit (required) |
+| `update_interval` | `float` | `0.0` | Physical tracking interval in seconds; `0.0` = on-change only |
+| `alive_sign_interval` | `float` | `0.0` | Maximum seconds between pushes before the sensor is considered out of order; `0.0` disables alive signalling |
+
+#### Settings parameters (writable, persisted)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `group` | `int` | `0` | dS group number |
+| `min_push_interval` | `float` | `2.0` | Minimum seconds between consecutive push notifications; rapid changes within this window are coalesced |
+| `changes_only_interval` | `float` | `0.0` | Minimum seconds between pushes of the same (unchanged) value; `0.0` means every hardware update triggers a push |
+
+### Key attributes and methods
+
+| Attribute / method | Description |
+|--------------------|-------------|
+| `ds_index` | Zero-based index (read-only) |
+| `sensor_type` | Physical quantity the sensor measures (read-only) |
+| `sensor_usage` | Usage context (read-only) |
+| `min_value` / `max_value` | Sensor range (read-only) |
+| `resolution` | Hardware resolution (read-only) |
+| `update_interval` | Physical tracking interval (read-only) |
+| `alive_sign_interval` | Maximum seconds between pushes before out-of-order detection (read-only) |
+| `group` | dS group number; writable, persisted |
+| `min_push_interval` | Minimum push interval; writable, persisted |
+| `changes_only_interval` | Same-value push suppression interval; writable, persisted |
+| `value` | Current sensor reading (`float \| None`); `None` = unknown; volatile |
+| `age` | Seconds since the last value update (`None` = unknown) |
+| `context_id` | Optional numerical context ID attached to the last push |
+| `context_msg` | Optional text context message attached to the last push |
+| `error` | Current `InputError` status; writable |
+| `on_settings_changed` | Settable async callback `(si: SensorInput, changed: dict) -> None` |
+
+#### `async update_value(value: float | None, session: VdcSession | None = None, *, context_id: int | None = None, context_msg: str | None = None) -> None`
+
+Set the sensor reading and push a `sensorStates` notification. Pass `None` for
+unknown. Push frequency is subject to `min_push_interval` and
+`changes_only_interval` throttling. If a session is not provided the stored session
+(set when the vdSD is announced) is used.
+
+#### `async update_error(error: InputError | int, session: VdcSession | None = None) -> None`
+
+Set the error status and push state.
+
+### Push throttling
+
+Two settings control how often state is pushed to the vdSM:
+
+- **`min_push_interval`** — rapid value changes within this window are coalesced into
+  one deferred push. Default is `2.0` seconds.
+- **`changes_only_interval`** — hardware re-reports of an unchanged value are
+  suppressed within this window. Default `0.0` means every call to `update_value()`
+  triggers a push regardless of whether the value changed.
+
+### Alive signalling
+
+When `alive_sign_interval` is non-zero the library automatically re-pushes the
+current state at that interval as a heartbeat. The timer is reset after each push.
+If no push arrives within the interval the vdSM can consider the sensor out of order.
+
+### Uplink converter
+
+An optional Python snippet transforms the raw incoming value before it is stored and
+pushed:
+
+```python
+# Convert Fahrenheit to Celsius
+si.set_uplink_converter("value = (value - 32.0) * 5.0 / 9.0")
+```
+
+Pass `None` to remove a previously set converter. Raises `SyntaxError` if the snippet
+cannot be compiled. The code is persisted to YAML.
+
+### SensorType enum
+
+| Member | Int | Typical unit | Description |
+|--------|-----|-------------|-------------|
+| `NONE` | 0 | — | No sensor / placeholder (not valid for deployed sensors) |
+| `TEMPERATURE` | 1 | °C | Temperature |
+| `HUMIDITY` | 2 | % | Relative humidity |
+| `ILLUMINATION` | 3 | lux | Illuminance |
+| `SUPPLY_VOLTAGE` | 4 | V | Supply voltage |
+| `CO_CONCENTRATION` | 5 | ppm | Carbon monoxide concentration |
+| `RADON_ACTIVITY` | 6 | Bq/m³ | Radon activity |
+| `GAS_TYPE` | 7 | — | Gas type indicator |
+| `PARTICLES_PM10` | 8 | µg/m³ | Particulate matter PM10 |
+| `PARTICLES_PM2_5` | 9 | µg/m³ | Particulate matter PM2.5 |
+| `PARTICLES_PM1` | 10 | µg/m³ | Particulate matter PM1 |
+| `ROOM_OPERATING_PANEL` | 11 | — | Room operating panel value |
+| `FAN_SPEED` | 12 | rpm | Fan speed |
+| `WIND_SPEED` | 13 | m/s | Wind speed |
+| `ACTIVE_POWER` | 14 | W | Active power consumption |
+| `ELECTRIC_CURRENT` | 15 | A | Electric current |
+| `ENERGY_METER` | 16 | kWh | Cumulative energy |
+| `APPARENT_POWER` | 17 | VA | Apparent power |
+| `AIR_PRESSURE` | 18 | hPa | Atmospheric pressure |
+| `WIND_DIRECTION` | 19 | ° | Wind direction |
+| `SOUND_PRESSURE_LEVEL` | 20 | dB | Sound pressure level |
+| `PRECIPITATION` | 21 | mm/m² | Precipitation |
+| `CO2_CONCENTRATION` | 22 | ppm | Carbon dioxide concentration |
+| `WIND_GUST_SPEED` | 23 | m/s | Wind gust speed |
+| `WIND_GUST_DIRECTION` | 24 | ° | Wind gust direction |
+| `GENERATED_ACTIVE_POWER` | 25 | W | Generated / exported active power |
+| `GENERATED_ENERGY` | 26 | kWh | Cumulative generated energy |
+| `WATER_QUANTITY` | 27 | l | Water quantity / volume |
+| `WATER_FLOW_RATE` | 28 | l/min | Water flow rate |
+| `LENGTH` | 29 | m | Length / distance |
+| `MASS` | 30 | kg | Mass / weight |
+| `DURATION` | 31 | s | Duration / time |
+| `PERCENT` | 32 | % | Generic percentage |
+| `PERCENT_SPEED` | 33 | %/s | Percentage rate of change |
+| `FREQUENCY` | 34 | Hz | Frequency |
+
+### SensorUsage enum
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `UNDEFINED` | 0 | Not specified (not valid for deployed sensors) |
+| `ROOM` | 1 | Indoor room sensor |
+| `OUTDOOR` | 2 | Outdoor sensor |
+| `USER_INTERACTION` | 3 | User-interaction context |
+| `DEVICE_LEVEL` | 4 | Device-level measurement (e.g. power consumption of the device itself) |
+| `DEVICE_LAST_RUN` | 5 | Measurement from the device's last operating cycle |
+| `DEVICE_AVERAGE` | 6 | Running average of device-level measurements |
+
+The ds-basics specification constrains which sensor types are valid with which
+usages. For example, `CO_CONCENTRATION` and `CO2_CONCENTRATION` are room-only;
+`AIR_PRESSURE`, wind sensors, and precipitation are outdoor-only; power and energy
+sensors require a device-level usage. The constructor validates this and raises
+`ValueError` on violation.
+
+### Code example — temperature and CO₂ sensor
+
+```python
+import asyncio
+from pydsvdcapi.sensor_input import SensorInput
+from pydsvdcapi.enums import SensorType, SensorUsage
+
+# Temperature sensor
+si_temp = SensorInput(
+    vdsd=my_vdsd,
+    ds_index=0,
+    sensor_type=SensorType.TEMPERATURE,
+    sensor_usage=SensorUsage.ROOM,
+    name="Room Temperature",
+    min_value=-20.0,
+    max_value=60.0,
+    resolution=0.1,
+    update_interval=30.0,
+    alive_sign_interval=120.0,
+)
+my_vdsd.add_sensor_input(si_temp)
+
+# CO₂ sensor
+si_co2 = SensorInput(
+    vdsd=my_vdsd,
+    ds_index=1,
+    sensor_type=SensorType.CO2_CONCENTRATION,
+    sensor_usage=SensorUsage.ROOM,
+    name="CO2 Level",
+    min_value=0.0,
+    max_value=5000.0,
+    resolution=1.0,
+)
+my_vdsd.add_sensor_input(si_co2)
+
+# When hardware delivers new readings:
+async def on_sensor_update(temperature: float, co2: float) -> None:
+    await si_temp.update_value(temperature)
+    await si_co2.update_value(co2)
+```
