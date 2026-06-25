@@ -100,7 +100,7 @@ from typing import (
     Any,
 )
 
-from pydsvdcapi.conversion import apply_converter, compile_converter
+from pydsvdcapi.addons.converter import apply_converter, compile_converter
 from pydsvdcapi.enums import OutputChannelType
 
 if TYPE_CHECKING:

@@ -84,7 +84,7 @@ from typing import (
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.conversion import apply_converter, compile_converter
+from pydsvdcapi.addons.converter import apply_converter, compile_converter
 from pydsvdcapi.enums import (
     InputError,
     SensorType,
