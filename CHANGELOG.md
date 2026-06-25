@@ -8,10 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `Vdsd.send_identify()` async method — sends `VDC_SEND_IDENTIFY` (type 22, vDC → vdSM) as a fire-and-forget notification when the user physically identifies a device (e.g. presses a pairing button on the hardware). The vdSM uses the incoming dSUID to associate the physical device with a pairing or zone-assignment request. No-op if the device is not yet announced or has no active session.
+- `MAX_SUPPORTED_API_VERSION: int = 4` constant — upper bound of the accepted `hello` API version range. Versions above this are rejected with `ERR_INCOMPATIBLE_API`.
 - `DeviceLifecycleState` enum with five states (`ACTIVE`, `INACTIVE`, `MAINTENANCE`, `ERROR`, `REMOVED`) for expressing device health from library user code.
 - `Vdsd.set_lifecycle_state(state: DeviceLifecycleState)` async method — sets the lifecycle state and handles all vdSM communication automatically: pushes `active` property changes to dSS, suppresses pong responses for non-ACTIVE devices, and triggers `VDC_SEND_VANISH` for `REMOVED` devices (re-triggered on every subsequent ping).
 - `Vdsd.lifecycle_state` read-only property — returns the current `DeviceLifecycleState`.
 - `VdcSession.set_presence_checker(checker)` method — registers an async `(dsuid: str) -> bool` callback that gates pong responses. Pass `None` to clear. Used internally by `VdcHost`; can be used directly in custom session setups.
+
+### Changed
+- `VdcSession` `hello` handshake now enforces both a lower and upper API version bound (`SUPPORTED_API_VERSION ≤ api_version ≤ MAX_SUPPORTED_API_VERSION`). Versions above the maximum are rejected with `ERR_INCOMPATIBLE_API` and the session is closed.
+- Re-hello from the **same vdSM dSUID** during an active session resets the session state (pending requests cancelled, counters zeroed) and fires `on_hello` again so all vDCs and devices are re-announced. This matches p44vdc behaviour and handles the case where the vdSM lost track of the still-open connection.
+- Re-hello from a **different vdSM dSUID** during an active session is now rejected with `ERR_SERVICE_NOT_AVAILABLE` — the existing session is preserved. Previously the session would accept any hello unconditionally.
 
 ### Removed
 - `Vdsd.active` setter (write access via `vdsd.active = True/False`). The read-only `active` property is retained (derived from `lifecycle_state`). **Migration:** replace `vdsd.active = False` with `await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)`.
