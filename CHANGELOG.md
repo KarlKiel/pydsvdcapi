@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `VdcSession` `hello` handshake now enforces both a lower and upper API version bound (`SUPPORTED_API_VERSION ≤ api_version ≤ MAX_SUPPORTED_API_VERSION`). Versions above the maximum are rejected with `ERR_INCOMPATIBLE_API` and the session is closed.
-- Re-hello from the **same vdSM dSUID** during an active session resets the session state (pending requests cancelled, counters zeroed) and fires `on_hello` again so all vDCs and devices are re-announced. This matches p44vdc behaviour and handles the case where the vdSM lost track of the still-open connection.
+- Re-hello from the **same vdSM dSUID** during an active session resets the session state (pending requests cancelled, counters zeroed) and fires `on_hello` again so all vDCs and devices are re-announced. This matches the vDC API specification and handles the case where the vdSM lost track of the still-open connection.
 - Re-hello from a **different vdSM dSUID** during an active session is now rejected with `ERR_SERVICE_NOT_AVAILABLE` — the existing session is preserved. Previously the session would accept any hello unconditionally.
 
 ### Removed
@@ -36,10 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_ChannelCompatDict` backward-compatibility layer: `getProperty` requests for `channelDescriptions`, `channelSettings`, and `channelStates` now resolve numeric keys (channel type decimal strings such as `"1"`, and the special `"0"` alias for the primary channel) in addition to the canonical channel name keys, covering API v2 and legacy lookup paths.
 
 ### Fixed
-- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for **all** output functions now use the **channel name string** (e.g. `"shadePositionOutside"`, `"brightness"`) as the outer key, matching p44vdc API v3+ wire format. Includes `POSITIONAL`, `DIMMER_COLOR_TEMP`, and `FULL_COLOR_DIMMER`. Numeric key backward-compatibility is handled transparently via `_ChannelCompatDict`.
+- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for **all** output functions now use the **channel name string** (e.g. `"shadePositionOutside"`, `"brightness"`) as the outer key, matching the vDC API v3+ wire format. Includes `POSITIONAL`, `DIMMER_COLOR_TEMP`, and `FULL_COLOR_DIMMER`. Numeric key backward-compatibility is handled transparently via `_ChannelCompatDict`.
 - Removed S2 awning workaround in `examples/example_shading.py` (`name="0"` override); the example now uses the standard `add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)` call.
-- `modelFeatures` property now emitted in canonical `ModelFeatureId` enum order (from `modelconst.h`) instead of alphabetical order, matching p44vdc.
-- `movingState` removed from `outputState` — it was not part of the vDC API spec and was never emitted by p44vdc.
+- `modelFeatures` property now emitted in canonical `ModelFeatureId` enum order instead of alphabetical order, matching the vDC API specification.
+- `movingState` removed from `outputState` — it was not part of the vDC API specification and was never emitted per spec.
 - `waterFlow` channel name corrected (`WATER_FLOW_RATE` spec name was missing; now `"waterFlow"`).
 - `outputSettings` shadow timing fields (`openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime`) are now correctly gated on `primaryGroup == 2` (shade/blind devices), not emitted for other device classes.
 - `outputSettings` light-specific fields (`minBrightness`, `dimTimeUp`, `dimTimeDown`, `dimTimeUpAlt1`, `dimTimeDownAlt1`, `dimTimeUpAlt2`, `dimTimeDownAlt2`) are correctly gated on `primaryGroup == 1`.
@@ -48,15 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.8.8] - 2026-05-30
 
 ### Added
-- `ChannelSpec` now carries `siunit` and `symbol` fields; all built-in channel specs are populated with the appropriate SI unit and symbol (e.g. `percent`/`%` for brightness/shade, `degree`/`°` for hue, `reciprocal megakelvin`/`mired` for color temperature). These are emitted in `channelDescriptions` responses to match the p44vdc wire format and fix grey-device validation errors on dSS.
+- `ChannelSpec` now carries `siunit` and `symbol` fields; all built-in channel specs are populated with the appropriate SI unit and symbol (e.g. `percent`/`%` for brightness/shade, `degree`/`°` for hue, `reciprocal megakelvin`/`mired` for color temperature). These are emitted in `channelDescriptions` responses to match the vDC API wire format and fix grey-device validation errors on dSS.
 - Shadow motor timing fields `openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime` added to `outputSettings` for shade devices. dSS reads and writes these to configure motor travel timing.
-- `transitionTime` field (float, seconds) added to `outputState`, matching p44vdc's `outputStateProperties`.
-- `movingState` (integer) added to `outputState` for shade/blind outputs: `0` = idle, `1` = moving open/up, `-1` = moving closed/down. Matches p44vdc `ShadowBehaviour` wire format.
+- `transitionTime` field (float, seconds) added to `outputState`, per the vDC API specification.
+- `movingState` (integer) added to `outputState` for shade/blind outputs: `0` = idle, `1` = moving open/up, `-1` = moving closed/down. Matches the vDC API shade output wire format.
 - Unknown `setProperty outputSettings` keys are now stored in `Output._extra_settings` and returned in future `get_settings_properties()` responses instead of being silently dropped.
 
 ### Fixed
-- Shade channel resolution corrected from 8-bit (`100/255 ≈ 0.392`) to 16-bit (`100/65536 ≈ 0.00153`), matching p44vdc's precision. Affects `SHADE_POSITION_OUTSIDE`, `SHADE_POSITION_INDOOR`, `SHADE_OPENING_ANGLE_OUTSIDE`, `SHADE_OPENING_ANGLE_INDOOR`.
-- All channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now use the channel's **dsIndex** as string key (e.g. `"0"`, `"1"`), matching the p44vdc wire format. The 0.8.6 change that switched to channel name keys is reverted; name-based lookup in `vdc_host.py` for incoming `setOutputChannelValue` notifications is unchanged.
+- Shade channel resolution corrected from 8-bit (`100/255 ≈ 0.392`) to 16-bit (`100/65536 ≈ 0.00153`), per the vDC API specification. Affects `SHADE_POSITION_OUTSIDE`, `SHADE_POSITION_INDOOR`, `SHADE_OPENING_ANGLE_OUTSIDE`, `SHADE_OPENING_ANGLE_INDOOR`.
+- All channel container keys (`channelDescriptions`, `channelSettings`, `channelStates` in GET responses and push notifications) now use the channel's **dsIndex** as string key (e.g. `"0"`, `"1"`), per the vDC API specification. The 0.8.6 change that switched to channel name keys is reverted; name-based lookup in `vdc_host.py` for incoming `setOutputChannelValue` notifications is unchanged.
 
 ## [0.8.7] - 2026-05-22
 

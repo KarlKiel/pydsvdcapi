@@ -3510,7 +3510,7 @@ class TestShadowTimingFields:
 
 
 class TestShadowTimingDefaults:
-    """Shadow timing fields are always emitted for shadow devices with p44-compatible defaults."""
+    """Shadow timing fields are always emitted for shadow devices with vDC API defaults."""
 
     def test_timing_defaults_emitted_when_nothing_set(self):
         host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)

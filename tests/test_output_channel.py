@@ -664,7 +664,7 @@ class TestChannelPropertyDicts:
         state = ch.get_state_properties()
         assert (
             state["value"] == 0.0
-        )  # uninitialized → 0.0, matching p44vdc v_double default
+        )  # uninitialized → 0.0 (vDC API default)
         assert state["age"] is None
 
     @pytest.mark.asyncio
@@ -1611,11 +1611,11 @@ class TestChannelContainerKeyFormat:
         assert str(ch.ds_index) in desc
 
     def test_positional_keyed_by_name(self):
-        """POSITIONAL: shade channels keyed by channel name, matching p44vdc wire format.
+        """POSITIONAL: shade channels keyed by channel name (vDC API v3+ wire format).
 
         The outer key becomes channel.id in dSS.  The vdSM builds the OPC table
         from the channelType and dsIndex sub-element fields, not from the outer
-        key, so the channel name is correct here (as p44vdc uses).
+        key, so the channel name is correct here.
         """
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
