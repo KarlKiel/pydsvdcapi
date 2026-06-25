@@ -107,7 +107,7 @@ message vdsm_RequestSetProperty {
 | 1 | `VDSM_SEND_PING` — presence check implemented via `DeviceLifecycleState` | ✅ | **resolved in v0.9.0** |
 | 2 | `hello` — API version bounds + vdSM identity check | ✅ | **resolved in v0.9.0** |
 | 3 | `VDC_SEND_IDENTIFY` outbound — physical device identification | ✅ | **resolved in v0.9.0** |
-| 4 | `x-p44-*` device methods not implemented | 🟡 | pydsvdcapi missing |
+| 4 | `x-p44-*` device methods | ⚪ | p44-proprietary, not part of dS protocol |
 | 5 | `channelStates` push — p44vdc explicitly not implemented for DS API | 🟢 | p44vdc missing (pydsvdcapi correct) |
 | 6 | `setControlValue` — pydsvdcapi passes `group`/`zone_id` to callback | 🟢 | harmless extension |
 | 7 | `VDSM_SEND_BYE` — pydsvdcapi requires ACTIVE state; p44vdc accepts out-of-session | 🟢 | minor divergence |
@@ -199,26 +199,15 @@ await vdsd.send_identify()
 
 ---
 
-### 🟡 #4 — `x-p44-*` device methods not implemented
+### ⚪ #4 — `x-p44-*` device methods (p44-proprietary, not dS protocol)
 
-Dispatched via `genericRequest` with those method names — `genericRequest` IS in the protobuf proto
-(`vdsm_RequestGenericRequest`), so these ARE reachable from the standard vdSM.
+`x-p44-removeDevice`, `x-p44-teachInSignal`, and `x-p44-syncChannels` are dispatched via
+`genericRequest` and are exclusive to the p44vdc ecosystem. They are not part of the dS protocol
+specification and the standard vdSM does not send them to non-p44vdc vDCs.
 
-**p44vdc** handles the following methods on `Device`:
-
-| Method | Purpose |
-|--------|---------|
-| `x-p44-removeDevice` | Software-initiated device removal (for disconnectable devices) |
-| `x-p44-teachInSignal` | Send a teach-in radio signal from the device (`variant` param) |
-| `x-p44-syncChannels` | Read current channel values from hardware, return to caller |
-
-None of these appear in pydsvdcapi. They would fall through to the `on_message` catch-all callback
-if set, otherwise return `ERR_NOT_IMPLEMENTED`.
-
-**Impact**: Low for most use cases. `x-p44-syncChannels` is used by the dSS configurator to
-synchronise displayed values with actual hardware state; without it the configurator may show
-stale values. `x-p44-removeDevice` and `x-p44-teachInSignal` are p44-proprietary extensions
-unlikely to be sent to non-p44vdc vDCs.
+**Not a conformance gap for pydsvdcapi.** Any `genericRequest` with an unknown method name falls
+through to the `on_message` catch-all callback if set, or returns `ERR_NOT_IMPLEMENTED` — the
+correct protocol response for an unrecognised method.
 
 ---
 
@@ -354,5 +343,6 @@ issue is essential — the handler code and the proto schema do not always match
 ### Protobuf API coverage is essentially complete
 
 For all message types and fields defined in `vdcapi.proto`, pydsvdcapi correctly handles the
-mandatory and optional fields that the standard vdSM sends. The remaining real gap is #4 — `x-p44-*` genericRequest methods that are p44-proprietary
-extensions. Findings #1, #2, and #3 are resolved in v0.9.0.
+mandatory and optional fields that the standard vdSM sends. All real conformance gaps (#1–#3) are resolved in v0.9.0. Finding #4 (`x-p44-*` methods) is
+reclassified as ⚪ — p44-proprietary extensions that the standard vdSM does not send to non-p44vdc
+vDCs. Protobuf API coverage is complete.
