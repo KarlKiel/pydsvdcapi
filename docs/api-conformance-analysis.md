@@ -106,7 +106,7 @@ message vdsm_RequestSetProperty {
 |---|----------------|----------|-----------------|
 | 1 | `VDSM_SEND_PING` — presence check implemented via `DeviceLifecycleState` | ✅ | **resolved in v0.9.0** |
 | 2 | `hello` — API version bounds + vdSM identity check | ✅ | **resolved in v0.9.0** |
-| 3 | `VDC_SEND_IDENTIFY` outbound not implemented | 🟡 | pydsvdcapi missing |
+| 3 | `VDC_SEND_IDENTIFY` outbound — physical device identification | ✅ | **resolved in v0.9.0** |
 | 4 | `x-p44-*` device methods not implemented | 🟡 | pydsvdcapi missing |
 | 5 | `channelStates` push — p44vdc explicitly not implemented for DS API | 🟢 | p44vdc missing (pydsvdcapi correct) |
 | 6 | `setControlValue` — pydsvdcapi passes `group`/`zone_id` to callback | 🟢 | harmless extension |
@@ -166,20 +166,36 @@ and re-announces; different-dSUID hello during an active session is rejected wit
 
 ---
 
-### 🟡 #3 — `VDC_SEND_IDENTIFY` outbound message not implemented
+### ✅ #3 — `VDC_SEND_IDENTIFY` outbound message *(resolved v0.9.0)*
 
-**Proto definition**: `message vdc_SendIdentify { optional string dSUID = 1; }` — this IS a proper
-protobuf message (type `VDCAPI__TYPE__VDC_SEND_IDENTIFY`), not JSON-API-only.
+The vDC API defines two completely separate IDENTIFY messages that travel in opposite directions:
 
-**p44vdc** (`pbufvdcapi.cpp:1569`): Can send `VDC_SEND_IDENTIFY` to notify the vdSM that a device
-has identified itself (e.g. physically learned-in via button press).
+| Message | Type | Direction | Meaning |
+|---------|------|-----------|---------|
+| `VDSM_NOTIFICATION_IDENTIFY` (type 20) | Inbound | vdSM → vDC | "Make this device blink/flash so the user can find it" |
+| `VDC_SEND_IDENTIFY` (type 22) | Outbound | vDC → vdSM | "The user physically touched/identified this device" |
 
-**pydsvdcapi**: This outbound message is not documented and not sent. The `identify` method in the
-genericRequest handler is an inbound handler (vdSM → vDC), not an outbound push.
+**Proto definition**: `message vdc_SendIdentify { optional string dSUID = 1; }` — a proper
+protobuf message (not JSON-API-only).
 
-**Impact**: If a pydsvdcapi device supports hardware learn-in (physical pairing), there is no
-mechanism to notify the vdSM that identification occurred. This affects pair/unpair workflows that
-rely on the vDC proactively reporting that a device has been physically identified.
+**p44vdc** (`pbufvdcapi.cpp:1569`): Sends `VDC_SEND_IDENTIFY` when a device signals that the user
+has physically identified it (e.g. button press on the hardware). The vdSM uses the incoming dSUID
+to identify *which* physical device the user touched, enabling the dSS configurator to proceed with
+pairing or zone assignment without the user entering a dSUID manually. The message is fire-and-forget;
+no response is expected from the vdSM.
+
+**pydsvdcapi** (v0.9.0+): `Vdsd.send_identify()` sends `VDC_SEND_IDENTIFY` with the device's dSUID.
+Call this from your device driver when the physical hardware signals a user-identification gesture.
+The call is a no-op if the device is not yet announced or has no active session; `ConnectionError`
+and `OSError` are caught and logged as warnings rather than propagated (best-effort semantics).
+
+```python
+# Example: user pressed the pairing button on the physical device
+await vdsd.send_identify()
+```
+
+**Previous state**: The inbound `VDSM_NOTIFICATION_IDENTIFY` handler existed but the outbound
+`VDC_SEND_IDENTIFY` was absent, leaving physical learn-in/pairing workflows incomplete.
 
 ---
 
@@ -338,5 +354,5 @@ issue is essential — the handler code and the proto schema do not always match
 ### Protobuf API coverage is essentially complete
 
 For all message types and fields defined in `vdcapi.proto`, pydsvdcapi correctly handles the
-mandatory and optional fields that the standard vdSM sends. The remaining real gaps (#3–#4) are missing outbound/inbound genericRequest support for
-p44-proprietary extensions. Findings #1 and #2 are resolved in v0.9.0.
+mandatory and optional fields that the standard vdSM sends. The remaining real gap is #4 — `x-p44-*` genericRequest methods that are p44-proprietary
+extensions. Findings #1, #2, and #3 are resolved in v0.9.0.
