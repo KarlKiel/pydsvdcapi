@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """vDC session — protocol state machine for a vdSM ↔ vDC host session.
 
 A :class:`VdcSession` wraps a :class:`~pydsvdcapi.connection.VdcConnection`

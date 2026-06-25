@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """pydsvdcapi - Python library for the DSvDC API."""
 
 __version__ = "0.8.9"

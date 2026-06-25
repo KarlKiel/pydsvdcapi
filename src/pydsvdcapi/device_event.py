@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Device event component for vdSD devices (§4.7).
 
 A :class:`DeviceEvent` models one stateless event on a virtual device.

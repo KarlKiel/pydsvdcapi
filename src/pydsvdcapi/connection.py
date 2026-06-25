@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Low-level TCP connection with length-prefixed protobuf framing.
 
 The vDC API transport is a TCP stream where every message is preceded by

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """digitalSTROM vDC API enumerations.
 
 This module contains all enum definitions required by the digitalSTROM

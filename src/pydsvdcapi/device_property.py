@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Device property component for vdSD devices (§4.6.3, §4.6.4).
 
 A :class:`DeviceProperty` models one generic device property on a

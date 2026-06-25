@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Output component for vdSD devices.
 
 A :class:`Output` models the single output of a virtual device.  Each

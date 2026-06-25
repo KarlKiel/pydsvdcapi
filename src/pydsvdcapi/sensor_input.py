@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Sensor input component for vdSD devices.
 
 A :class:`SensorInput` models one analogue (continuous-value) sensor on

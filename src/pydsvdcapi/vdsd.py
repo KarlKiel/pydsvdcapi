@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """vdSD — virtual digitalSTROM device.
 
 A :class:`Vdsd` is the API-visible unit that the vdSM (and dSS) recognise

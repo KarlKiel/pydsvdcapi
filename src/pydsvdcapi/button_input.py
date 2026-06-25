@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Button input component for vdSD devices.
 
 A :class:`ButtonInput` models one pushbutton input element on a virtual

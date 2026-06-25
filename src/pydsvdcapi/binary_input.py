@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Binary input component for vdSD devices.
 
 A :class:`BinaryInput` models one binary (digital) sensor input on a

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """dSUID - digitalSTROM Unique Identifier.
 
 Implements the dSUID (136-bit unique identifier) as specified in the

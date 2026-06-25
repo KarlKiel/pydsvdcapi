@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Device state component for vdSD devices (§4.6.1, §4.6.2).
 
 A :class:`DeviceState` models one discrete device state on a virtual

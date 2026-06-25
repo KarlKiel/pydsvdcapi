@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """YAML-based persistence for vDC host state.
 
 Stores the complete property tree of a vDC host (including its vDCs and
