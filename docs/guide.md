@@ -490,3 +490,329 @@ Well-known namespace UUIDs for use with `from_name_in_space`:
 - **EnOcean device** → `from_enocean`
 - **No unique hardware ID / prototype** → `random()` — but **persist** the result to
   `state_path` or another store so the same dSUID is reused across restarts
+
+---
+
+## 9. Output Reference
+
+`Output` represents the single controllable output of a vdSD. It owns a set of
+output channels (e.g. brightness, shade position, colour), a scene table, and three
+property groups visible to the vdSM: `outputDescription`, `outputSettings`, and
+`outputState`.
+
+Each vdSD may have **at most one** output. Attach it with `vdsd.set_output(output)`.
+
+### Constructor
+
+All parameters are keyword-only.
+
+```python
+from pydsvdcapi.output import Output
+from pydsvdcapi.enums import OutputFunction, OutputMode, OutputUsage, ColorClass
+
+output = Output(
+    vdsd=my_vdsd,
+    function=OutputFunction.DIMMER,
+    output_usage=OutputUsage.ROOM,
+    name="Dimmable Light",
+    default_group=ColorClass.LIGHTS,
+)
+my_vdsd.set_output(output)
+```
+
+#### Description parameters (read-only after construction)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vdsd` | `Vdsd` | — | Owning vdSD (required) |
+| `function` | `OutputFunction \| int` | `ON_OFF` | Functional type; controls which channels are auto-created |
+| `output_usage` | `OutputUsage \| int` | `UNDEFINED` | Usage context |
+| `name` | `str \| None` | `None` | Human-readable output name; omitted from `outputDescription` when `None` |
+| `default_group` | `int \| None` | `None` | dS Application Group ID (use `ColorClass` values); informational only |
+| `variable_ramp` | `bool` | `False` | Whether variable-speed transitions are supported |
+| `max_power` | `float` | `-1.0` | Maximum output power in Watts; `-1.0` means undefined |
+| `active_cooling_mode` | `bool \| None` | `None` | `True` if the device can actively cool (FCU / air-con); `None` if not applicable |
+
+#### Settings parameters (writable, persisted)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `mode` | `OutputMode \| int \| None` | auto-derived | Output mode; when `None`, auto-derived from `function` (see `OutputMode`) |
+| `active_group` | `int \| None` | `None` | dS Application Group ID this output is active in; drives scene routing |
+| `groups` | `set[int] \| None` | `None` | Set of Application Group IDs (1–63) this output belongs to |
+| `push_changes` | `bool` | `False` | Whether locally-generated output changes are pushed to the vdSM |
+| `on_threshold` | `float \| None` | `None` | Minimum brightness (0–100 %) to switch on non-dimmable lamps (ON_OFF outputs) |
+| `min_brightness` | `float \| None` | `None` | Minimum brightness the hardware supports (light outputs) |
+| `dim_time_up` | `int \| None` | `None` | Dim-up time in dS 8-bit format |
+| `dim_time_down` | `int \| None` | `None` | Dim-down time in dS 8-bit format |
+| `dim_time_up_alt1` | `int \| None` | `None` | Alternate 1 dim-up time |
+| `dim_time_down_alt1` | `int \| None` | `None` | Alternate 1 dim-down time |
+| `dim_time_up_alt2` | `int \| None` | `None` | Alternate 2 dim-up time |
+| `dim_time_down_alt2` | `int \| None` | `None` | Alternate 2 dim-down time |
+| `open_time` | `float \| None` | `None` | Motor open travel time in seconds (shade outputs) |
+| `close_time` | `float \| None` | `None` | Motor close travel time in seconds (shade outputs) |
+| `angle_open_time` | `float \| None` | `None` | Blade angle open time in seconds (shade outputs) |
+| `angle_close_time` | `float \| None` | `None` | Blade angle close time in seconds (shade outputs) |
+| `stop_delay_time` | `float \| None` | `None` | Stop delay time in seconds (shade outputs) |
+
+### OutputFunction enum
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `ON_OFF` | 0 | Binary on/off; auto-creates `BRIGHTNESS` channel |
+| `DIMMER` | 1 | Continuously dimmable; auto-creates `BRIGHTNESS` channel |
+| `POSITIONAL` | 2 | Positional actuator (shade/blind/valve); no auto-created channels |
+| `DIMMER_COLOR_TEMP` | 3 | Tunable white; auto-creates `BRIGHTNESS` + `COLOR_TEMPERATURE` |
+| `FULL_COLOR_DIMMER` | 4 | Full colour (RGB / RGBW); auto-creates `BRIGHTNESS`, `COLOR_TEMPERATURE`, `HUE`, `SATURATION`, `CIE_X`, `CIE_Y` |
+| `BIPOLAR` | 5 | Bipolar actuator; no auto-created channels |
+| `INTERNALLY_CONTROLLED` | 6 | Device controls itself; no auto-created channels |
+| `CUSTOM` | 127 | Custom action output; no auto-created channels |
+
+### OutputMode enum
+
+`Output` auto-derives the correct mode from `function` when `mode` is not
+passed explicitly.
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `DISABLED` | 0 | Output disabled; no controls shown in the configurator |
+| `BINARY` | 1 | Binary on/off; configurator shows a toggle only |
+| `GRADUAL` | 2 | Continuous-range; configurator shows a slider. Used for all dimmer, positional, and bipolar outputs |
+| `DEFAULT` | 127 | Sentinel; do not use directly |
+
+Auto-derivation rules: `ON_OFF` → `BINARY`; `INTERNALLY_CONTROLLED` / `CUSTOM` →
+`DISABLED`; all other functions → `GRADUAL`.
+
+### OutputUsage enum
+
+| Member | Int | Description |
+|--------|-----|-------------|
+| `UNDEFINED` | 0 | Not specified |
+| `ROOM` | 1 | Indoor room device |
+| `OUTDOORS` | 2 | Outdoor device |
+| `USER` | 3 | User-controlled output |
+
+### Auto-created channels by OutputFunction
+
+| OutputFunction | Channels created (in dsIndex order) |
+|----------------|-------------------------------------|
+| `ON_OFF` | `BRIGHTNESS` (0) |
+| `DIMMER` | `BRIGHTNESS` (0) |
+| `DIMMER_COLOR_TEMP` | `BRIGHTNESS` (0), `COLOR_TEMPERATURE` (1) |
+| `FULL_COLOR_DIMMER` | `BRIGHTNESS` (0), `COLOR_TEMPERATURE` (1), `HUE` (2), `SATURATION` (3), `CIE_X` (4), `CIE_Y` (5) |
+| `POSITIONAL` | — (add manually via `add_channel()`) |
+| `BIPOLAR` | — (add manually via `add_channel()`) |
+| `INTERNALLY_CONTROLLED` | — (add manually via `add_channel()`) |
+| `CUSTOM` | — (add manually via `add_channel()`) |
+
+### Key attributes and methods
+
+#### Channel access
+
+- **`channels`** — `dict[int, OutputChannel]`: all channels keyed by `dsIndex`
+  (returns a shallow copy).
+- **`channel_by_key(key: str) -> OutputChannel | None`** — look up a channel by
+  name string (e.g. `"brightness"`) or by a numeric string (the `channelType`
+  integer as used by the old API v1/v2 wire format, or `"0"` for the standard
+  channel of the device's colour class).
+- **`get_channel(ds_index: int) -> OutputChannel | None`** — look up by `dsIndex`.
+- **`get_channel_by_type(channel_type) -> OutputChannel | None`** — look up the
+  first channel with the given `OutputChannelType`.
+
+#### Adding and removing channels
+
+- **`add_channel(channel_type, *, ds_index=None, name=None, min_value=None, max_value=None, resolution=None, siunit=None, symbol=None, enum_values=None) -> OutputChannel`**
+  — add a channel to this output. `ds_index` is auto-assigned (next free) when
+  omitted. Use this for `POSITIONAL`, `BIPOLAR`, `INTERNALLY_CONTROLLED`, and
+  `CUSTOM` outputs. Raises `ValueError` if `ds_index` is already in use.
+
+- **`remove_channel(ds_index: int) -> OutputChannel | None`** — remove a channel
+  by `dsIndex`; returns the removed instance or `None`.
+
+#### Callbacks
+
+- **`on_channel_applied`** — settable async callback, invoked when the vdSM sends
+  `apply_now` (i.e. the channel values should be written to hardware):
+
+  ```python
+  async def handle_apply(output: Output, updates: dict[OutputChannelType | int, float]) -> None:
+      brightness = updates.get(OutputChannelType.BRIGHTNESS)
+      if brightness is not None:
+          await my_device.set_brightness(brightness)
+
+  output.on_channel_applied = handle_apply
+  ```
+
+  `updates` maps `OutputChannelType` (or raw `int` for device-specific channels)
+  to the new value. Multiple channel changes for one hardware apply arrive together
+  in a single call.
+
+- **`on_dim_channel`** — settable async callback for continuous dimming
+  notifications (vDC API §7.3.5):
+
+  ```python
+  async def handle_dim(output: Output, channel: OutputChannel, mode: int, area: int) -> None:
+      # mode: 1 = dim up, -1 = dim down, 0 = stop
+      ...
+
+  output.on_dim_channel = handle_dim
+  ```
+
+- **`on_settings_changed`** — settable async callback, invoked when the vdSM
+  writes `outputSettings`:
+
+  ```python
+  async def handle_settings(output: Output, changed: dict[str, Any]) -> None:
+      if "mode" in changed:
+          ...
+
+  output.on_settings_changed = handle_settings
+  ```
+
+#### Pushing device-side values
+
+Use `OutputChannel.update_value()` (see Section 10) to push a new channel value
+from the device to the dSS. If `push_changes` is enabled on the output, this
+automatically sends a `VDC_SEND_PUSH_NOTIFICATION` to the vdSM.
+
+### Shade / blind output setup
+
+POSITIONAL outputs require channels to be added manually:
+
+```python
+from pydsvdcapi.enums import OutputFunction, OutputUsage, ColorClass, ColorGroup, OutputChannelType
+
+output = Output(
+    vdsd=my_vdsd,
+    function=OutputFunction.POSITIONAL,
+    output_usage=OutputUsage.ROOM,
+    default_group=ColorClass.BLINDS,
+    open_time=50.0,
+    close_time=50.0,
+    angle_open_time=1.0,
+    angle_close_time=1.0,
+    stop_delay_time=0.0,
+)
+# Add channels manually
+pos_ch = output.add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)
+angle_ch = output.add_channel(OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE)
+my_vdsd.set_output(output)
+```
+
+For a device with `primaryGroup=ColorGroup.GREY` the shadow motor timing settings
+(`open_time`, `close_time`, etc.) are included in `outputSettings` automatically.
+
+---
+
+## 10. Output Channels Reference
+
+### OutputChannelType enum
+
+Standard channel type identifiers. IDs 0–191 are reserved for standard types;
+IDs 192–239 are available for device-specific (proprietary) channels.
+
+| Enum member | Int | Name string | Unit | Description |
+|-------------|-----|-------------|------|-------------|
+| `DEFAULT` | 0 | — | — | Catch-all / none |
+| `BRIGHTNESS` | 1 | `brightness` | % (0–100) | Light dimming level |
+| `HUE` | 2 | `hue` | ° (0–360) | Colour hue |
+| `SATURATION` | 3 | `saturation` | % (0–100) | Colour saturation |
+| `COLOR_TEMPERATURE` | 4 | `colortemp` | mired (100–1000) | Colour temperature |
+| `CIE_X` | 5 | `x` | 0–10000 | CIE x chromaticity |
+| `CIE_Y` | 6 | `y` | 0–10000 | CIE y chromaticity |
+| `SHADE_POSITION_OUTSIDE` | 7 | `shadePositionOutside` | % (0–100) | External blind / roller shutter position |
+| `SHADE_POSITION_INDOOR` | 8 | `shadePositionIndoor` | % (0–100) | Indoor curtain / blind position |
+| `SHADE_OPENING_ANGLE_OUTSIDE` | 9 | `shadeOpeningAngleOutside` | % (0–100) | External slat / blade opening angle |
+| `SHADE_OPENING_ANGLE_INDOOR` | 10 | `shadeOpeningAngleIndoor` | % (0–100) | Indoor slat / blade opening angle |
+| `TRANSPARENCY` | 11 | `transparency` | % (0–100) | Transparency level |
+| `AIR_FLOW_INTENSITY` | 12 | `airFlowIntensity` | % (0–100) | Fan / ventilation speed |
+| `AIR_FLOW_DIRECTION` | 13 | `airFlowDirection` | enum | Supply (0) / exhaust (1) / both (2) |
+| `AIR_FLAP_POSITION` | 14 | `airFlapPosition` | % (0–100) | Air flap position |
+| `AIR_LOUVER_POSITION` | 15 | `airLouverPosition` | % (0–100) | Louvre position |
+| `HEATING_POWER` | 16 | `heatingPower` | % (0–100) | Heating valve / power level |
+| `COOLING_CAPACITY` | 17 | `coolingCapacity` | % (0–100) | Cooling capacity level |
+| `AUDIO_VOLUME` | 18 | `audioVolume` | % (0–100) | Audio volume |
+| `POWER_STATE` | 19 | `powerState` | enum | Off (0) / on (1) / standby (2) / extendedStandby (3) |
+| `AIR_LOUVER_AUTO` | 20 | `airLouverAuto` | enum | Off (0) / auto (1) |
+| `AIR_FLOW_AUTO` | 21 | `airFlowAuto` | enum | Off (0) / auto (1) |
+| `WATER_TEMPERATURE` | 22 | `waterTemperature` | — (0–150) | Water temperature |
+| `WATER_FLOW_RATE` | 23 | `waterFlow` | % (0–100) | Water flow rate |
+| `POWER_LEVEL` | 24 | `powerLevel` | % (0–100) | Generic power level |
+| `VIDEO_STATION` | 25 | `videoStation` | 0–65535 | Video station / channel number |
+| `VIDEO_INPUT_SOURCE` | 26 | `videoInputSource` | 0–255 | Video input source selector |
+| `FCU_OPERATION_MODE` | 192 | `operationMode` | enum | FCU mode: off (0), heating (1), cooling (2), fanOnly (3), dry (4), auto (5) |
+
+The **name string** is the channel identifier used in all property trees
+(`channelDescriptions`, `channelSettings`, `channelStates`) and in push
+notifications. It is also the `channelId` field sent by the dSS in
+`setOutputChannelValue` notifications.
+
+### OutputChannel class
+
+`OutputChannel` represents one controllable dimension of a device output. Instances
+are created automatically by `Output.add_channel()` (or by the auto-create logic on
+`Output` construction) — you do not instantiate them directly.
+
+#### Key attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `ds_index` | `int` | Zero-based channel index within the device |
+| `channel_type` | `OutputChannelType \| int` | Channel type ID |
+| `name` | `str` | Canonical channel name (e.g. `"brightness"`) |
+| `min_value` | `float` | Minimum value in the channel's unit |
+| `max_value` | `float` | Maximum value in the channel's unit |
+| `resolution` | `float` | Smallest distinguishable step (writable) |
+| `value` | `float \| None` | Current channel value; `None` if never set |
+| `age` | `float \| None` | Seconds since last hardware confirmation; `None` if not yet confirmed |
+| `display_name` | `str \| None` | Optional free-text label for the `name` sub-field in `channelDescriptions` (does not affect the channel key) |
+
+#### `async update_value(value: float) -> None`
+
+Push a new value from the **device** to the dSS. Call this when the physical
+device reports a state change.
+
+- The value is clamped to `[min_value, max_value]`.
+- If an uplink converter is set, it is applied first.
+- The hardware-confirmation timestamp is recorded (so `age` starts counting from
+  now).
+- If the owning output has `push_changes=True` and an active session, a
+  `VDC_SEND_PUSH_NOTIFICATION` is sent to the vdSM.
+
+```python
+# Notify the dSS that brightness has changed on the device side
+await output.channels[0].update_value(75.0)
+```
+
+### Value converters
+
+Converters let you scale values between the device's native range and the
+digitalSTROM protocol range without modifying your callback logic.
+
+Two converters can be set per channel:
+
+- **Uplink converter** — applied in the **device → dSS** direction when
+  `update_value()` is called.
+- **Downlink converter** — applied in the **dSS → device** direction when the vdSM
+  sets a channel value via `setOutputChannelValue`.
+
+Both are Python expression snippets. The snippet receives `value` (a `float`) and
+must assign the converted result back to `value`. The library appends
+`return value` automatically.
+
+```python
+ch = output.channels[0]  # e.g. BRIGHTNESS, dS range 0–100 %
+
+# Scale dS 0–100 % to device 0–255 (dSS → device direction)
+ch.set_downlink_converter("value = int(round(value * 255.0 / 100.0))")
+
+# Scale device 0–255 to dS 0–100 % (device → dSS direction)
+ch.set_uplink_converter("value = value / 255.0 * 100.0")
+```
+
+Pass `None` to either method to remove a previously set converter.
+
+Both methods raise `SyntaxError` if the snippet cannot be compiled.
+
+The converter code is persisted alongside the channel description in the YAML state
+file, so converters survive restarts without re-registration.
