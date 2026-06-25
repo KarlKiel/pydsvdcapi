@@ -2003,3 +2003,196 @@ async def handle_action(vdsd, action_id: str, params: dict) -> None:
 
 my_vdsd.on_invoke_action = handle_action
 ```
+
+---
+
+## 18. Model Features Reference
+
+### Overview
+
+`modelFeatures` is a set of boolean capability flags announced in the vdSD's
+`modelFeatures` property. The dSS and the dS configurator use these flags to decide
+which UI panels to display, which hardware integrations to enable, and which
+behaviours to apply to the device. Some flags are derived automatically from the
+device's configured components; others must be added manually when a specific
+capability cannot be inferred.
+
+### Auto-derived features
+
+`vdsd.derive_model_features()` analyses the vdSD's configured output, channels,
+sensors, binary inputs, and button inputs and adds the appropriate flags
+automatically. If you do not call `derive_model_features()` before announcement,
+the library runs it once automatically at announcement time.
+
+| Feature | Auto-derived when |
+|---------|-------------------|
+| `dontcare` | Any output is configured |
+| `blink` | Any output is configured |
+| `transt` | Any output with a non-POSITIONAL function that includes a channel type supporting transitions (brightness, colour, heating/cooling, audio, etc.) |
+| `shadeposition` | `primaryGroup` GREY (2) + POSITIONAL output function |
+| `shadebladeang` | `primaryGroup` GREY (2) + POSITIONAL output + slat/angle channel (`SHADE_OPENING_ANGLE_OUTSIDE` or `SHADE_OPENING_ANGLE_INDOOR`) present |
+| `outvalue8` | Any output present and `primaryGroup` is not GREY (2) |
+| `outputchannels` | Both HUE and SATURATION channels present, or both BRIGHTNESS and COLOR_TEMPERATURE channels present |
+| `dimtimeconfig` | Output function is DIMMER, DIMMER_COLOR_TEMP, or FULL_COLOR_DIMMER |
+| `outconfigswitch` | Output function is ON_OFF |
+| `impulseconfig` | Output function is ON_OFF |
+| `pwmvalue` | `primaryGroup` BLUE (3) + ON_OFF output, or HEATING_POWER channel present |
+| `ventconfig` | Any ventilation channel present (AIR_FLOW_INTENSITY, AIR_FLOW_DIRECTION, AIR_FLAP_POSITION, AIR_LOUVER_POSITION, AIR_LOUVER_AUTO, AIR_FLOW_AUTO) |
+| `consumption` | Any power or energy sensor present (ACTIVE_POWER, ELECTRIC_CURRENT, ENERGY_METER, or APPARENT_POWER) |
+| `temperatureoffset` | TEMPERATURE sensor present and `primaryGroup` is BLUE (3) |
+| `akmsensor` | Any binary input is configured |
+| `pushbutton` | Any button input is configured |
+| `pushbadvanced` | Any button input is configured |
+| `pushbdisabled` | Any button input is configured |
+| `pushbarea` | Any button input with `group` ≠ 8 is configured |
+| `pushbdevice` | Any button input with `group` ≠ 8 and `supports_local_key_mode=True` |
+| `pushbsensor` | Any button input with `group` == 8 (Joker) is configured |
+| `highlevel` | Any button input with `group` == 8 (Joker) is configured |
+| `heatingprops` | `primaryGroup` BLUE (3) |
+| `heatinggroup` | `primaryGroup` BLUE (3) |
+| `valvetype` | `primaryGroup` BLUE (3) + output configured |
+| `extendedvalvetypes` | `primaryGroup` BLUE (3) + output configured |
+| `fcu` | `primaryGroup` BLUE (3) + output configured + ventilation channel types present |
+| `locationconfig` | `primaryGroup` GREY (2) + output configured |
+| `operationlock` | `primaryGroup` GREY (2) + output configured + outdoor channel (`SHADE_POSITION_OUTSIDE` or `SHADE_OPENING_ANGLE_OUTSIDE`) present |
+| `windprotectionconfigblind` | `primaryGroup` GREY (2) + `SHADE_OPENING_ANGLE_OUTSIDE` (type 9) channel present |
+| `windprotectionconfigawning` | `primaryGroup` GREY (2) + outdoor position only (no slat/angle channel) |
+| `jokerconfig` | `primaryGroup` BLACK (8) |
+| `identification` | `vdsd.on_identify` callback is registered |
+
+### Manually addable features
+
+Some features are valid and useful but cannot be inferred automatically. Add them
+explicitly with `vdsd.add_model_feature("featurename")` after constructing the
+device.
+
+| Feature | What it enables in the configurator |
+|---------|-------------------------------------|
+| `shadeprops` | Motor timing configuration panel for grey shade devices; enables position-calibration and travel-time fields in the configurator |
+| `motiontimefins` | Fine position / motion-time configuration for jalousie / Venetian blind devices; enables blade calibration fields |
+| `blinkconfig` | Blink configuration panel; allows the user to configure alert-blink duration and parameters |
+| `consumptiontimer` | Consumption timer panel; enables energy-measurement scheduling in the configurator |
+| `outmodegeneric` | Generic output-mode selector; shows an additional mode-selection UI element for devices that expose multiple generic output modes |
+| `outmodeauto` | Automatic output-mode UI; enables an auto-mode selection control in the configurator |
+
+### Blocked / unsupported features
+
+The following features raise `ValueError` if passed to `add_model_feature()` because
+they write to DS485 bus registers or physical hardware registers that are never
+forwarded to a TCP/IP VDC device. Declaring them would cause the configurator to show
+controls that have no effect.
+
+| Feature | Reason blocked |
+|---------|----------------|
+| `ledauto` | Controls LED indicators via a DS485 hardware register; no VDC write-back path |
+| `leddark` | Controls LED indicators via a DS485 hardware register; no VDC write-back path |
+| `dimmodeconfig` | Selects the physical dimmer circuit type via DS485; no VDC path |
+| `consumptioneventled` | Triggers LED flash on consumption events via DS485; no VDC path |
+| `outmode` | Output-mode selector that writes via `CfgFunction_Mode` on DS485; not forwarded to VDC |
+| `outmodeswitch` | Same as `outmode`; DS485 only |
+| `heatingoutmode` | Heating output-mode selector via DS485 |
+| `umroutmode` | Universal module relay output-mode selector via DS485 |
+| `extradimmer` | Extra-dimmer hardware flag; DS485 only |
+| `optypeconfig` | Output type configuration via DS485 hardware register |
+| `outmodetempcontrol` | Temperature-control output-mode selector; DS485 only |
+| `outmodeenoceanvalve` | EnOcean valve output-mode selector; DS485 only |
+| `twowayconfig` | Two-way TKM pushbutton hardware type; no VDC equivalent |
+| `pushbcombined` | Combined pushbutton mode for physical TKM hardware; no VDC equivalent |
+| `ftwdisplaysettings` | FTW display settings; physical device only |
+| `ftwbacklighttimeout` | FTW backlight timeout; physical device only |
+| `grkl387workaround` | Hardware-specific workaround for a physical device model |
+| `akminput` | AKM contact-module input configuration via DS485 bus register; never reaches VDC |
+| `akmdelay` | AKM contact-module delay configuration via DS485 bus register; never reaches VDC |
+
+### Complete feature reference
+
+All known feature strings, their canonical index in the dSS firmware enum, and what
+they enable:
+
+| Feature string | Firmware index | Description |
+|----------------|---------------|-------------|
+| `dontcare` | 0 | Device supports "don't care" scene behaviour; enables scene-assignment controls in the configurator |
+| `blink` | 1 | Device can blink/alert on scene call; enables the blink alert action |
+| `transt` | 4 | Device supports software transition time; enables dim-speed and transition-time controls in the configurator |
+| `outmode` | 5 | (Blocked) DS485 output-mode selector |
+| `outmodeswitch` | 6 | (Blocked) DS485 output-mode switch selector |
+| `outvalue8` | 7 | Device uses 8-bit output value reporting; enables the output value display in the configurator for non-shade devices |
+| `shadeposition` | 15 | Device reports shade position; enables the position display and calibration panel for grey shade devices |
+| `shadebladeang` | 18 | Device reports blade/slat angle; enables the blade angle calibration panel |
+| `consumption` | 20 | Device has power/energy sensors; enables the consumption display in the configurator |
+| `outputchannels` | 26 | Device has multiple independent output channels (colour, tunable white); enables the multi-channel output panel |
+| `heatingoutmode` | 28 | (Blocked) DS485 heating output-mode selector |
+| `heatingprops` | 29 | Device is a climate device; enables heating/cooling properties in the configurator |
+| `pwmvalue` | 30 | Device uses PWM-style value reporting (0–100 % heating valve or ON_OFF climate output); enables the heating-power display |
+| `blinkconfig` | 34 | Device supports blink-duration configuration; enables the blink configuration panel |
+| `umroutmode` | 35 | (Blocked) DS485 universal module relay output-mode selector |
+| `impulseconfig` | 39 | Device supports impulse output configuration; enables the impulse-duration configuration panel for ON_OFF outputs |
+| `outmodegeneric` | 40 | Device supports a generic output-mode selector; enables the generic mode-selection UI |
+| `outconfigswitch` | 41 | Device output can be configured as a binary switch; enables switch-configuration options for ON_OFF outputs |
+| `ventconfig` | 47 | Device supports ventilation control; enables the ventilation stage and fan-speed configuration panel |
+| `consumptioneventled` | 50 | (Blocked) LED flash on consumption threshold events; DS485 only |
+| `consumptiontimer` | 51 | Device supports consumption timer scheduling; enables the energy-measurement schedule panel |
+| `dimtimeconfig` | 53 | Device supports dim time configuration; enables the dim-up/dim-down timing controls |
+| `outmodeauto` | 54 | Device supports automatic output mode; enables the auto-mode selection control |
+| `outmodetempcontrol` | 60 | (Blocked) DS485 temperature-control output-mode selector |
+| `outmodeenoceanvalve` | 61 | (Blocked) DS485 EnOcean valve output-mode selector |
+| `shadeprops` | — | Enables the motor timing configuration panel for shade devices (travel time, stop delay, etc.) |
+| `motiontimefins` | — | Enables blade/slat fine-calibration panel for jalousie devices |
+| `temperatureoffset` | — | Climate device with temperature sensor; enables the temperature offset calibration control |
+| `akmsensor` | — | Device has binary inputs; enables the binary-input / AKM sensor function panel |
+| `pushbutton` | — | Device has button inputs; enables the button configuration panel |
+| `pushbadvanced` | — | Enables advanced button options (long-press, multi-click configuration) |
+| `pushbdisabled` | — | Enables the option to disable individual button elements |
+| `pushbarea` | — | Button controls a zone area; enables area-assignment for the button |
+| `pushbdevice` | — | Button supports local key mode; enables local-device-key configuration |
+| `pushbsensor` | — | Joker-group button; enables sensor-button assignment panel |
+| `highlevel` | — | Joker button with high-level scene calls; enables the high-level scene assignment panel |
+| `heatinggroup` | — | Climate device belongs to a heating/cooling group; enables group-assignment for climate devices |
+| `valvetype` | — | Climate output device; enables valve type selection (heating-only, cooling-only, combined) |
+| `extendedvalvetypes` | — | Climate output device; enables extended valve type options beyond the basic three |
+| `fcu` | — | Fan-coil unit (FCU) / ventilation device; enables FCU-specific controls (operation mode, louver, flow direction) |
+| `locationconfig` | — | Shade device with output; enables the indoor/outdoor location configuration for the shade |
+| `operationlock` | — | Outdoor shade with position channel; enables the operation lock (wind/rain/sun protection) |
+| `windprotectionconfigblind` | — | Outdoor jalousie/blind (has slat angle channel); enables the blind-specific wind protection settings |
+| `windprotectionconfigawning` | — | Outdoor awning/roller blind (no slat channel); enables awning-specific wind protection settings |
+| `jokerconfig` | — | Joker/Black device; enables the joker configuration panel for freely assignable functions |
+| `identification` | — | Device has an `on_identify` callback; enables the identify button in the configurator |
+
+### Code example
+
+```python
+from pydsvdcapi import Vdsd
+
+# Auto-derive features from the configured output, sensors, inputs, and buttons.
+# This is the recommended approach — call it once after all components are attached.
+vdsd.derive_model_features()
+
+# Manually add a feature that cannot be auto-derived.
+# For a grey shade device that supports motor timing configuration:
+vdsd.add_model_feature("shadeprops")
+vdsd.add_model_feature("motiontimefins")
+
+# For a dimmer that supports blink-duration configuration:
+vdsd.add_model_feature("blinkconfig")
+
+# Remove a feature that was auto-derived but is not applicable:
+vdsd.remove_model_feature("blink")
+
+# Inspect the current feature set (returns a copy):
+print(vdsd.model_features)
+```
+
+After `derive_model_features()` is called the flag `_features_derived` is set.
+Subsequent calls to `announce()` will not run auto-derivation again, so any manual
+additions or removals made after `derive_model_features()` are preserved.
+
+### Note on GTIN-based dSUIDs and firmware injection
+
+If the device uses a GTIN-based dSUID (constructed with `DsUid.from_gtin_serial()`
+or `DsUid.from_sgtin96()`) and the dSS firmware's internal device database contains
+an entry for that GTIN, the dSS may automatically inject additional model features
+from its firmware database — independently of what the vDC announces. This injection
+is firmware behaviour that occurs outside library control. The features declared by
+the vDC via `modelFeatures` and the firmware-injected features are merged by the dSS;
+the result visible in the configurator may therefore include flags that were never
+explicitly set in your code.
