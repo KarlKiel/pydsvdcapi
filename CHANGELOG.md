@@ -20,10 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_ChannelCompatDict` backward-compatibility layer: `getProperty` requests for `channelDescriptions`, `channelSettings`, and `channelStates` now resolve numeric keys (channel type decimal strings such as `"1"`, and the special `"0"` alias for the primary channel) in addition to the canonical channel name keys, covering API v2 and legacy lookup paths.
 
 ### Fixed
-- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for **all** output functions now use the **channel name string** (e.g. `"shadePositionOutside"`, `"brightness"`) as the outer key, matching p44vdc API v3+ wire format. Includes `POSITIONAL`, `DIMMER_COLOR_TEMP`, and `FULL_COLOR_DIMMER`. Numeric key backward-compatibility is handled transparently via `_ChannelCompatDict`.
+- Channel container keys (`channelDescriptions`, `channelSettings`, `channelStates`) for **all** output functions now use the **channel name string** (e.g. `"shadePositionOutside"`, `"brightness"`) as the outer key. Includes `POSITIONAL`, `DIMMER_COLOR_TEMP`, and `FULL_COLOR_DIMMER`. Numeric key backward-compatibility is handled transparently via `_ChannelCompatDict`.
 - Removed S2 awning workaround in `examples/example_shading.py` (`name="0"` override); the example now uses the standard `add_channel(OutputChannelType.SHADE_POSITION_OUTSIDE)` call.
-- `modelFeatures` property now emitted in canonical `ModelFeatureId` enum order (from `modelconst.h`) instead of alphabetical order, matching p44vdc.
-- `movingState` removed from `outputState` — it was not part of the vDC API spec and was never emitted by p44vdc.
+- `modelFeatures` property now emitted in canonical `ModelFeatureId` enum order (from `modelconst.h`) instead of alphabetical order.
+- `movingState` removed from `outputState` — it is not part of the vDC API spec.
 - `waterFlow` channel name corrected (`WATER_FLOW_RATE` spec name was missing; now `"waterFlow"`).
 - `outputSettings` shadow timing fields (`openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime`) are now correctly gated on `primaryGroup == 2` (shade/blind devices), not emitted for other device classes.
 - `outputSettings` light-specific fields (`minBrightness`, `dimTimeUp`, `dimTimeDown`, `dimTimeUpAlt1`, `dimTimeDownAlt1`, `dimTimeUpAlt2`, `dimTimeDownAlt2`) are correctly gated on `primaryGroup == 1`.
@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `ChannelSpec` now carries `siunit` and `symbol` fields; all built-in channel specs are populated with the appropriate SI unit and symbol (e.g. `percent`/`%` for brightness/shade, `degree`/`°` for hue, `reciprocal megakelvin`/`mired` for color temperature). These are emitted in `channelDescriptions` responses to fix grey-device validation errors on dSS.
 - Shadow motor timing fields `openTime`, `closeTime`, `angleOpenTime`, `angleCloseTime`, `stopDelayTime` added to `outputSettings` for shade devices. dSS reads and writes these to configure motor travel timing.
-- `transitionTime` field (float, seconds) added to `outputState`, matching p44vdc's `outputStateProperties`.
+- `transitionTime` field (float, seconds) added to `outputState`.
 - `movingState` (integer) added to `outputState` for shade/blind outputs: `0` = idle, `1` = moving open/up, `-1` = moving closed/down. Matches p44vdc `ShadowBehaviour` wire format.
 - Unknown `setProperty outputSettings` keys are now stored in `Output._extra_settings` and returned in future `get_settings_properties()` responses instead of being silently dropped.
 
