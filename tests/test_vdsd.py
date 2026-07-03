@@ -429,7 +429,7 @@ class TestVdsdApplyState:
 
 
 class TestVdsdAutoSave:
-    def test_tracked_attr_triggers_auto_save(self, tmp_path):
+    async def test_tracked_attr_triggers_auto_save(self, tmp_path):
         host = _make_host(tmp_path)
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
@@ -443,7 +443,7 @@ class TestVdsdAutoSave:
 
         # Mutate a tracked attribute.
         vdsd.name = "Changed"
-        assert host._save_timer is not None
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
     def test_untracked_attr_no_auto_save(self, tmp_path):
@@ -459,7 +459,7 @@ class TestVdsdAutoSave:
         host._cancel_auto_save()
 
         vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE  # not tracked
-        assert host._save_timer is None
+        assert host._save_handle is None
 
 
 # ===========================================================================

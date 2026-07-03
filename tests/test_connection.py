@@ -2,6 +2,7 @@
 
 import asyncio
 import struct
+from unittest.mock import patch
 
 import pytest
 
@@ -188,14 +189,39 @@ class TestEdgeCases:
             await server.receive()
 
     @pytest.mark.asyncio
-    async def test_oversized_message_rejected(self):
+    async def test_send_oversized_payload_raises(self):
+        """send() must raise ValueError when the serialized payload exceeds MAX_MESSAGE_LENGTH."""
         client, _ = _make_pair()
+        msg = pb.Message()
+        msg.type = pb.VDSM_SEND_PING
+        # Patch the module constant so any non-empty message is "too large".
+        with patch("pydsvdcapi.connection.MAX_MESSAGE_LENGTH", 0):
+            with pytest.raises(ValueError, match="too large"):
+                await client.send(msg)
 
-        # Create a message with a very large payload by setting a big
-        # string field.  We can't easily hit 16384 with protobuf, so
-        # we test the length check in the framing header.
-        # Instead, we'll directly feed an invalid header.
-        pass  # covered by test_oversized_header below
+    @pytest.mark.asyncio
+    async def test_receive_zero_length_header_raises(self):
+        """A received header with length == 0 should raise ValueError."""
+        _, server = _make_pair()
+        server._reader.feed_data(struct.pack("!H", 0))
+        with pytest.raises(ValueError, match="zero-length"):
+            await server.receive()
+
+    @pytest.mark.asyncio
+    async def test_close_swallows_feed_eof_exception(self):
+        """close() must not propagate exceptions from feed_eof()."""
+        _, server = _make_pair()
+        with patch.object(server._reader, "feed_eof", side_effect=RuntimeError("eof failed")):
+            await server.close()  # must not raise
+        assert server.is_closed
+
+    @pytest.mark.asyncio
+    async def test_close_swallows_wait_closed_exception(self):
+        """close() must not propagate exceptions from wait_closed()."""
+        _, server = _make_pair()
+        with patch.object(server._writer, "wait_closed", side_effect=OSError("broken")):
+            await server.close()  # must not raise
+        assert server.is_closed
 
     @pytest.mark.asyncio
     async def test_oversized_header_rejected(self):
@@ -209,6 +235,22 @@ class TestEdgeCases:
         server._reader.feed_data(b"\x00" * bad_length)
 
         with pytest.raises(ValueError, match="exceeds maximum"):
+            await server.receive()
+
+
+# ---------------------------------------------------------------------------
+# Corrupt protobuf payload (T5)
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptProtobuf:
+    @pytest.mark.asyncio
+    async def test_receive_corrupt_protobuf_raises_value_error(self):
+        """receive() must raise ValueError when the protobuf payload cannot be parsed."""
+        _, server = _make_pair()
+        corrupt_payload = b"\xff\xfe\xfd\xfc\xfb\xfa\xf9\xf8\xf7\xf6"
+        server._reader.feed_data(struct.pack("!H", len(corrupt_payload)) + corrupt_payload)
+        with pytest.raises(ValueError, match="Failed to parse protobuf"):
             await server.receive()
 
 

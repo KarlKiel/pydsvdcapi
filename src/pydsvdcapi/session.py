@@ -47,7 +47,7 @@ import asyncio
 import enum
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Final
+from typing import Any, Final
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
@@ -171,6 +171,7 @@ class VdcSession:
         self._watchdog_timeout: float = watchdog_timeout
         self._last_activity: float = 0.0
         self._watchdog_task: asyncio.Task[None] | None = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         self.disconnect_reason: Exception | None = None
 
@@ -486,10 +487,12 @@ class VdcSession:
         # vDCs and devices, which requires sending requests and waiting
         # for responses dispatched by this same loop).
         if self._on_hello is not None:
-            asyncio.create_task(
+            _task = asyncio.create_task(
                 self._invoke_on_hello(),
                 name=f"on_hello-{vdsm_dsuid}",
             )
+            self._background_tasks.add(_task)
+            _task.add_done_callback(self._background_tasks.discard)
 
     def _reset_session_state(self) -> None:
         """Clear per-session runtime state before accepting a re-hello.

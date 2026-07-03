@@ -1,5 +1,7 @@
 """Tests for the PropertyStore persistence layer."""
 
+from unittest.mock import patch
+
 import pytest
 import yaml
 
@@ -194,6 +196,49 @@ class TestDirectoryCreation:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Error-path coverage (T2)
+# ---------------------------------------------------------------------------
+
+
+class TestSaveErrorPaths:
+    def test_backup_failure_does_not_abort_save(self, store, sample_tree):
+        """A failed backup copy must be logged and ignored — save() continues."""
+        store.save(sample_tree)  # create primary so backup is attempted next
+        with patch("pydsvdcapi.persistence.shutil.copy2", side_effect=OSError("disk full")):
+            store.save({"vdcHost": {"name": "V2"}})
+        loaded = store.load()
+        assert loaded is not None
+        assert loaded["vdcHost"]["name"] == "V2"
+
+    def test_tmp_write_failure_raises(self, store, sample_tree):
+        """An OSError during yaml.dump must propagate out of save()."""
+        with patch("pydsvdcapi.persistence.yaml.dump", side_effect=OSError("no space")):
+            with pytest.raises(OSError):
+                store.save(sample_tree)
+
+    def test_atomic_replace_failure_raises(self, store, sample_tree):
+        """An OSError from os.replace must propagate out of save()."""
+        with patch("pydsvdcapi.persistence.os.replace", side_effect=OSError("cross-device")):
+            with pytest.raises(OSError):
+                store.save(sample_tree)
+
+
+class TestLoadErrorPaths:
+    def test_restore_copy_failure_still_returns_data(self, store, sample_tree):
+        """When restoring primary from backup fails, load() still returns the data."""
+        store.save(sample_tree)
+        store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "V2"}})
+        store.path.unlink()  # remove primary to force backup fallback
+
+        with patch("pydsvdcapi.persistence.shutil.copy2", side_effect=OSError("disk full")):
+            loaded = store.load()
+
+        assert loaded is not None
+        assert loaded["vdcHost"]["name"] == "Test Host"
+        assert not store.path.is_file()  # primary was not restored
+
+
 class TestDelete:
     def test_delete_removes_files(self, store, sample_tree):
         store.save(sample_tree)
@@ -204,6 +249,27 @@ class TestDelete:
 
     def test_delete_when_nothing_exists(self, store):
         store.delete()  # should not raise
+
+    def test_delete_continues_on_partial_failure(self, store, sample_tree):
+        """delete() must not raise even if one file cannot be removed."""
+        from pathlib import Path
+
+        store.save(sample_tree)
+        store.save(sample_tree)  # creates backup
+        primary = store.path
+
+        original_unlink = Path.unlink
+
+        def conditional_unlink(self_path: Path, missing_ok: bool = False) -> None:
+            if self_path == primary:
+                raise OSError("locked")
+            original_unlink(self_path, missing_ok=missing_ok)
+
+        with patch.object(Path, "unlink", conditional_unlink):
+            store.delete()  # must not raise
+
+        # The backup was still deleted despite the primary failing.
+        assert not store.backup_path.exists()
 
 
 # ---------------------------------------------------------------------------

@@ -2693,7 +2693,7 @@ pushed with initial values before the slot list appears populated:
 
 ---
 
-## Section 22: Device Lifecycle
+## 22. Device Lifecycle
 
 ### DeviceLifecycleState
 
@@ -2775,7 +2775,7 @@ await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
 
 ---
 
-## Section 23: Persistence (PropertyStore)
+## 23. Persistence (PropertyStore)
 
 ### Enabling auto-save
 
@@ -2834,17 +2834,29 @@ the YAML file:
 - Dynamic actions (always runtime-only)
 - Control values received from dSS
 
+### Three-file persistence strategy
+
+For a `state_path` of `/var/lib/myvdc/state.yaml`, the library automatically
+manages three sibling files:
+
+| File | Purpose |
+|------|---------|
+| `state.yaml` | Primary YAML file — the authoritative snapshot |
+| `state.yaml.bak` | Backup of the previous save — used for recovery if the primary is corrupt |
+| `state.yaml.tmp` | Atomic write staging — replaced onto the primary via `os.replace()` |
+
+**Back up all three files together.** Backing up only `state.yaml` means a corrupt
+primary at restore time has no `.bak` to fall back on.
+
 ### PropertyStore class
 
 `PropertyStore` (in `pydsvdcapi.persistence`) is the underlying YAML store used
 by `VdcHost` internally. It implements atomic writes with a backup/recovery
 strategy:
 
-- Writes go through a `.tmp` intermediate file, then atomically replace the
-  primary file via `os.replace()`.
-- Before each write the previous primary file is copied to `<file>.bak`.
-- On load, if the primary file is missing or corrupt, the backup is tried
-  automatically.
+- Writes go through `.tmp`, then atomically replace the primary via `os.replace()`.
+- Before each write the previous primary is copied to `.bak`.
+- On load, if the primary is missing or corrupt, the backup is tried automatically.
 
 Users typically do not instantiate `PropertyStore` directly. Configure persistence
 through `VdcHost(state_path=...)` and call `host.flush()` as needed.
@@ -2857,7 +2869,7 @@ your changes.
 
 ---
 
-## Section 24: Value Converters
+## 24. Value Converters
 
 ### Purpose
 
@@ -2947,7 +2959,7 @@ is never silently dropped.
 
 ---
 
-## Section 25: Device Templates
+## 25. Device Templates
 
 ### Purpose
 
@@ -3040,7 +3052,7 @@ Required callbacks are determined from the device structure at template-save tim
 
 ---
 
-## Section 26: Session Constants
+## 26. Session Constants
 
 The following module-level constants are defined in `pydsvdcapi.vdc_host` and
 `pydsvdcapi.session`. They can be imported directly if needed.

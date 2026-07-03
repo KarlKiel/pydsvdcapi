@@ -637,35 +637,6 @@ class TestOutputStateProperties:
         assert out.get_state_properties()["transitionTime"] == 0.0
 
 
-class TestMovingState:
-    """Tests for Output.moving_state and outputState["movingState"]."""
-
-    def test_default_is_zero(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        assert out.moving_state == 0
-        assert out.get_state_properties()["movingState"] == 0
-
-    def test_set_to_moving_up(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.moving_state = 1
-        assert out.get_state_properties()["movingState"] == 1
-
-    def test_set_to_moving_down(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.moving_state = -1
-        assert out.get_state_properties()["movingState"] == -1
-
-    def test_not_in_property_tree(self):
-        host, vdc, device, vdsd = _make_stack()
-        out = _make_output(vdsd)
-        out.moving_state = 1
-        tree = out.get_property_tree()
-        assert "movingState" not in tree
-
-
 # ===========================================================================
 # apply_settings
 # ===========================================================================

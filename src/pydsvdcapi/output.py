@@ -667,7 +667,6 @@ class Output:
         self._local_priority: bool = False
         self._error: OutputError = OutputError.OK
         self._transition_time: float = 0.0
-        self._moving_state: int = 0
 
         # ---- session reference (set on announcement) -----------------
         self._session: VdcSession | None = None
@@ -1004,15 +1003,6 @@ class Output:
     @transition_time.setter
     def transition_time(self, value: float) -> None:
         self._transition_time = float(value)
-
-    @property
-    def moving_state(self) -> int:
-        """Motor movement state: 0=idle, 1=moving up/opening, -1=moving down/closing."""
-        return self._moving_state
-
-    @moving_state.setter
-    def moving_state(self, value: int) -> None:
-        self._moving_state = int(value)
 
     # ==================================================================
     # Channel management
@@ -1985,14 +1975,10 @@ class Output:
 
         ``error`` is included for all device types (always included,
         useful for diagnostics).
-
-        ``movingState`` is device-reported state (motor moving/stopped, etc.)
-        and is read-only from the vdSM perspective.
         """
         return {
             "localPriority": self._local_priority,
             "transitionTime": self._transition_time,
-            "movingState": self._moving_state,
             "error": int(self._error),
         }
 
@@ -2096,8 +2082,6 @@ class Output:
         vdSM sends a ``VDSM_SEND_SET_PROPERTY`` for ``outputState``.
 
         Recognised keys: ``localPriority``, ``transitionTime``.
-        ``movingState`` is device-side-only (the device reports it; the vdSM
-        does not write it) and is intentionally not handled here.
         Unknown keys are silently ignored.
         """
         if "localPriority" in state:

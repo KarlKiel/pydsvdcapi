@@ -1,6 +1,7 @@
 """Tests for the VdcSession protocol state machine."""
 
 import asyncio
+import struct
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -1090,3 +1091,93 @@ class TestPingPresenceChecker:
         await task
 
         assert session.ping_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Re-hello (session reset) — T3
+# ---------------------------------------------------------------------------
+
+
+class TestReHello:
+    @pytest.mark.asyncio
+    async def test_rehello_from_same_vdsm_calls_on_hello_again(self):
+        """A second hello from the same vdSM must reset the session and invoke on_hello again."""
+        vdsm, vdc = _make_pair()
+        hello_count = 0
+
+        async def hello_cb(sess):
+            nonlocal hello_count
+            hello_count += 1
+
+        session = VdcSession(vdc, HOST_DSUID, on_hello=hello_cb)
+
+        await vdsm.send(_hello_msg(msg_id=1))
+        await vdsm.send(_hello_msg(msg_id=2))  # same DSUID — re-hello
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+
+        resp1 = await vdsm.receive()
+        assert resp1 is not None
+        assert resp1.type == pb.VDC_RESPONSE_HELLO
+
+        resp2 = await vdsm.receive()
+        assert resp2 is not None
+        assert resp2.type == pb.VDC_RESPONSE_HELLO
+
+        await task
+        # on_hello tasks are fire-and-forget; yield twice to let them complete.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hello_count == 2
+
+    @pytest.mark.asyncio
+    async def test_rehello_cancels_pending_requests(self):
+        """Pending outgoing requests must be cancelled when a re-hello resets the session."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        await vdsm.send(_hello_msg(msg_id=1))
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+
+        # Inject a pending future simulating an in-flight outgoing request.
+        loop = asyncio.get_running_loop()
+        pending_future: asyncio.Future[object] = loop.create_future()
+        session._pending_requests[99] = pending_future  # type: ignore[assignment]
+
+        # Re-hello from same vdSM — triggers _reset_session_state()
+        await vdsm.send(_hello_msg(msg_id=2))
+        await asyncio.sleep(0)  # yield to let session process the re-hello
+
+        assert pending_future.cancelled()
+
+        vdsm._writer.close()
+        await task
+
+
+# ---------------------------------------------------------------------------
+# Corrupt protobuf — T5
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptProtobuf:
+    @pytest.mark.asyncio
+    async def test_session_terminates_cleanly_on_corrupt_protobuf(self):
+        """Session must set disconnect_reason and close cleanly when a corrupt frame arrives."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        await vdsm.send(_hello_msg())
+
+        # Queue corrupt protobuf (valid length header, garbage payload) after hello.
+        corrupt_payload = b"\xff\xfe\xfd\xfc\xfb\xfa\xf9\xf8\xf7\xf6"
+        vdc._reader.feed_data(struct.pack("!H", len(corrupt_payload)) + corrupt_payload)
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        await task
+
+        assert session.state is SessionState.CLOSED
+        assert isinstance(session.disconnect_reason, ValueError)
