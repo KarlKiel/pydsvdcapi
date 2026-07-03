@@ -1,5 +1,42 @@
 # pydsvdcapi — Developer Guide
 
+## Contents
+
+1. [Introduction](#1-introduction)
+2. [DsUid — Unique Identifiers](#2-dsuid--unique-identifiers)
+   - [The three protocol artefacts](#the-three-protocol-artefacts)
+   - [Device: grouping vdSDs by hardware identity](#device-grouping-vdsds-by-hardware-identity)
+3. [Architecture](#3-architecture)
+4. [Installation](#4-installation)
+5. [Quick Start](#5-quick-start)
+6. [VdcHost Reference](#6-vdchost-reference)
+7. [Vdc Reference](#7-vdc-reference)
+8. [Device and Vdsd Reference](#8-device-and-vdsd-reference)
+9. [Output Reference](#9-output-reference)
+10. [Output Channels Reference](#10-output-channels-reference)
+11. [BinaryInput Reference](#11-binaryinput-reference)
+12. [ButtonInput Reference](#12-buttoninput-reference)
+13. [SensorInput Reference](#13-sensorinput-reference)
+14. [Model Features Reference](#14-model-features-reference)
+15. [Dynamic Features](#15-dynamic-features)
+    - [Prerequisites](#prerequisites)
+    - [State evaluation gap](#state-evaluation-gap)
+16. [Device States Reference](#16-device-states-reference)
+17. [Device Events Reference](#17-device-events-reference)
+18. [Device Properties Reference](#18-device-properties-reference)
+19. [Device Actions Reference](#19-device-actions-reference)
+20. [Generic Framework GTIN](#20-generic-framework-gtin)
+21. [Device Template Catalogue](#21-device-template-catalogue)
+    - [Template family reference](#template-family-reference)
+    - [Full walkthrough — washing machine](#full-walkthrough--washing-machine)
+22. [Device Lifecycle](#section-22-device-lifecycle)
+23. [Persistence (PropertyStore)](#section-23-persistence-propertystore)
+24. [Value Converters](#section-24-value-converters)
+25. [Device Templates (library)](#section-25-device-templates)
+26. [Session Constants](#section-26-session-constants)
+
+---
+
 ## 1. Introduction
 
 pydsvdcapi is a Python library for building **virtual Device Connectors (vDCs)** — software
@@ -24,7 +61,8 @@ virtual devices to the vdSM, receives commands (scene calls, output value change
 state updates back. From the dSS's point of view, vDC devices are indistinguishable from real
 hardware devices.
 
-The protocol defines three first-class entities:
+The protocol defines three first-class entities, each identified in the dSS by its own
+dSUID (see [Section 2](#2-dsuid--unique-identifiers)):
 
 | Entity | Role |
 |--------|------|
@@ -41,7 +79,162 @@ The protocol defines three first-class entities:
 
 ---
 
-## 2. Installation
+## 2. DsUid — Unique Identifiers
+
+Every entity that the digitalSTROM system tracks is identified by a stable **17-byte
+dSUID** (digitalSTROM Unique Identifier). The dSS persists all scene assignments, zone
+memberships, group configurations, and automation rules under the dSUID — so the same
+dSUID must be reused across restarts for the dSS to recognise a device as the same
+object it already knows.
+
+### The three protocol artefacts
+
+The vDC API announces three entity types to the vdSM, each with its own dSUID:
+
+| Entity | Library class | dSUID assigned by |
+|--------|--------------|-------------------|
+| **vDChost** | `VdcHost` | Derived automatically from the host machine's MAC address (or set explicitly) |
+| **vDC** | `Vdc` | Derived automatically from `implementation_id` + host MAC |
+| **vdSD** | `Vdsd` | Your code — choose from the factory methods below |
+
+pydsvdcapi manages the vDChost and vDC dSUIDs automatically. **Your only responsibility
+is to supply stable, persistent dSUIDs for your `Vdsd` instances.**
+
+### Device: grouping vdSDs by hardware identity
+
+pydsvdcapi introduces a fourth object, `Device`, which has **no protocol identity of its
+own** — it is a library-level grouping for one or more `Vdsd` instances that represent
+the same physical piece of hardware. The hardware's identity is captured in the dSUID:
+
+- All `Vdsd` instances within one `Device` share the same **base UUID (bytes 0–15)**.
+- Each `Vdsd` has a unique **sub-device index** in byte 17 (zero-based index 16).
+
+```python
+base = DsUid.from_gtin_serial("07640156791013", "SN001")
+# Two relay outputs on the same hardware unit:
+relay_0 = base.derive_subdevice(0)
+relay_1 = base.derive_subdevice(1)
+```
+
+The dSS treats sibling sub-devices as logically related and groups them in the
+configurator under the same hardware object.
+
+### dSUID format
+
+The canonical string form is **34 upper-case hex characters**, e.g.
+`"198C033E330755E78015F97AD093DD1C00"`. The first 16 bytes encode a UUID or EPC96
+identifier; byte 17 (index 16, zero-based) is the sub-device index.
+
+### Factory methods
+
+| Method | Use case |
+|--------|----------|
+| `DsUid.from_string(value)` | Parse from a 34-hex or UUID-with-dashes string |
+| `DsUid.from_bytes(data)` | Parse from 17 raw bytes |
+| `DsUid.from_uuid(uuid_obj, subdevice_index=0)` | Wrap an existing `uuid.UUID` |
+| `DsUid.from_name_in_space(name, namespace, subdevice_index=0)` | UUIDv5 from name + namespace (general purpose) |
+| `DsUid.from_gtin_serial(gtin, serial, subdevice_index=0)` | UUIDv5 from GTIN + serial number (SGTIN-128 in the GS1-128 namespace) |
+| `DsUid.from_sgtin96(gcp, item_ref, partition, serial, subdevice_index=0)` | Direct SGTIN-96 binary encoding |
+| `DsUid.from_gid96(manager, object_class, serial, subdevice_index=0)` | Legacy GID-96 encoding |
+| `DsUid.from_mac_gid96(mac, subdevice_index=0)` | Legacy GID-96 derived from a MAC address |
+| `DsUid.from_vdc_mac(mac, subdevice_index=0)` | UUIDv5 from MAC in the vDC namespace |
+| `DsUid.from_enocean(address, subdevice_index=0)` | UUIDv5 from an EnOcean 32-bit device address |
+| `DsUid.random(subdevice_index=0)` | Random UUIDv4-based dSUID (last resort — **must be persisted**) |
+
+### Sub-device derivation
+
+```python
+base = DsUid.from_gtin_serial("07640156791013", "SN001")
+button0 = base.derive_subdevice(0)  # same base, index 0
+button1 = base.derive_subdevice(1)
+button2 = base.derive_subdevice(2)
+button3 = base.derive_subdevice(3)
+```
+
+**`derive_subdevice(index)`** returns a new `DsUid` with the same base UUID (bytes
+0–15) but a different sub-device index byte. This is the canonical way to build
+sibling vdSDs from a single hardware dSUID.
+
+### DsUidNamespace
+
+Well-known namespace UUIDs for use with `from_name_in_space`:
+
+| Constant | Namespace |
+|----------|-----------|
+| `DsUidNamespace.GS1_128` | SGTIN-128 strings (used internally by `from_gtin_serial`) |
+| `DsUidNamespace.ENOCEAN` | EnOcean device addresses |
+| `DsUidNamespace.VDC` | vDC dSUIDs derived from MAC |
+| `DsUidNamespace.VDSM` | vdSM dSUIDs derived from MAC |
+
+### Selection guide
+
+- **Hardware with a GTIN (EAN barcode) and a serial number** → `from_gtin_serial`
+- **GTIN-only hardware (no individual serial)** → `from_gtin_serial` with a fixed
+  placeholder serial, or `from_sgtin96` with the raw EPC components
+- **You already have a UUID** → `from_uuid`
+- **Any unique string ID** → `from_name_in_space` with a custom namespace UUID
+- **EnOcean device** → `from_enocean`
+- **No unique hardware ID / prototype** → `random()` — but **persist** the result to
+  `state_path` or another store so the same dSUID is reused across restarts
+
+> **Note on GTIN and VdcDb:** The GTIN embedded in a dSUID via `from_gtin_serial()`
+> is used only for stable unique identification. The dSS firmware database (VdcDb) is
+> keyed by `vdsd.oem_model_guid`, not by the dSUID GTIN. See
+> [Dynamic Features](#15-dynamic-features) and
+> [Device Template Catalogue](#21-device-template-catalogue) for details.
+
+---
+
+## 3. Architecture
+
+### Entity hierarchy
+
+All three protocol entities — vDChost, vDC, and vdSD — carry their own dSUID (see
+[Section 2](#2-dsuid--unique-identifiers)) and are announced individually to the vdSM.
+`Device` is a library-only grouping with no protocol identity:
+
+```
+VdcHost  — gateway process; dSUID derived from MAC address      [protocol entity]
+└── Vdc  — logical connector; dSUID derived from impl. ID + MAC [protocol entity]
+    └── Device  — hardware grouping; no dSUID, not known to dSS [library only]
+        └── Vdsd  — virtual device; dSUID = base + sub-index    [protocol entity]
+```
+
+### Device vs Vdsd
+
+A `Device` groups one or more `Vdsd` instances that represent the same physical piece
+of hardware. The relationship is encoded directly in the dSUID:
+
+- All `Vdsd` instances within a `Device` share the same base UUID (bytes 0–15) —
+  taken from the `Device`'s own dSUID.
+- Each `Vdsd` has a unique sub-device index in byte 17, making it independently
+  addressable by the dSS.
+
+Example: a two-relay irrigation controller. Both relays share the hardware's
+GTIN + serial dSUID base and differ only in sub-device index:
+
+```python
+base = DsUid.from_gtin_serial("07640156791013", "SN001")
+device = Device(vdc=vdc, dsuid=base)
+relay_a = Vdsd(device=device, ...)                            # dSUID: base + index 0
+relay_b = Vdsd(device=device, subdevice_index=1, ...)         # dSUID: base + index 1
+```
+
+The dSS sees `relay_a` and `relay_b` as two independent addressable devices that happen
+to share a hardware identity.
+
+### Naming quick reference
+
+| Class | Role |
+|-------|------|
+| `VdcHost` | Gateway process; owns the TCP socket; announced with its own dSUID |
+| `Vdc` | Logical connector (one per integration type); announced with its own dSUID |
+| `Device` | Library grouping for one piece of hardware; **not known to the dSS** |
+| `Vdsd` | A single virtual device; announced with dSUID = Device base + sub-device index |
+
+---
+
+## 4. Installation
 
 ```bash
 pip install pydsvdcapi
@@ -64,7 +257,7 @@ make -C docs html
 
 ---
 
-## 3. Quick Start
+## 5. Quick Start
 
 The minimal skeleton to get a dimmable light visible on the dSS:
 
@@ -147,45 +340,10 @@ The host will:
 
 ---
 
-## 4. Architecture
-
-### Entity hierarchy
-
-```
-VdcHost          — gateway process, owns the TCP socket and DNS-SD announcement
-└── Vdc          — logical connector grouping related devices (one per integration type)
-    └── Device   — library grouping for a single piece of hardware
-        └── Vdsd — the actual protocol device entity (one dSUID each)
-```
-
-### Device vs Vdsd
-
-`Device` groups one or more `Vdsd` instances that share the same physical hardware —
-identified by the same base dSUID (bytes 0–15). Each `Vdsd` represents one
-addressable software sub-device; the sub-device index is stored in byte 17 of the
-dSUID.
-
-Example: a 4-button remote is **one Device** with **four Vdsd instances** (sub-device
-indices 0–3). All four share bytes 0–15 of the dSUID and differ only in byte 17.
-
-### Protocol entities
-
-The vDC API protocol knows three first-class entities that are announced to the
-vdSM: `VdcHost`, `Vdc`, and `Vdsd`. `Device` is a **library-level grouping only** —
-it has no protocol representation of its own.
-
-### Naming quick reference
-
-| Class | Role |
-|-------|------|
-| `VdcHost` | Gateway process; owns the TCP socket |
-| `Vdc` | Logical connector (one per integration type) |
-| `Device` | Library grouping for one piece of hardware (not a protocol entity) |
-| `Vdsd` | A single virtual device with its own dSUID |
 
 ---
 
-## 5. VdcHost Reference
+## 6. VdcHost Reference
 
 `VdcHost` is the top-level entity. It opens the TCP server socket that the vdSM
 connects to and registers the service via mDNS/DNS-SD so vdSMs can discover it
@@ -272,11 +430,12 @@ Rapid successive changes are coalesced into a single write.
 
 ---
 
-## 6. Vdc Reference
 
-`Vdc` is a logical connector that groups related virtual devices. Each distinct
-integration type (e.g. KNX lights, a cloud thermostat API) should have its own
-`Vdc`.
+---
+
+## 7. Vdc Reference
+
+`Vdc` is the logical connector that groups related virtual devices of the implementation purpose(e.g. for a device bridge, or a dedicated device) Normally, there will be only one Vdc implemented per VdcHost - Nevertheless, the library also supports several Vdc implementations on one host.
 
 ### Constructor
 
@@ -307,6 +466,8 @@ are required; `name` and `model` must be non-empty strings.
 | `device_class` | `None` | digitalSTROM device class profile name |
 | `device_class_version` | `None` | Revision of the device class profile |
 | `template_path` | `None` | Path for storing/loading device templates |
+| `capabilities` | `VdcCapabilities()` | Capability flags (`metering`, `identification`, `dynamic_definitions`); see [GTIN choice and dSS firmware behavior](#gtin-choice-and-dss-firmware-behavior) |
+| `zone_id` | `0` | Default dS zone ID |
 
 ### Device management methods
 
@@ -330,7 +491,10 @@ are required; `name` and `model` must be non-empty strings.
 
 ---
 
-## 7. Device and Vdsd Reference
+
+---
+
+## 8. Device and Vdsd Reference
 
 ### Device
 
@@ -432,64 +596,6 @@ vdc.add_device(device)
 
 ---
 
-## 8. DsUid — Unique Identifiers
-
-Every entity in the dS system has a **17-byte dSUID** (digitalSTROM Unique
-Identifier). The canonical string form is **34 upper-case hex characters**, e.g.
-`"198C033E330755E78015F97AD093DD1C00"`. The first 16 bytes encode a UUID or an
-EPC96 identifier; byte 17 (index 16, zero-based) is the **sub-device index**.
-
-### Factory methods
-
-| Method | Use case |
-|--------|----------|
-| `DsUid.from_string(value)` | Parse from a 34-hex or UUID-with-dashes string |
-| `DsUid.from_bytes(data)` | Parse from 17 raw bytes |
-| `DsUid.from_uuid(uuid_obj, subdevice_index=0)` | Wrap an existing `uuid.UUID` |
-| `DsUid.from_name_in_space(name, namespace, subdevice_index=0)` | UUIDv5 from name + namespace (general purpose) |
-| `DsUid.from_gtin_serial(gtin, serial, subdevice_index=0)` | UUIDv5 from GTIN + serial number (SGTIN-128 in the GS1-128 namespace) |
-| `DsUid.from_sgtin96(gcp, item_ref, partition, serial, subdevice_index=0)` | Direct SGTIN-96 binary encoding |
-| `DsUid.from_gid96(manager, object_class, serial, subdevice_index=0)` | Legacy GID-96 encoding |
-| `DsUid.from_mac_gid96(mac, subdevice_index=0)` | Legacy GID-96 derived from a MAC address |
-| `DsUid.from_vdc_mac(mac, subdevice_index=0)` | UUIDv5 from MAC in the vDC namespace |
-| `DsUid.from_enocean(address, subdevice_index=0)` | UUIDv5 from an EnOcean 32-bit device address |
-| `DsUid.random(subdevice_index=0)` | Random UUIDv4-based dSUID (last resort — **must be persisted**) |
-
-### Sub-device derivation
-
-```python
-base = DsUid.from_gtin_serial("07640156791013", "SN001")
-button0 = base.derive_subdevice(0)  # same base, index 0
-button1 = base.derive_subdevice(1)
-button2 = base.derive_subdevice(2)
-button3 = base.derive_subdevice(3)
-```
-
-**`derive_subdevice(index)`** returns a new `DsUid` with the same base UUID (bytes
-0–15) but a different sub-device index byte. This is the canonical way to build
-sibling vdSDs from a single hardware dSUID.
-
-### DsUidNamespace
-
-Well-known namespace UUIDs for use with `from_name_in_space`:
-
-| Constant | Namespace |
-|----------|-----------|
-| `DsUidNamespace.GS1_128` | SGTIN-128 strings (used internally by `from_gtin_serial`) |
-| `DsUidNamespace.ENOCEAN` | EnOcean device addresses |
-| `DsUidNamespace.VDC` | vDC dSUIDs derived from MAC |
-| `DsUidNamespace.VDSM` | vdSM dSUIDs derived from MAC |
-
-### Selection guide
-
-- **Hardware with a GTIN (EAN barcode) and a serial number** → `from_gtin_serial`
-- **GTIN-only hardware (no individual serial)** → `from_gtin_serial` with a fixed
-  placeholder serial, or `from_sgtin96` with the raw EPC components
-- **You already have a UUID** → `from_uuid`
-- **Any unique string ID** → `from_name_in_space` with a custom namespace UUID
-- **EnOcean device** → `from_enocean`
-- **No unique hardware ID / prototype** → `random()` — but **persist** the result to
-  `state_path` or another store so the same dSUID is reused across restarts
 
 ---
 
@@ -1444,7 +1550,293 @@ async def on_sensor_update(temperature: float, co2: float) -> None:
 
 ---
 
-## 14. DeviceState Reference
+## 14. Model Features Reference
+
+### Overview
+
+`modelFeatures` is a set of boolean capability flags announced in the vdSD's
+`modelFeatures` property. The dSS and the dS configurator use these flags to decide
+which UI panels to display, which hardware integrations to enable, and which
+behaviours to apply to the device. Some flags are derived automatically from the
+device's configured components; others must be added manually when a specific
+capability cannot be inferred.
+
+### Auto-derived features
+
+`vdsd.derive_model_features()` analyses the vdSD's configured output, channels,
+sensors, binary inputs, and button inputs and adds the appropriate flags
+automatically. If you do not call `derive_model_features()` before announcement,
+the library runs it once automatically at announcement time.
+
+| Feature | Auto-derived when |
+|---------|-------------------|
+| `dontcare` | Any output is configured |
+| `blink` | Any output is configured |
+| `transt` | Any output with a non-POSITIONAL function that includes a channel type supporting transitions (brightness, colour, heating/cooling, audio, etc.) |
+| `shadeposition` | `primaryGroup` GREY (2) + POSITIONAL output function |
+| `shadebladeang` | `primaryGroup` GREY (2) + POSITIONAL output + slat/angle channel (`SHADE_OPENING_ANGLE_OUTSIDE` or `SHADE_OPENING_ANGLE_INDOOR`) present |
+| `outvalue8` | Any output present and `primaryGroup` is not GREY (2) |
+| `outputchannels` | Both HUE and SATURATION channels present, or both BRIGHTNESS and COLOR_TEMPERATURE channels present |
+| `dimtimeconfig` | Output function is DIMMER, DIMMER_COLOR_TEMP, or FULL_COLOR_DIMMER |
+| `outconfigswitch` | Output function is ON_OFF |
+| `impulseconfig` | Output function is ON_OFF |
+| `pwmvalue` | `primaryGroup` BLUE (3) + ON_OFF output, or HEATING_POWER channel present |
+| `ventconfig` | Any ventilation channel present (AIR_FLOW_INTENSITY, AIR_FLOW_DIRECTION, AIR_FLAP_POSITION, AIR_LOUVER_POSITION, AIR_LOUVER_AUTO, AIR_FLOW_AUTO) |
+| `consumption` | Any power or energy sensor present (ACTIVE_POWER, ELECTRIC_CURRENT, ENERGY_METER, or APPARENT_POWER) |
+| `temperatureoffset` | TEMPERATURE sensor present and `primaryGroup` is BLUE (3) |
+| `akmsensor` | Any binary input is configured |
+| `pushbutton` | Any button input is configured |
+| `pushbadvanced` | Any button input is configured |
+| `pushbdisabled` | Any button input is configured |
+| `pushbarea` | Any button input with `group` ≠ 8 is configured |
+| `pushbdevice` | Any button input with `group` ≠ 8 and `supports_local_key_mode=True` |
+| `pushbsensor` | Any button input with `group` == 8 (Joker) is configured |
+| `highlevel` | Any button input with `group` == 8 (Joker) is configured |
+| `heatingprops` | `primaryGroup` BLUE (3) |
+| `heatinggroup` | `primaryGroup` BLUE (3) |
+| `valvetype` | `primaryGroup` BLUE (3) + output configured |
+| `extendedvalvetypes` | `primaryGroup` BLUE (3) + output configured |
+| `fcu` | `primaryGroup` BLUE (3) + output configured + ventilation channel types present |
+| `locationconfig` | `primaryGroup` GREY (2) + output configured |
+| `operationlock` | `primaryGroup` GREY (2) + output configured + outdoor channel (`SHADE_POSITION_OUTSIDE` or `SHADE_OPENING_ANGLE_OUTSIDE`) present |
+| `windprotectionconfigblind` | `primaryGroup` GREY (2) + `SHADE_OPENING_ANGLE_OUTSIDE` (type 9) channel present |
+| `windprotectionconfigawning` | `primaryGroup` GREY (2) + outdoor position only (no slat/angle channel) |
+| `jokerconfig` | `primaryGroup` BLACK (8) |
+| `identification` | `vdsd.on_identify` callback is registered |
+
+### Manually addable features
+
+Some features are valid and useful but cannot be inferred automatically. Add them
+explicitly with `vdsd.add_model_feature("featurename")` after constructing the
+device.
+
+| Feature | What it enables in the configurator |
+|---------|-------------------------------------|
+| `shadeprops` | Motor timing configuration panel for grey shade devices; enables position-calibration and travel-time fields in the configurator |
+| `motiontimefins` | Fine position / motion-time configuration for jalousie / Venetian blind devices; enables blade calibration fields |
+| `blinkconfig` | Blink configuration panel; allows the user to configure alert-blink duration and parameters |
+| `consumptiontimer` | Consumption timer panel; enables energy-measurement scheduling in the configurator |
+| `outmodegeneric` | Generic output-mode selector; shows an additional mode-selection UI element for devices that expose multiple generic output modes |
+| `outmodeauto` | Automatic output-mode UI; enables an auto-mode selection control in the configurator |
+
+### Blocked / unsupported features
+
+The following features raise `ValueError` if passed to `add_model_feature()` because
+they write to DS485 bus registers or physical hardware registers that are never
+forwarded to a TCP/IP VDC device. Declaring them would cause the configurator to show
+controls that have no effect.
+
+| Feature | Reason blocked |
+|---------|----------------|
+| `ledauto` | Controls LED indicators via a DS485 hardware register; no VDC write-back path |
+| `leddark` | Controls LED indicators via a DS485 hardware register; no VDC write-back path |
+| `dimmodeconfig` | Selects the physical dimmer circuit type via DS485; no VDC path |
+| `consumptioneventled` | Triggers LED flash on consumption events via DS485; no VDC path |
+| `outmode` | Output-mode selector that writes via `CfgFunction_Mode` on DS485; not forwarded to VDC |
+| `outmodeswitch` | Same as `outmode`; DS485 only |
+| `heatingoutmode` | Heating output-mode selector via DS485 |
+| `umroutmode` | Universal module relay output-mode selector via DS485 |
+| `extradimmer` | Extra-dimmer hardware flag; DS485 only |
+| `optypeconfig` | Output type configuration via DS485 hardware register |
+| `outmodetempcontrol` | Temperature-control output-mode selector; DS485 only |
+| `outmodeenoceanvalve` | EnOcean valve output-mode selector; DS485 only |
+| `twowayconfig` | Two-way TKM pushbutton hardware type; no VDC equivalent |
+| `pushbcombined` | Combined pushbutton mode for physical TKM hardware; no VDC equivalent |
+| `ftwdisplaysettings` | FTW display settings; physical device only |
+| `ftwbacklighttimeout` | FTW backlight timeout; physical device only |
+| `grkl387workaround` | Hardware-specific workaround for a physical device model |
+| `akminput` | AKM contact-module input configuration via DS485 bus register; never reaches VDC |
+| `akmdelay` | AKM contact-module delay configuration via DS485 bus register; never reaches VDC |
+
+### Complete feature reference
+
+All known feature strings, their canonical index in the dSS firmware enum, and what
+they enable:
+
+| Feature string | Firmware index | Description |
+|----------------|---------------|-------------|
+| `dontcare` | 0 | Device supports "don't care" scene behaviour; enables scene-assignment controls in the configurator |
+| `blink` | 1 | Device can blink/alert on scene call; enables the blink alert action |
+| `transt` | 4 | Device supports software transition time; enables dim-speed and transition-time controls in the configurator |
+| `outmode` | 5 | (Blocked) DS485 output-mode selector |
+| `outmodeswitch` | 6 | (Blocked) DS485 output-mode switch selector |
+| `outvalue8` | 7 | Device uses 8-bit output value reporting; enables the output value display in the configurator for non-shade devices |
+| `shadeposition` | 15 | Device reports shade position; enables the position display and calibration panel for grey shade devices |
+| `shadebladeang` | 18 | Device reports blade/slat angle; enables the blade angle calibration panel |
+| `consumption` | 20 | Device has power/energy sensors; enables the consumption display in the configurator |
+| `outputchannels` | 26 | Device has multiple independent output channels (colour, tunable white); enables the multi-channel output panel |
+| `heatingoutmode` | 28 | (Blocked) DS485 heating output-mode selector |
+| `heatingprops` | 29 | Device is a climate device; enables heating/cooling properties in the configurator |
+| `pwmvalue` | 30 | Device uses PWM-style value reporting (0–100 % heating valve or ON_OFF climate output); enables the heating-power display |
+| `blinkconfig` | 34 | Device supports blink-duration configuration; enables the blink configuration panel |
+| `umroutmode` | 35 | (Blocked) DS485 universal module relay output-mode selector |
+| `impulseconfig` | 39 | Device supports impulse output configuration; enables the impulse-duration configuration panel for ON_OFF outputs |
+| `outmodegeneric` | 40 | Device supports a generic output-mode selector; enables the generic mode-selection UI |
+| `outconfigswitch` | 41 | Device output can be configured as a binary switch; enables switch-configuration options for ON_OFF outputs |
+| `ventconfig` | 47 | Device supports ventilation control; enables the ventilation stage and fan-speed configuration panel |
+| `consumptioneventled` | 50 | (Blocked) LED flash on consumption threshold events; DS485 only |
+| `consumptiontimer` | 51 | Device supports consumption timer scheduling; enables the energy-measurement schedule panel |
+| `dimtimeconfig` | 53 | Device supports dim time configuration; enables the dim-up/dim-down timing controls |
+| `outmodeauto` | 54 | Device supports automatic output mode; enables the auto-mode selection control |
+| `outmodetempcontrol` | 60 | (Blocked) DS485 temperature-control output-mode selector |
+| `outmodeenoceanvalve` | 61 | (Blocked) DS485 EnOcean valve output-mode selector |
+| `shadeprops` | — | Enables the motor timing configuration panel for shade devices (travel time, stop delay, etc.) |
+| `motiontimefins` | — | Enables blade/slat fine-calibration panel for jalousie devices |
+| `temperatureoffset` | — | Climate device with temperature sensor; enables the temperature offset calibration control |
+| `akmsensor` | — | Device has binary inputs; enables the binary-input / AKM sensor function panel |
+| `pushbutton` | — | Device has button inputs; enables the button configuration panel |
+| `pushbadvanced` | — | Enables advanced button options (long-press, multi-click configuration) |
+| `pushbdisabled` | — | Enables the option to disable individual button elements |
+| `pushbarea` | — | Button controls a zone area; enables area-assignment for the button |
+| `pushbdevice` | — | Button supports local key mode; enables local-device-key configuration |
+| `pushbsensor` | — | Joker-group button; enables sensor-button assignment panel |
+| `highlevel` | — | Joker button with high-level scene calls; enables the high-level scene assignment panel |
+| `heatinggroup` | — | Climate device belongs to a heating/cooling group; enables group-assignment for climate devices |
+| `valvetype` | — | Climate output device; enables valve type selection (heating-only, cooling-only, combined) |
+| `extendedvalvetypes` | — | Climate output device; enables extended valve type options beyond the basic three |
+| `fcu` | — | Fan-coil unit (FCU) / ventilation device; enables FCU-specific controls (operation mode, louver, flow direction) |
+| `locationconfig` | — | Shade device with output; enables the indoor/outdoor location configuration for the shade |
+| `operationlock` | — | Outdoor shade with position channel; enables the operation lock (wind/rain/sun protection) |
+| `windprotectionconfigblind` | — | Outdoor jalousie/blind (has slat angle channel); enables the blind-specific wind protection settings |
+| `windprotectionconfigawning` | — | Outdoor awning/roller blind (no slat channel); enables awning-specific wind protection settings |
+| `jokerconfig` | — | Joker/Black device; enables the joker configuration panel for freely assignable functions |
+| `identification` | — | Device has an `on_identify` callback; enables the identify button in the configurator |
+
+### Code example
+
+```python
+from pydsvdcapi import Vdsd
+
+# Auto-derive features from the configured output, sensors, inputs, and buttons.
+# This is the recommended approach — call it once after all components are attached.
+vdsd.derive_model_features()
+
+# Manually add a feature that cannot be auto-derived.
+# For a grey shade device that supports motor timing configuration:
+vdsd.add_model_feature("shadeprops")
+vdsd.add_model_feature("motiontimefins")
+
+# For a dimmer that supports blink-duration configuration:
+vdsd.add_model_feature("blinkconfig")
+
+# Remove a feature that was auto-derived but is not applicable:
+vdsd.remove_model_feature("blink")
+
+# Inspect the current feature set (returns a copy):
+print(vdsd.model_features)
+```
+
+After `derive_model_features()` is called the flag `_features_derived` is set.
+Subsequent calls to `announce()` will not run auto-derivation again, so any manual
+additions or removals made after `derive_model_features()` are preserved.
+
+### Note on oem_model_guid and firmware model feature injection
+
+If the vdSD's `oem_model_guid` matches a GTIN in the dSS firmware's internal device
+database (VdcDb), the dSS may automatically inject additional `modelFeatures` flags
+from that database entry — independently of what the vDC announces. The features
+declared by the vDC and the firmware-injected features are merged by the dSS; the
+result visible in the configurator may therefore include flags that were never
+explicitly set in your code.
+
+Note: this injection is driven by `oem_model_guid`, not by any GTIN embedded in the
+dSUID. See [Device Template Catalogue](#21-device-template-catalogue) for details.
+
+---
+
+## 15. Dynamic Features
+
+The dSS exposes four distinct mechanisms that let virtual devices participate in
+automation and the configurator beyond simple output control: device states, device
+events, device properties, and device actions. Enabling them correctly requires two
+prerequisites and an understanding of how each mechanism interacts with the dSS
+firmware's built-in device database (VdcDb).
+
+### What the dSS exposes
+
+| Feature | Protocol entity | Purpose |
+|---------|----------------|---------|
+| Device States | `deviceStates` | Discrete enumerated status values (e.g. OperationMode, DoorState) |
+| Device Events | `deviceEventDescriptions` / push | One-shot notifications (e.g. ProgramFinished) |
+| Device Properties | `deviceProperties` | Read/write named values persisted by the VDC |
+| Device Actions | `deviceActionDescriptions` | Callable operations the dSS can invoke on the device |
+
+### What a template GTIN activates
+
+The dSS firmware looks up `vdsd.oem_model_guid` in VdcDb and activates features
+accordingly:
+
+| GTIN has … | Effect in dSS |
+|---|---|
+| ≥ 1 row in actions or events table | `hasActionInterface=True` → Actions and Events from the VDC appear as automation triggers |
+| ≥ 1 row in states table | Allocates `StateType_Device` slots in `/usr/states/` → device appears in the automation state picker |
+| Rows in properties table | Property descriptions loaded; `dynamic_definitions=True` → VDC's names shown |
+| Any entry | dSS may inject additional `modelFeatures` flags (see [Section 14](#14-model-features-reference)) |
+
+### Prerequisites
+
+Before device states, events, properties, or actions are usable in dSS automation
+and the configurator, two prerequisites must be met:
+
+**1. Set `oem_model_guid` on the vdSD to a VdcDb-registered GTIN:**
+
+```python
+vdsd.oem_model_guid = "gs1:(01)<13-digit-GTIN>"
+```
+
+Without a matching VdcDb entry, `hasActionInterface` remains `False` and the device
+does not appear in the automation state picker. See [Section 20](#20-generic-framework-gtin)
+for the generic test GTIN and [Section 21](#21-device-template-catalogue) for
+device-specific GTINs.
+
+**2. Enable `dynamic_definitions` on the VDC:**
+
+```python
+from pydsvdcapi import VdcCapabilities
+
+vdc = Vdc(
+    host=host,
+    implementation_id="x-myapp",
+    name="My VDC",
+    model="My Gateway",
+    capabilities=VdcCapabilities(dynamic_definitions=True),
+)
+```
+
+Without `dynamic_definitions=True`, the dSS shows generic names from VdcDb instead
+of the names your VDC provides for states, events, actions, and properties.
+
+### State evaluation gap
+
+States involve four separate mechanisms in the dSS. Understanding their interaction
+is critical for reliable automation:
+
+| Mechanism | Works with any VDC-pushed state? | Requires VdcDb state rows? |
+|---|---|---|
+| Device appears in automation state-picker device list | No | Yes — `initStates()` only runs when VdcDb has state rows for the GTIN |
+| State names shown in condition / trigger picker | Yes — with `dynamic_definitions=True` | No — VDC's names override VdcDb |
+| `DeviceStateEvent` fires on state push (event-triggered automation) | **Yes** | No |
+| State **condition** evaluates in automation rule | **No** | State name must exactly match a VdcDb-pre-allocated slot in `/usr/states/` |
+
+**Practical consequence:** Event-triggered automation (`when ProgramFinished event fires →
+do something`) works reliably with any template GTIN. State-condition automation (`when
+OperationMode == Running → do something`) only works if the state name in `DeviceState.name`
+exactly matches the VdcDb-registered name for that GTIN.
+
+---
+
+## 16. Device States Reference
+
+### Prerequisites
+
+Device states are visible in the dSS configurator and automation engine only when
+both prerequisites from [Section 15](#15-dynamic-features) are met:
+
+1. `vdsd.oem_model_guid` is set to a GTIN that has state rows in VdcDb.
+2. `dynamic_definitions=True` is set on the VDC (to show your state names in the picker).
+
+For state-condition automation, the `DeviceState.name` must exactly match the
+VdcDb-pre-allocated slot name for your GTIN (see [state evaluation gap](#state-evaluation-gap)).
 
 `DeviceState` models one discrete enumerated device state on a vdSD. States
 are used to report device-specific status information to the dSS — for example
@@ -1549,7 +1941,16 @@ async def on_hardware_state_changed(raw_state: int) -> None:
 
 ---
 
-## 15. DeviceEvent Reference
+## 17. Device Events Reference
+
+### Prerequisites
+
+Device events appear as automation triggers in the dSS configurator only when both
+prerequisites from [Section 15](#15-dynamic-features) are met:
+
+1. `vdsd.oem_model_guid` is set to a GTIN that has action or event rows in VdcDb
+   (`hasActionInterface=True`).
+2. `dynamic_definitions=True` is set on the VDC (to show your event names in the trigger picker).
 
 `DeviceEvent` models one stateless one-shot event on a vdSD. Device events are
 push notifications sent from the device to the dSS when something notable
@@ -1624,7 +2025,15 @@ async def on_alarm() -> None:
 
 ---
 
-## 16. DeviceProperty Reference
+## 18. Device Properties Reference
+
+### Prerequisites
+
+Device properties are shown in the dSS configurator's property panel only when both
+prerequisites from [Section 15](#15-dynamic-features) are met:
+
+1. `vdsd.oem_model_guid` is set to a GTIN that has property rows in VdcDb.
+2. `dynamic_definitions=True` is set on the VDC (to show your property names).
 
 `DeviceProperty` models one generic device property on a vdSD. Properties
 differ from device states in that they are not limited to a fixed set of
@@ -1752,7 +2161,17 @@ async def on_battery_update(percent: float) -> None:
 
 ---
 
-## 17. Actions Reference
+## 19. Device Actions Reference
+
+### Prerequisites
+
+Device actions are invokable from the dSS configurator and automation engine only
+when both prerequisites from [Section 15](#15-dynamic-features) are met:
+
+1. `vdsd.oem_model_guid` is set to a GTIN that has action rows in VdcDb
+   (`hasActionInterface=True`).
+2. `dynamic_definitions=True` is set on the VDC (to show your action names in the
+   configurator).
 
 Actions are operations that the dSS can invoke on the device. The vdSM sends
 action requests via `VDSM_REQUEST_GENERIC_REQUEST` with
@@ -2006,196 +2425,267 @@ my_vdsd.on_invoke_action = handle_action
 
 ---
 
-## 18. Model Features Reference
+## 20. Generic Framework GTIN
 
-### Overview
+For VDC implementations that do not map to a specific physical product, the dSS
+firmware database includes internal test GTINs that can be used to enable
+`hasActionInterface` and related configurator features without implementing a
+device-specific contract.
 
-`modelFeatures` is a set of boolean capability flags announced in the vdSD's
-`modelFeatures` property. The dSS and the dS configurator use these flags to decide
-which UI panels to display, which hardware integrations to enable, and which
-behaviours to apply to the device. Some flags are derived automatically from the
-device's configured components; others must be added manually when a specific
-capability cannot be inferred.
+Set `oem_model_guid` and enable `dynamic_definitions` as described in
+[Section 15](#15-dynamic-features) before using either GTIN.
 
-### Auto-derived features
-
-`vdsd.derive_model_features()` analyses the vdSD's configured output, channels,
-sensors, binary inputs, and button inputs and adds the appropriate flags
-automatically. If you do not call `derive_model_features()` before announcement,
-the library runs it once automatically at announcement time.
-
-| Feature | Auto-derived when |
-|---------|-------------------|
-| `dontcare` | Any output is configured |
-| `blink` | Any output is configured |
-| `transt` | Any output with a non-POSITIONAL function that includes a channel type supporting transitions (brightness, colour, heating/cooling, audio, etc.) |
-| `shadeposition` | `primaryGroup` GREY (2) + POSITIONAL output function |
-| `shadebladeang` | `primaryGroup` GREY (2) + POSITIONAL output + slat/angle channel (`SHADE_OPENING_ANGLE_OUTSIDE` or `SHADE_OPENING_ANGLE_INDOOR`) present |
-| `outvalue8` | Any output present and `primaryGroup` is not GREY (2) |
-| `outputchannels` | Both HUE and SATURATION channels present, or both BRIGHTNESS and COLOR_TEMPERATURE channels present |
-| `dimtimeconfig` | Output function is DIMMER, DIMMER_COLOR_TEMP, or FULL_COLOR_DIMMER |
-| `outconfigswitch` | Output function is ON_OFF |
-| `impulseconfig` | Output function is ON_OFF |
-| `pwmvalue` | `primaryGroup` BLUE (3) + ON_OFF output, or HEATING_POWER channel present |
-| `ventconfig` | Any ventilation channel present (AIR_FLOW_INTENSITY, AIR_FLOW_DIRECTION, AIR_FLAP_POSITION, AIR_LOUVER_POSITION, AIR_LOUVER_AUTO, AIR_FLOW_AUTO) |
-| `consumption` | Any power or energy sensor present (ACTIVE_POWER, ELECTRIC_CURRENT, ENERGY_METER, or APPARENT_POWER) |
-| `temperatureoffset` | TEMPERATURE sensor present and `primaryGroup` is BLUE (3) |
-| `akmsensor` | Any binary input is configured |
-| `pushbutton` | Any button input is configured |
-| `pushbadvanced` | Any button input is configured |
-| `pushbdisabled` | Any button input is configured |
-| `pushbarea` | Any button input with `group` ≠ 8 is configured |
-| `pushbdevice` | Any button input with `group` ≠ 8 and `supports_local_key_mode=True` |
-| `pushbsensor` | Any button input with `group` == 8 (Joker) is configured |
-| `highlevel` | Any button input with `group` == 8 (Joker) is configured |
-| `heatingprops` | `primaryGroup` BLUE (3) |
-| `heatinggroup` | `primaryGroup` BLUE (3) |
-| `valvetype` | `primaryGroup` BLUE (3) + output configured |
-| `extendedvalvetypes` | `primaryGroup` BLUE (3) + output configured |
-| `fcu` | `primaryGroup` BLUE (3) + output configured + ventilation channel types present |
-| `locationconfig` | `primaryGroup` GREY (2) + output configured |
-| `operationlock` | `primaryGroup` GREY (2) + output configured + outdoor channel (`SHADE_POSITION_OUTSIDE` or `SHADE_OPENING_ANGLE_OUTSIDE`) present |
-| `windprotectionconfigblind` | `primaryGroup` GREY (2) + `SHADE_OPENING_ANGLE_OUTSIDE` (type 9) channel present |
-| `windprotectionconfigawning` | `primaryGroup` GREY (2) + outdoor position only (no slat/angle channel) |
-| `jokerconfig` | `primaryGroup` BLACK (8) |
-| `identification` | `vdsd.on_identify` callback is registered |
-
-### Manually addable features
-
-Some features are valid and useful but cannot be inferred automatically. Add them
-explicitly with `vdsd.add_model_feature("featurename")` after constructing the
-device.
-
-| Feature | What it enables in the configurator |
-|---------|-------------------------------------|
-| `shadeprops` | Motor timing configuration panel for grey shade devices; enables position-calibration and travel-time fields in the configurator |
-| `motiontimefins` | Fine position / motion-time configuration for jalousie / Venetian blind devices; enables blade calibration fields |
-| `blinkconfig` | Blink configuration panel; allows the user to configure alert-blink duration and parameters |
-| `consumptiontimer` | Consumption timer panel; enables energy-measurement scheduling in the configurator |
-| `outmodegeneric` | Generic output-mode selector; shows an additional mode-selection UI element for devices that expose multiple generic output modes |
-| `outmodeauto` | Automatic output-mode UI; enables an auto-mode selection control in the configurator |
-
-### Blocked / unsupported features
-
-The following features raise `ValueError` if passed to `add_model_feature()` because
-they write to DS485 bus registers or physical hardware registers that are never
-forwarded to a TCP/IP VDC device. Declaring them would cause the configurator to show
-controls that have no effect.
-
-| Feature | Reason blocked |
-|---------|----------------|
-| `ledauto` | Controls LED indicators via a DS485 hardware register; no VDC write-back path |
-| `leddark` | Controls LED indicators via a DS485 hardware register; no VDC write-back path |
-| `dimmodeconfig` | Selects the physical dimmer circuit type via DS485; no VDC path |
-| `consumptioneventled` | Triggers LED flash on consumption events via DS485; no VDC path |
-| `outmode` | Output-mode selector that writes via `CfgFunction_Mode` on DS485; not forwarded to VDC |
-| `outmodeswitch` | Same as `outmode`; DS485 only |
-| `heatingoutmode` | Heating output-mode selector via DS485 |
-| `umroutmode` | Universal module relay output-mode selector via DS485 |
-| `extradimmer` | Extra-dimmer hardware flag; DS485 only |
-| `optypeconfig` | Output type configuration via DS485 hardware register |
-| `outmodetempcontrol` | Temperature-control output-mode selector; DS485 only |
-| `outmodeenoceanvalve` | EnOcean valve output-mode selector; DS485 only |
-| `twowayconfig` | Two-way TKM pushbutton hardware type; no VDC equivalent |
-| `pushbcombined` | Combined pushbutton mode for physical TKM hardware; no VDC equivalent |
-| `ftwdisplaysettings` | FTW display settings; physical device only |
-| `ftwbacklighttimeout` | FTW backlight timeout; physical device only |
-| `grkl387workaround` | Hardware-specific workaround for a physical device model |
-| `akminput` | AKM contact-module input configuration via DS485 bus register; never reaches VDC |
-| `akmdelay` | AKM contact-module delay configuration via DS485 bus register; never reaches VDC |
-
-### Complete feature reference
-
-All known feature strings, their canonical index in the dSS firmware enum, and what
-they enable:
-
-| Feature string | Firmware index | Description |
-|----------------|---------------|-------------|
-| `dontcare` | 0 | Device supports "don't care" scene behaviour; enables scene-assignment controls in the configurator |
-| `blink` | 1 | Device can blink/alert on scene call; enables the blink alert action |
-| `transt` | 4 | Device supports software transition time; enables dim-speed and transition-time controls in the configurator |
-| `outmode` | 5 | (Blocked) DS485 output-mode selector |
-| `outmodeswitch` | 6 | (Blocked) DS485 output-mode switch selector |
-| `outvalue8` | 7 | Device uses 8-bit output value reporting; enables the output value display in the configurator for non-shade devices |
-| `shadeposition` | 15 | Device reports shade position; enables the position display and calibration panel for grey shade devices |
-| `shadebladeang` | 18 | Device reports blade/slat angle; enables the blade angle calibration panel |
-| `consumption` | 20 | Device has power/energy sensors; enables the consumption display in the configurator |
-| `outputchannels` | 26 | Device has multiple independent output channels (colour, tunable white); enables the multi-channel output panel |
-| `heatingoutmode` | 28 | (Blocked) DS485 heating output-mode selector |
-| `heatingprops` | 29 | Device is a climate device; enables heating/cooling properties in the configurator |
-| `pwmvalue` | 30 | Device uses PWM-style value reporting (0–100 % heating valve or ON_OFF climate output); enables the heating-power display |
-| `blinkconfig` | 34 | Device supports blink-duration configuration; enables the blink configuration panel |
-| `umroutmode` | 35 | (Blocked) DS485 universal module relay output-mode selector |
-| `impulseconfig` | 39 | Device supports impulse output configuration; enables the impulse-duration configuration panel for ON_OFF outputs |
-| `outmodegeneric` | 40 | Device supports a generic output-mode selector; enables the generic mode-selection UI |
-| `outconfigswitch` | 41 | Device output can be configured as a binary switch; enables switch-configuration options for ON_OFF outputs |
-| `ventconfig` | 47 | Device supports ventilation control; enables the ventilation stage and fan-speed configuration panel |
-| `consumptioneventled` | 50 | (Blocked) LED flash on consumption threshold events; DS485 only |
-| `consumptiontimer` | 51 | Device supports consumption timer scheduling; enables the energy-measurement schedule panel |
-| `dimtimeconfig` | 53 | Device supports dim time configuration; enables the dim-up/dim-down timing controls |
-| `outmodeauto` | 54 | Device supports automatic output mode; enables the auto-mode selection control |
-| `outmodetempcontrol` | 60 | (Blocked) DS485 temperature-control output-mode selector |
-| `outmodeenoceanvalve` | 61 | (Blocked) DS485 EnOcean valve output-mode selector |
-| `shadeprops` | — | Enables the motor timing configuration panel for shade devices (travel time, stop delay, etc.) |
-| `motiontimefins` | — | Enables blade/slat fine-calibration panel for jalousie devices |
-| `temperatureoffset` | — | Climate device with temperature sensor; enables the temperature offset calibration control |
-| `akmsensor` | — | Device has binary inputs; enables the binary-input / AKM sensor function panel |
-| `pushbutton` | — | Device has button inputs; enables the button configuration panel |
-| `pushbadvanced` | — | Enables advanced button options (long-press, multi-click configuration) |
-| `pushbdisabled` | — | Enables the option to disable individual button elements |
-| `pushbarea` | — | Button controls a zone area; enables area-assignment for the button |
-| `pushbdevice` | — | Button supports local key mode; enables local-device-key configuration |
-| `pushbsensor` | — | Joker-group button; enables sensor-button assignment panel |
-| `highlevel` | — | Joker button with high-level scene calls; enables the high-level scene assignment panel |
-| `heatinggroup` | — | Climate device belongs to a heating/cooling group; enables group-assignment for climate devices |
-| `valvetype` | — | Climate output device; enables valve type selection (heating-only, cooling-only, combined) |
-| `extendedvalvetypes` | — | Climate output device; enables extended valve type options beyond the basic three |
-| `fcu` | — | Fan-coil unit (FCU) / ventilation device; enables FCU-specific controls (operation mode, louver, flow direction) |
-| `locationconfig` | — | Shade device with output; enables the indoor/outdoor location configuration for the shade |
-| `operationlock` | — | Outdoor shade with position channel; enables the operation lock (wind/rain/sun protection) |
-| `windprotectionconfigblind` | — | Outdoor jalousie/blind (has slat angle channel); enables the blind-specific wind protection settings |
-| `windprotectionconfigawning` | — | Outdoor awning/roller blind (no slat channel); enables awning-specific wind protection settings |
-| `jokerconfig` | — | Joker/Black device; enables the joker configuration panel for freely assignable functions |
-| `identification` | — | Device has an `on_identify` callback; enables the identify button in the configurator |
-
-### Code example
+### `2345678901234` — recommended for custom VDC implementations
 
 ```python
-from pydsvdcapi import Vdsd
-
-# Auto-derive features from the configured output, sensors, inputs, and buttons.
-# This is the recommended approach — call it once after all components are attached.
-vdsd.derive_model_features()
-
-# Manually add a feature that cannot be auto-derived.
-# For a grey shade device that supports motor timing configuration:
-vdsd.add_model_feature("shadeprops")
-vdsd.add_model_feature("motiontimefins")
-
-# For a dimmer that supports blink-duration configuration:
-vdsd.add_model_feature("blinkconfig")
-
-# Remove a feature that was auto-derived but is not applicable:
-vdsd.remove_model_feature("blink")
-
-# Inspect the current feature set (returns a copy):
-print(vdsd.model_features)
+vdsd.oem_model_guid = "gs1:(01)2345678901234"
 ```
 
-After `derive_model_features()` is called the flag `_features_derived` is set.
-Subsequent calls to `announce()` will not run auto-derivation again, so any manual
-additions or removals made after `derive_model_features()` are preserved.
+Registered as `FrameworkTestDeviceWithoutRegressionImpact`. Has action and event
+database rows (so `hasActionInterface=True`) but **no state rows** — no state slots
+are pre-allocated, so the device never appears in the automation state-picker.
 
-### Note on GTIN-based dSUIDs and firmware injection
+| Feature | Status |
+|---|---|
+| Actions visible as automation triggers | ✅ your `DeviceActionDescription` names |
+| Events visible as automation triggers | ✅ your `DeviceEvent` names |
+| State values visible in Hardware tab | ✅ pushed via `DeviceState.update_value()` |
+| Device appears in automation state picker | ❌ no state rows in VdcDb |
+| State conditions / triggers evaluate | ❌ |
 
-If the device uses a GTIN-based dSUID (constructed with `DsUid.from_gtin_serial()`
-or `DsUid.from_sgtin96()`) and the dSS firmware's internal device database contains
-an entry for that GTIN, the dSS may automatically inject additional model features
-from its firmware database — independently of what the vDC announces. This injection
-is firmware behaviour that occurs outside library control. The features declared by
-the vDC via `modelFeatures` and the firmware-injected features are merged by the dSS;
-the result visible in the configurator may therefore include flags that were never
-explicitly set in your code.
+Use this GTIN when your device primarily exposes commands (actions) and notifications
+(events) without needing state-condition automation.
+
+### `1234567890123` — do not use for custom implementations
+
+Registered as `RegressionTestDevice`. The dSS regression suite depends on its exact
+definition and it must not change. It pre-allocates one state (`dummyState`, options:
+`d` / `mm` / `u` / `y`) plus action/event rows. With `dynamic_definitions=True`, your
+VDC's own state names appear in the picker — but condition evaluation still only works
+for a state named exactly `dummyState`. Not suitable for production use.
+
+---
+
+## 21. Device Template Catalogue
+
+The dSS firmware ships with a built-in device database (VdcDb) that maps product
+GTINs to pre-defined contracts of states, events, actions, and properties. When a
+vdSD's `oem_model_guid` matches a GTIN in this database, the dSS activates those
+contract entries for the device — enabling automation and configurator features that
+the vDC API cannot set directly.
+
+**`oem_model_guid` is the only lookup key.** The GTIN in the dSUID (set via
+`from_gtin_serial()`) is not consulted for this purpose; it is used only for stable
+unique identification. The format is always:
+
+```python
+vdsd.oem_model_guid = "gs1:(01)<13-digit-GTIN>"
+```
+
+Also enable `dynamic_definitions` on the VDC so the configurator shows your VDC's own
+state/event/action names rather than the generic names stored in VdcDb:
+
+```python
+vdc = Vdc(
+    host=host,
+    implementation_id="x-myapp",
+    name="My VDC",
+    model="My Gateway",
+    capabilities=VdcCapabilities(dynamic_definitions=True),
+)
+```
+
+### Template family reference
+
+Each row shows the **recommended generic GTIN** for that device family, the exact
+State / Property / Action / Event names registered in VdcDb, and a link to the
+implementation notes below.
+
+| Device family | Generic GTIN | States | Properties | Actions | Events |
+|---|---|---|---|---|---|
+| Coffee Maker | `7640156794144` | OperationMode · PowerState · RemoteControl | BeanAmount · FillQuantity · ProgramName · ProgramProgress · RemainingProgramTime | CaffeLatte · Cappuccino · Coffee · Espresso · EspressoMacchiato · LatteMacchiato · PowerOn · StandBy · Stop | LocallyOperated · ProgramFinished · ProgramStarted |
+| Cooktop | `7640156794298` | OperationMode · PowerState · RemoteControl | — | — | AlarmClockElapsed · LocallyOperated · PreheatFinished · ProgramFinished · ProgramStarted |
+| Dishwasher | `7640156794120` | DoorState · OperationMode · PowerState · RemoteControl | DelayedStart · ProgramName · ProgramProgress · RemainingProgramTime | Auto3545 · Auto4565 · Auto6575 · Eco50 · PowerOff · PowerOn · QuickWash45 · Stop | ProgramAborted · ProgramFinished · ProgramStarted |
+| Dryer | `7640156794106` | DoorState · OperationMode · RemoteControl | DryingTarget · ProgramName · ProgramProgress · RemainingProgramTime | Cotton · Mix · Stop · Synthetic | LocallyOperated · ProgramFinished · ProgramStarted |
+| Fridge / Fridge-Freezer | `7640156794113` | DoorState | FreezerSuperMode · FreezerTargetTemperature · FridgeSuperMode · FridgeTargetTemperature | CancelFreezerSuperMode · CancelFridgeSuperMode · SetFreezerSuperMode · SetFridgeSuperMode | — |
+| Hood | `7640156794304` | OperationMode · PowerState · RemoteControl | ElapsedProgramTime · ProgramName · ProgramProgress · RemainingProgramTime | ActAutomaticMode · ActFanIntense1 · ActFanIntense2 · ActFanLevel1 · ActFanLevel2 · ActFanLevel3 · ActFanRunOn · PowerOff | LocalyOperated · ProgramFinished · ProgramStarted |
+| Oven | `7640156794083` | DoorState · OperationMode · PowerState · RemoteControl | ElapsedProgramTime · ProgramName · ProgramProgress · RemainingProgramTime · TargetTemperature | HotAir · PizzaSetting · PowerOn · Preheating · StandBy · Stop · StopIfNotTimed · TopBottomHeating | AlarmClockElapsed · LocallyOperated · PreheatFinished · ProgramFinished · ProgramStarted |
+| Washing Machine | `7640156794090` | DoorState · OperationMode · RemoteControl | ProgramName · ProgramProgress · RemainingProgramTime · SpinSpeed · Temperature | Cotton · DelicatesSilk · EasyCare · Mix · Stop · Wool | LocallyOperated · ProgramFinished · ProgramStarted |
+| Door Lock (Dormakaba) | `7640156793871` | StatusDoorState | — | OpenDoor | DoorUnlockedKey1 … DoorUnlockedKey10 |
+| Video Door Station (DoorBird) | `7640156794496` | — | — | ActDoorUnlock · ActIrLightOn · ActSwitchRelay2 | — |
+| Logitech Harmony | `7640156792072` | OperationMode | AvActivityName · NonAvActivityName | PowerOffAvActivity · StopAllActivities | — |
+| Panasonic TV | `7640156794465` | StaInputMode · StaMute · StaNotLevel · StaOpMode | PropIp | ActTurnOn · ActTurnOff · ActIncrVol · ActDecrVol · ActMute · ActUnmute · ActSetVol · ActSetInputMode · … | — |
+| Sonos | `7640156794625` | StatusInputMode · StatusMute · StatusOperationMode · StatusPlaybackModeRepeat · StatusPlaybackModeShuffle · StatusPlaybackType | PropertyIpAddress · PropertyPlaybackArtist · PropertyPlaybackTitle · PropertySerialNumber | ActionMute · ActionNextTrack · ActionPause · ActionPlay · ActionPreviousTrack · ActionUnmute | — |
+| Samsung Vacuum Robot | `7640156793826` | StaOpMode · StaRemoteCtrl · StaSuckPwr | — | ActGoHome · ActSetPwr · ActStart · ActStop | — |
+| V-ZUG Adora (Dishwasher) | `7640156794403` | OperationMode · RemoteControl · SwStatus | CurrentProgram · SwVersion | Stop | EmptyingTankEnded · PowerSupplyInterrupted · ProgramAborted · ProgramAbortedDueToError · ProgramFinished · ProgramInterrupted · ProgramStarted · TopupSalt |
+| V-ZUG Adora S (Washer) | `7640156794380` | OperationMode · RemoteControl · SwStatus | CurrentEndTime · CurrentProgram · SwVersion · WaterHardness | Pause · SmartStart | LooseningUpStarted · ProgramAborted · ProgramAbortedDueToError · ProgramFinished · ProgramStarted |
+| V-ZUG Adora T (Dryer) | `7640156794397` | OperationMode · RemoteControl · SwStatus | CurrentEndTime · CurrentProgram · SwVersion | SmartStart · Stop | CreaseGuardFinishes · PowerSupplyInterrupted · ProgramAborted · ProgramAbortedDueToError · ProgramFinished · ProgramInterrupted · ProgramStarted |
+| V-ZUG Combair (Oven) | `7640156794366` | OperationMode · RemoteControl · SwStatus | CurrentEndTime · CurrentFoodTemperature · CurrentProgram · CurrentTemperature · RemainingDuration · SetEndFoodTemperature · SetTemperature · SwVersion | BottomHeat · Grill · HotAir · PizzaPlus · SmartStart · Stop · StopIfNotTimed · TopBottomHeat · … | IntroduceFood · ProgramAborted · ProgramFinished · ProgramStarted · TimerFinished · … |
+| V-ZUG Combi-Steam | `7640156794373` | OperationMode · RemoteControl · SwStatus | CurrentEndTime · CurrentProgram · CurrentTemperature · RemainingDuration · SwVersion · … | HotAir · SmartStart · Steam · Stop · … | ProgramAborted · ProgramFinished · ProgramStarted · RefillWater · … |
+| Dornbracht Smart Water | `7640156792591` | StaHandShower · StaOutlet · StatusOpMode · StatusError · … | PossibleMappings · PropCScenarioName · PropRemainingWaterAmount | ActionShowerSettingOn · ActionShowerOff · ActionWaterOff · ActionScenarioOff · … | EvWaterTurnedOn · EvWaterTurnedOff · EvTargetWaterTempReached · EvFillingCompleted |
+| Securiton SecuriSafe | `7640156794342` | armingPrevention · armingState | — | armExternal · armInternal · Alarm1 … Alarm6 · NoAlarm1 … NoAlarm6 | Alarm1 … Alarm6 · NoAlarm1 … NoAlarm6 · disarmed · extArmed · intArmed · … |
+| Smarter iKettle 2.0 | `7640156791945` | operation | currentTemperature · defaulttemperature · waterLevel · … | boilandcooldown · heat · stop | BoilingStarted · BoilingFinished · KeepWarm · KettleAttached · KettleReleased · … |
+| Tielsa Liftmodule | `7640156792850` | CurrentPosition · OperationMode | BottomHeight · DeviceType · LevelHeight · OffsetHeight · TopHeight | MoveDown · MoveToLevel · MoveUp · Stop · … | LevelReached · MaxPosReached · MinPosReached · MovingDown · MovingUp · … |
+
+### Full walkthrough — washing machine
+
+This example implements the complete VdcDb contract for GTIN `7640156794090` (Generic
+Washing Machine): three states, five properties, six actions, three events.
+
+```python
+import asyncio
+from pydsvdcapi import (
+    VdcHost, Vdc, Device, Vdsd,
+    DsUid, VdcCapabilities,
+    ColorGroup, DeviceLifecycleState,
+    DeviceState, DeviceEvent, DeviceProperty, DeviceActionDescription,
+)
+from pydsvdcapi.device_property import PROPERTY_TYPE_NUMERIC, PROPERTY_TYPE_STRING
+
+
+async def main():
+    host = VdcHost(name="Appliance Gateway", state_path="state.yaml")
+    vdc = Vdc(
+        host=host,
+        implementation_id="x-myapp-appliances",
+        name="Home Appliances",
+        model="Appliance VDC",
+        capabilities=VdcCapabilities(dynamic_definitions=True),
+    )
+    host.add_vdc(vdc)
+
+    device = Device(vdc=vdc, dsuid=DsUid.random())
+    vdsd = Vdsd(
+        device=device,
+        primary_group=ColorGroup.BLACK,
+        name="Washing Machine",
+        model="Generic Washer",
+    )
+    # Activate the VdcDb template — must match the GTIN exactly
+    vdsd.oem_model_guid = "gs1:(01)7640156794090"
+
+    # ── States ──────────────────────────────────────────────────────────────
+    # Names MUST match the VdcDb registration for state-condition automation.
+    # Options keys are integers; values are human-readable labels.
+    door_state = DeviceState(
+        vdsd=vdsd, ds_index=0, name="DoorState",
+        options={0: "Closed", 1: "Open"},
+        description="Door open/closed",
+    )
+    vdsd.add_device_state(door_state)
+
+    op_mode = DeviceState(
+        vdsd=vdsd, ds_index=1, name="OperationMode",
+        options={0: "Inactive", 1: "Ready", 2: "Running", 3: "Pause", 4: "Finished"},
+    )
+    vdsd.add_device_state(op_mode)
+
+    remote_ctrl = DeviceState(
+        vdsd=vdsd, ds_index=2, name="RemoteControl",
+        options={0: "Inactive", 1: "Active"},
+    )
+    vdsd.add_device_state(remote_ctrl)
+
+    # ── Properties ──────────────────────────────────────────────────────────
+    prog_name = DeviceProperty(
+        vdsd=vdsd, ds_index=0, name="ProgramName", type=PROPERTY_TYPE_STRING,
+    )
+    vdsd.add_device_property(prog_name)
+
+    prog_progress = DeviceProperty(
+        vdsd=vdsd, ds_index=1, name="ProgramProgress",
+        type=PROPERTY_TYPE_NUMERIC, min_value=0.0, max_value=100.0,
+        resolution=1.0, siunit="%",
+    )
+    vdsd.add_device_property(prog_progress)
+
+    remaining_time = DeviceProperty(
+        vdsd=vdsd, ds_index=2, name="RemainingProgramTime",
+        type=PROPERTY_TYPE_NUMERIC, min_value=0.0, siunit="s",
+    )
+    vdsd.add_device_property(remaining_time)
+
+    spin_speed = DeviceProperty(
+        vdsd=vdsd, ds_index=3, name="SpinSpeed",
+        type=PROPERTY_TYPE_NUMERIC, min_value=0.0, max_value=1600.0,
+        resolution=100.0, siunit="rpm",
+    )
+    vdsd.add_device_property(spin_speed)
+
+    temperature = DeviceProperty(
+        vdsd=vdsd, ds_index=4, name="Temperature",
+        type=PROPERTY_TYPE_NUMERIC, min_value=0.0, max_value=90.0,
+        resolution=10.0, siunit="°C",
+    )
+    vdsd.add_device_property(temperature)
+
+    # ── Events ──────────────────────────────────────────────────────────────
+    ev_started = DeviceEvent(vdsd=vdsd, ds_index=0, name="ProgramStarted")
+    vdsd.add_device_event(ev_started)
+
+    ev_finished = DeviceEvent(vdsd=vdsd, ds_index=1, name="ProgramFinished")
+    vdsd.add_device_event(ev_finished)
+
+    ev_local = DeviceEvent(vdsd=vdsd, ds_index=2, name="LocallyOperated")
+    vdsd.add_device_event(ev_local)
+
+    # ── Actions ─────────────────────────────────────────────────────────────
+    # DeviceActionDescription takes vdsd as a positional argument.
+    for i, (name, title) in enumerate([
+        ("Cotton",       "Cotton"),
+        ("DelicatesSilk","Delicates / Silk"),
+        ("EasyCare",     "Easy Care"),
+        ("Mix",          "Mix"),
+        ("Stop",         "Stop"),
+        ("Wool",         "Wool"),
+    ]):
+        vdsd.add_device_action_description(
+            DeviceActionDescription(vdsd, ds_index=i, name=name, description=title)
+        )
+
+    # ── Action handler ───────────────────────────────────────────────────────
+    async def handle_action(v: Vdsd, action_id: str, params: dict) -> None:
+        if action_id == "Stop":
+            await op_mode.update_value(0)           # → Inactive
+        elif action_id in ("Cotton", "DelicatesSilk", "EasyCare", "Mix", "Wool"):
+            await prog_name.update_value(action_id)
+            await op_mode.update_value(2)           # → Running
+            await ev_started.raise_event()
+
+    vdsd.on_invoke_action = handle_action
+
+    # ── Announce and start ───────────────────────────────────────────────────
+    await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
+    device.add_vdsd(vdsd)
+    vdc.add_device(device)
+    await host.start()
+    await asyncio.Event().wait()
+
+
+asyncio.run(main())
+```
+
+Push live updates from your hardware integration whenever the physical device changes:
+
+```python
+# Door opened
+await door_state.update_value(1)          # 1 = "Open" (option key)
+
+# Cycle finished
+await op_mode.update_value(4)             # 4 = "Finished"
+await prog_progress.update_value(100.0)
+await ev_finished.raise_event()
+```
+
+### Sonos — all six states must be pushed
+
+The Sonos GTIN (`7640156794625`) pre-allocates six state slots. If any of the six
+names is not pushed by the VDC, the state list in the configurator appears empty when
+drilled into. All six names must be present in your `DeviceState` definitions and
+pushed with initial values before the slot list appears populated:
+
+`StatusInputMode` · `StatusMute` · `StatusOperationMode` · `StatusPlaybackModeRepeat`
+· `StatusPlaybackModeShuffle` · `StatusPlaybackType`
 
 ---
 
@@ -2203,7 +2693,7 @@ explicitly set in your code.
 
 ---
 
-## Section 19: Device Lifecycle
+## Section 22: Device Lifecycle
 
 ### DeviceLifecycleState
 
@@ -2285,7 +2775,7 @@ await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
 
 ---
 
-## Section 20: Persistence (PropertyStore)
+## Section 23: Persistence (PropertyStore)
 
 ### Enabling auto-save
 
@@ -2367,7 +2857,7 @@ your changes.
 
 ---
 
-## Section 21: Value Converters
+## Section 24: Value Converters
 
 ### Purpose
 
@@ -2457,7 +2947,7 @@ is never silently dropped.
 
 ---
 
-## Section 22: Device Templates
+## Section 25: Device Templates
 
 ### Purpose
 
@@ -2544,13 +3034,13 @@ Required callbacks are determined from the device structure at template-save tim
 
 - **Multiple identical devices**: configure once, instantiate many times with
   different dSUIDs and names.
-- **Devices re-created on restart**: use `state_path` (see Section 20) for full
+- **Devices re-created on restart**: use `state_path` (see Section 23) for full
   state persistence, or use templates to restore the device structure and re-attach
   callbacks without re-building components manually.
 
 ---
 
-## Section 23: Session Constants
+## Section 26: Session Constants
 
 The following module-level constants are defined in `pydsvdcapi.vdc_host` and
 `pydsvdcapi.session`. They can be imported directly if needed.
