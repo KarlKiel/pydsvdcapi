@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-03
+
 ### Added
 - `Vdsd.send_identify()` async method — sends `VDC_SEND_IDENTIFY` (type 22, vDC → vdSM) as a fire-and-forget notification when the user physically identifies a device (e.g. presses a pairing button on the hardware). The vdSM uses the incoming dSUID to associate the physical device with a pairing or zone-assignment request. No-op if the device is not yet announced or has no active session.
 - `MAX_SUPPORTED_API_VERSION: int = 4` constant — upper bound of the accepted `hello` API version range. Versions above this are rejected with `ERR_INCOMPATIBLE_API`.
@@ -22,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - `Vdsd.active` setter (write access via `vdsd.active = True/False`). The read-only `active` property is retained (derived from `lifecycle_state`). **Migration:** replace `vdsd.active = False` with `await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)`.
+
+### Fixed
+- Stale `movingState` property removed from `Vdsd` — the property was a leftover from an earlier draft and not part of the vDC API specification.
+- Fire-and-forget `asyncio.create_task()` calls now retain a reference in `_background_tasks` to prevent the GC from cancelling pending tasks silently.
+- `threading.Timer`-based auto-save in `VdcHost` replaced with `asyncio.TimerHandle` via `loop.call_later()` — eliminates cross-thread state mutations and removes the need for a lock around the save schedule.
+- `google.protobuf.message.DecodeError` is now caught in `VdcConnection.receive()` and re-raised as `ValueError`, ensuring callers' `except (ConnectionError, ValueError)` handlers see corrupt-payload errors correctly.
+
+### Infrastructure
+- `pytest-cov` added to `[project.optional-dependencies] dev` for coverage reporting.
+- Development Status classifier updated to `4 - Beta`.
+- `asyncio` is now imported at module level in `vdc.py` (was imported inline inside `announce_devices()`).
 
 ## [0.8.9] - 2026-06-15
 
@@ -153,6 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DsUid` — dSUID encoding/decoding with multiple creation strategies.
 - Property handling helpers (`build_get_property_response`, etc.).
 
+[0.9.0]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.9...v0.9.0
 [0.8.9]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.6...v0.8.7

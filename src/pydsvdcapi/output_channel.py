@@ -773,7 +773,9 @@ class OutputChannel:
         sub-tree (§4.9.1).  Keys match the vDC API property names.
         """
         props: dict[str, Any] = {
-            "name": self._display_name if self._display_name is not None else self._name,
+            "name": self._display_name
+            if self._display_name is not None
+            else self._name,
             "channelType": int(self._channel_type),
             "dsIndex": self._ds_index,
             "channelIndex": self._ds_index,

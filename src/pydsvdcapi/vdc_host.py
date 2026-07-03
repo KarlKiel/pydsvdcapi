@@ -369,7 +369,7 @@ class VdcHost:
 
         # --- auto-save ------------------------------------------------
         self._save_handle: asyncio.TimerHandle | None = None
-        self._auto_save_enabled: bool = self._store is not None
+        self._auto_save_enabled = self._store is not None
 
         # --- restore vDCs from persisted state ------------------------
         if host_state.get("vdcs"):

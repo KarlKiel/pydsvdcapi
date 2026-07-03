@@ -3498,7 +3498,7 @@ class TestShadowTimingDefaults:
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL, open_time=30.0)
         s = out.get_settings_properties()
         assert s["openTime"] == 30.0
-        assert s["closeTime"] == 50.0   # still default
+        assert s["closeTime"] == 50.0  # still default
 
     def test_all_explicit_values_preserved(self):
         host, vdc, device, vdsd = _make_stack(primary_group=ColorGroup.GREY)

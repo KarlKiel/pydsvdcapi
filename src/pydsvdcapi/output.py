@@ -1939,23 +1939,28 @@ class Output:
         # Always emitted when both conditions hold; falls back to vDC API defaults.
         if pg == 2 and int(self._function) == int(OutputFunction.POSITIONAL):
             settings["openTime"] = (
-                self._open_time if self._open_time is not None
+                self._open_time
+                if self._open_time is not None
                 else _SHADOW_DEFAULT_OPEN_TIME
             )
             settings["closeTime"] = (
-                self._close_time if self._close_time is not None
+                self._close_time
+                if self._close_time is not None
                 else _SHADOW_DEFAULT_CLOSE_TIME
             )
             settings["angleOpenTime"] = (
-                self._angle_open_time if self._angle_open_time is not None
+                self._angle_open_time
+                if self._angle_open_time is not None
                 else _SHADOW_DEFAULT_ANGLE_OPEN_TIME
             )
             settings["angleCloseTime"] = (
-                self._angle_close_time if self._angle_close_time is not None
+                self._angle_close_time
+                if self._angle_close_time is not None
                 else _SHADOW_DEFAULT_ANGLE_CLOSE_TIME
             )
             settings["stopDelayTime"] = (
-                self._stop_delay_time if self._stop_delay_time is not None
+                self._stop_delay_time
+                if self._stop_delay_time is not None
                 else _SHADOW_DEFAULT_STOP_DELAY_TIME
             )
 

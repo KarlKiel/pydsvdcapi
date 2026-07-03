@@ -178,9 +178,7 @@ class VdcSession:
         # Optional async callback for ping presence checks.
         # Signature: async (dsuid: str) -> bool
         # If None, all pings receive a pong (backward-compatible default).
-        self._presence_checker: (
-            Callable[[str], Awaitable[bool]] | None
-        ) = None
+        self._presence_checker: Callable[[str], Awaitable[bool]] | None = None
 
     # ---- public properties -------------------------------------------
 

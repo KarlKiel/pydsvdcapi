@@ -3023,7 +3023,7 @@ class TestVdsdLifecycleState:
         calls = session.send_notification.call_args_list
         assert len(calls) == 2
         assert calls[0][0][0].type == pb.VDC_SEND_PUSH_NOTIFICATION  # push first
-        assert calls[1][0][0].type == pb.VDC_SEND_VANISH             # vanish second
+        assert calls[1][0][0].type == pb.VDC_SEND_VANISH  # vanish second
 
     @pytest.mark.asyncio
     async def test_set_removed_from_inactive_sends_vanish_only(self):

@@ -195,9 +195,11 @@ class TestEdgeCases:
         msg = pb.Message()
         msg.type = pb.VDSM_SEND_PING
         # Patch the module constant so any non-empty message is "too large".
-        with patch("pydsvdcapi.connection.MAX_MESSAGE_LENGTH", 0):
-            with pytest.raises(ValueError, match="too large"):
-                await client.send(msg)
+        with (
+            patch("pydsvdcapi.connection.MAX_MESSAGE_LENGTH", 0),
+            pytest.raises(ValueError, match="too large"),
+        ):
+            await client.send(msg)
 
     @pytest.mark.asyncio
     async def test_receive_zero_length_header_raises(self):
@@ -211,7 +213,9 @@ class TestEdgeCases:
     async def test_close_swallows_feed_eof_exception(self):
         """close() must not propagate exceptions from feed_eof()."""
         _, server = _make_pair()
-        with patch.object(server._reader, "feed_eof", side_effect=RuntimeError("eof failed")):
+        with patch.object(
+            server._reader, "feed_eof", side_effect=RuntimeError("eof failed")
+        ):
             await server.close()  # must not raise
         assert server.is_closed
 
@@ -249,7 +253,9 @@ class TestCorruptProtobuf:
         """receive() must raise ValueError when the protobuf payload cannot be parsed."""
         _, server = _make_pair()
         corrupt_payload = b"\xff\xfe\xfd\xfc\xfb\xfa\xf9\xf8\xf7\xf6"
-        server._reader.feed_data(struct.pack("!H", len(corrupt_payload)) + corrupt_payload)
+        server._reader.feed_data(
+            struct.pack("!H", len(corrupt_payload)) + corrupt_payload
+        )
         with pytest.raises(ValueError, match="Failed to parse protobuf"):
             await server.receive()
 

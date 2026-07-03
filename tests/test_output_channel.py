@@ -662,9 +662,7 @@ class TestChannelPropertyDicts:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         ch = out.get_channel(0)
         state = ch.get_state_properties()
-        assert (
-            state["value"] == 0.0
-        )  # uninitialized → 0.0 (vDC API default)
+        assert state["value"] == 0.0  # uninitialized → 0.0 (vDC API default)
         assert state["age"] is None
 
     @pytest.mark.asyncio

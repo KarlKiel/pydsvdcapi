@@ -1332,10 +1332,13 @@ class TestPresenceCheckerRegistration:
         assert any(c[0][0].type == pb.VDC_SEND_VANISH for c in second_calls)
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("state", [
-        DeviceLifecycleState.MAINTENANCE,
-        DeviceLifecycleState.ERROR,
-    ])
+    @pytest.mark.parametrize(
+        "state",
+        [
+            DeviceLifecycleState.MAINTENANCE,
+            DeviceLifecycleState.ERROR,
+        ],
+    )
     async def test_non_active_state_suppresses_pong(self, state):
         """MAINTENANCE and ERROR both suppress pong (same code path as INACTIVE)."""
         host, session, vdsd = await _make_host_session_vdsd()

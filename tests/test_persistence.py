@@ -205,7 +205,9 @@ class TestSaveErrorPaths:
     def test_backup_failure_does_not_abort_save(self, store, sample_tree):
         """A failed backup copy must be logged and ignored — save() continues."""
         store.save(sample_tree)  # create primary so backup is attempted next
-        with patch("pydsvdcapi.persistence.shutil.copy2", side_effect=OSError("disk full")):
+        with patch(
+            "pydsvdcapi.persistence.shutil.copy2", side_effect=OSError("disk full")
+        ):
             store.save({"vdcHost": {"name": "V2"}})
         loaded = store.load()
         assert loaded is not None
@@ -213,15 +215,21 @@ class TestSaveErrorPaths:
 
     def test_tmp_write_failure_raises(self, store, sample_tree):
         """An OSError during yaml.dump must propagate out of save()."""
-        with patch("pydsvdcapi.persistence.yaml.dump", side_effect=OSError("no space")):
-            with pytest.raises(OSError):
-                store.save(sample_tree)
+        with (
+            patch("pydsvdcapi.persistence.yaml.dump", side_effect=OSError("no space")),
+            pytest.raises(OSError),
+        ):
+            store.save(sample_tree)
 
     def test_atomic_replace_failure_raises(self, store, sample_tree):
         """An OSError from os.replace must propagate out of save()."""
-        with patch("pydsvdcapi.persistence.os.replace", side_effect=OSError("cross-device")):
-            with pytest.raises(OSError):
-                store.save(sample_tree)
+        with (
+            patch(
+                "pydsvdcapi.persistence.os.replace", side_effect=OSError("cross-device")
+            ),
+            pytest.raises(OSError),
+        ):
+            store.save(sample_tree)
 
 
 class TestLoadErrorPaths:
@@ -231,7 +239,9 @@ class TestLoadErrorPaths:
         store.save({"vdcHost": {**sample_tree["vdcHost"], "name": "V2"}})
         store.path.unlink()  # remove primary to force backup fallback
 
-        with patch("pydsvdcapi.persistence.shutil.copy2", side_effect=OSError("disk full")):
+        with patch(
+            "pydsvdcapi.persistence.shutil.copy2", side_effect=OSError("disk full")
+        ):
             loaded = store.load()
 
         assert loaded is not None

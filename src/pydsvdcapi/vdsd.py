@@ -1533,17 +1533,11 @@ class Vdsd:
             msg.vdc_send_push_notification.changedproperties.append(elem)
         try:
             await self._session.send_notification(msg)
-            logger.debug(
-                "vdSD '%s': pushed active=%s", self.name, active
-            )
+            logger.debug("vdSD '%s': pushed active=%s", self.name, active)
         except (ConnectionError, OSError) as exc:
-            logger.warning(
-                "vdSD '%s': failed to push active: %s", self.name, exc
-            )
+            logger.warning("vdSD '%s': failed to push active: %s", self.name, exc)
 
-    async def set_lifecycle_state(
-        self, state: DeviceLifecycleState
-    ) -> None:
+    async def set_lifecycle_state(self, state: DeviceLifecycleState) -> None:
         """Set the lifecycle state and handle all vdSM communication.
 
         * If ``active`` changes (``True`` ↔ ``False``) and the device is
