@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydsvdcapi"
-version = "0.8.9"
+version = "0.9.0"
 description = "Python library for the digitalSTROM vDC API"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -19,7 +19,7 @@ dependencies = [
     "zeroconf>=0.80.0",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Home Automation",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -49,11 +49,13 @@ dev = [
     "pytest-timeout>=2.0",
     "ruff>=0.4",
     "mypy>=1.10",
+    "pytest-cov>=7.0",
     "coverage[toml]>=7.0",
     "types-PyYAML>=6.0",
 ]
 docs = [
     "sphinx>=7.0",
+    "myst-parser>=3.0",
     "sphinx-autodoc-typehints>=1.25",
     "furo>=2024.0",
 ]

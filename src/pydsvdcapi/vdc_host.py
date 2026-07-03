@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """vDC Host — top-level entity of a virtualDC host.
 
 A :class:`VdcHost` represents the vDC host in the digitalSTROM system.
@@ -32,10 +34,12 @@ import asyncio
 import logging
 import platform
 import socket
-import threading
 from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from pydsvdcapi.vdsd import Vdsd
 
 from zeroconf import ServiceInfo, ServiceListener
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
@@ -43,6 +47,7 @@ from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZerocon
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
+from pydsvdcapi.enums import DeviceLifecycleState
 from pydsvdcapi.persistence import PropertyStore
 from pydsvdcapi.property_handling import (
     build_get_property_response,
@@ -205,10 +210,15 @@ class VdcHost:
     device_icon_name:
         Filename-safe icon identifier for caching.
     state_path:
-        Path to the YAML file used for persisting the property tree.
-        When given, the host will attempt to restore its state on
+        Path to the primary YAML file used for persisting the property
+        tree.  When given, the host will attempt to restore its state on
         construction and can be asked to :meth:`save` at any time.
         When omitted, persistence is disabled.
+
+        Two sibling files are managed automatically alongside the primary:
+        ``<state_path>.bak`` (backup of the previous save) and
+        ``<state_path>.tmp`` (atomic write staging).  Back up all three
+        files together to ensure a consistent snapshot.
     """
 
     #: Attribute names whose mutation triggers a debounced auto-save.
@@ -236,11 +246,13 @@ class VdcHost:
         """Set an attribute and schedule an auto-save when appropriate.
 
         Only attributes listed in :attr:`_TRACKED_ATTRS` are monitored.
-        Auto-save is suppressed during ``__init__`` and :meth:`load` to
-        avoid redundant writes.
+        Auto-save is suppressed while ``_auto_save_enabled`` is ``False``,
+        which is the case during ``__init__`` (before the flag is set at
+        the end of initialisation) and during :meth:`load` (which
+        temporarily clears the flag via a context manager).
         """
         super().__setattr__(name, value)
-        if name in self._TRACKED_ATTRS and getattr(self, "_auto_save_enabled", False):
+        if name in self._TRACKED_ATTRS and self._auto_save_enabled:
             self._schedule_auto_save()
 
     def __init__(
@@ -266,6 +278,10 @@ class VdcHost:
         state_path: str | Path | None = None,
         watchdog_timeout: float = 90.0,
     ) -> None:
+        # Disable auto-save explicitly so that tracked-attribute assignments
+        # below do not trigger saves before initialisation is complete.
+        self._auto_save_enabled: bool = False
+
         # --- persistence ----------------------------------------------
         self._store: PropertyStore | None = (
             PropertyStore(state_path) if state_path else None
@@ -333,6 +349,7 @@ class VdcHost:
         self._server: asyncio.AbstractServer | None = None
         self._session: VdcSession | None = None
         self._reannounce_task: asyncio.Task | None = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
         self._on_message: MessageCallback | None = None
         self._on_remove: RemoveCallback | None = None
         self._on_identify: IdentifyCallback | None = None
@@ -351,8 +368,8 @@ class VdcHost:
         self._pending_vanish: set[str] = set()
 
         # --- auto-save ------------------------------------------------
-        self._save_timer: threading.Timer | None = None
-        self._auto_save_enabled: bool = self._store is not None
+        self._save_handle: asyncio.TimerHandle | None = None
+        self._auto_save_enabled = self._store is not None
 
         # --- restore vDCs from persisted state ------------------------
         if host_state.get("vdcs"):
@@ -511,6 +528,19 @@ class VdcHost:
         """
         return self._vdcs.get(str(dsuid))
 
+    def _find_vdsd(self, dsuid: str) -> Vdsd | None:
+        """Find a :class:`Vdsd` by its dSUID string.
+
+        Traverses all registered vDCs → devices → vdSDs.
+        Returns ``None`` if no vdSD with the given dSUID is found.
+        """
+        for vdc in self._vdcs.values():
+            for device in vdc.devices.values():
+                for vdsd in device.vdsds.values():
+                    if str(vdsd.dsuid).upper() == dsuid.upper():
+                        return vdsd
+        return None
+
     @property
     def vdcs(self) -> dict[str, Vdc]:
         """A read-only view of all registered vDCs (keyed by dSUID)."""
@@ -628,26 +658,31 @@ class VdcHost:
     def _schedule_auto_save(self) -> None:
         """Schedule a debounced save after :data:`AUTO_SAVE_DELAY` seconds.
 
-        If a timer is already running it is cancelled and restarted so
+        If a handle is already pending it is cancelled and restarted so
         that rapid successive changes are coalesced into one write.
+        Runs on the asyncio event loop thread — no cross-thread locking needed.
+        No-op when called outside a running event loop (e.g. during object
+        setup before :meth:`start` is awaited).
         """
-        if self._save_timer is not None:
-            self._save_timer.cancel()
-        timer = threading.Timer(AUTO_SAVE_DELAY, self._do_auto_save)
-        timer.daemon = True
-        timer.start()
-        self._save_timer = timer
+        if self._save_handle is not None:
+            self._save_handle.cancel()
+            self._save_handle = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._save_handle = loop.call_later(AUTO_SAVE_DELAY, self._do_auto_save)
 
     def _cancel_auto_save(self) -> None:
-        """Cancel a pending auto-save timer without performing a save."""
-        timer = getattr(self, "_save_timer", None)
-        if timer is not None:
-            timer.cancel()
-            self._save_timer = None
+        """Cancel a pending auto-save handle without performing a save."""
+        handle = getattr(self, "_save_handle", None)
+        if handle is not None:
+            handle.cancel()
+            self._save_handle = None
 
     def _do_auto_save(self) -> None:
-        """Execute the auto-save (called by the debounce timer thread)."""
-        self._save_timer = None
+        """Execute the auto-save (called on the event loop via call_later)."""
+        self._save_handle = None
         logger.debug("Auto-saving property tree.")
         if self._store is not None:
             self._store.save(self.get_property_tree())
@@ -655,13 +690,13 @@ class VdcHost:
     def flush(self) -> None:
         """Save immediately if there is a pending auto-save.
 
-        This cancels the debounce timer and performs the save
+        This cancels the debounce handle and performs the save
         synchronously.  Call this before shutdown to ensure no
         property changes are lost.
         """
-        if self._save_timer is not None:
-            self._save_timer.cancel()
-            self._save_timer = None
+        if self._save_handle is not None:
+            self._save_handle.cancel()
+            self._save_handle = None
             self.save()
 
     def load(self) -> bool:
@@ -1152,6 +1187,21 @@ class VdcHost:
         the new session — without requiring the caller to re-drive
         the announcement manually.
         """
+        # Register presence checker so ping/pong respects device lifecycle state.
+        host_dsuid = str(self._dsuid)
+
+        async def _presence_check(dsuid: str) -> bool:
+            if not dsuid or dsuid == host_dsuid:
+                return True
+            vdsd = self._find_vdsd(dsuid)
+            if vdsd is None:
+                return True  # unknown dSUID → pong (backward compat)
+            if vdsd.lifecycle_state == DeviceLifecycleState.REMOVED:
+                await vdsd.vanish(session)
+            return vdsd.lifecycle_state == DeviceLifecycleState.ACTIVE
+
+        session.set_presence_checker(_presence_check)
+
         await self._flush_pending_vanish(session)
         logger.info(
             "Session ready — auto-announcing %d vDC(s)",
@@ -1580,7 +1630,9 @@ class VdcHost:
                             new_val,
                         )
                     # apply_pending_channels is async; schedule it.
-                    asyncio.create_task(output.apply_pending_channels())
+                    _task = asyncio.create_task(output.apply_pending_channels())
+                    self._background_tasks.add(_task)
+                    _task.add_done_callback(self._background_tasks.discard)
                     logger.info(
                         "vdSD '%s' channelStates updated via setProperty",
                         vdsd.dsuid,
@@ -1866,7 +1918,9 @@ class VdcHost:
                             vdc.dsuid,
                         )
 
-            asyncio.create_task(_do_scan(vdcs_to_scan, session, dsuid_str))
+            _task = asyncio.create_task(_do_scan(vdcs_to_scan, session, dsuid_str))
+            self._background_tasks.add(_task)
+            _task.add_done_callback(self._background_tasks.discard)
             resp.generic_response.code = pb.ERR_OK
             return resp
 
@@ -2382,10 +2436,10 @@ class VdcHost:
         return f"VdcHost(dsuid={self._dsuid!r}, port={self._port}, name={self.name!r})"
 
     def __del__(self) -> None:
-        # Cancel any pending auto-save timer.
-        timer = getattr(self, "_save_timer", None)
-        if timer is not None:
-            timer.cancel()
+        # Cancel any pending auto-save handle.
+        handle = getattr(self, "_save_handle", None)
+        if handle is not None:
+            handle.cancel()
 
         # Best-effort cleanup hint.  Async resources should be released
         # via ``await host.stop()`` before the object is dropped.

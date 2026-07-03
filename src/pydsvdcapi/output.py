@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Output component for vdSD devices.
 
 A :class:`Output` models the single output of a virtual device.  Each
@@ -161,6 +163,13 @@ FUNCTION_CHANNELS: dict[OutputFunction, list[OutputChannelType]] = {
 }
 
 logger = logging.getLogger(__name__)
+
+# Default motor timing values for shade outputs (per vDC API specification).
+_SHADOW_DEFAULT_OPEN_TIME: float = 50.0
+_SHADOW_DEFAULT_CLOSE_TIME: float = 50.0
+_SHADOW_DEFAULT_ANGLE_OPEN_TIME: float = 1.0
+_SHADOW_DEFAULT_ANGLE_CLOSE_TIME: float = 1.0
+_SHADOW_DEFAULT_STOP_DELAY_TIME: float = 0.0
 
 #: All setting keys that :meth:`Output.apply_settings` handles explicitly.
 #: Any key arriving via ``setProperty`` that is **not** in this set is stored
@@ -549,7 +558,7 @@ class Output:
         Kind of valve / actuator attached.  ``None`` if not a climate
         device.
     open_time:
-        Motor open travel time in seconds (ShadowBehaviour / p44vdc).
+        Motor open travel time in seconds.
         ``None`` if not a shadow device.
     close_time:
         Motor close travel time in seconds.  ``None`` if not configured.
@@ -587,7 +596,7 @@ class Output:
         dim_time_down_alt2: int | None = None,
         heating_system_capability: HeatingSystemCapability | int | None = None,
         heating_system_type: HeatingSystemType | int | None = None,
-        # Shadow motor timing settings (ShadowBehaviour / p44vdc)
+        # Shadow motor timing settings
         open_time: float | None = None,
         close_time: float | None = None,
         angle_open_time: float | None = None,
@@ -642,7 +651,7 @@ class Output:
             else None
         )
 
-        # Shadow motor timing (ShadowBehaviour / p44vdc outputSettings)
+        # Shadow motor timing
         self._open_time: float | None = open_time
         self._close_time: float | None = close_time
         self._angle_open_time: float | None = angle_open_time
@@ -1726,7 +1735,7 @@ class Output:
 
         All output functions use the channel name (e.g. ``"brightness"``,
         ``"shadePositionOutside"``) as the outer element key, matching the
-        p44vdc API v3+ ``getApiId()`` format.  Numeric backward-compat
+        vDC API v3+ ``getApiId()`` format.  Numeric backward-compat
         resolution for incoming queries is handled by :class:`_ChannelCompatDict`
         and :meth:`channel_by_key`.
         """
@@ -1779,7 +1788,7 @@ class Output:
         """Return the ``channelDescriptions`` sub-tree.
 
         Keys are channel name strings (e.g. ``"brightness"``,
-        ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
+        ``"shadePositionOutside"``), matching the vDC API v3+ channel ID
         format. Backward-compat numeric key resolution for incoming queries is
         provided by :class:`_ChannelCompatDict`.
 
@@ -1798,7 +1807,7 @@ class Output:
         """Return the ``channelSettings`` sub-tree.
 
         Keys are channel name strings (e.g. ``"brightness"``,
-        ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
+        ``"shadePositionOutside"``), matching the vDC API v3+ channel ID
         format. Backward-compat numeric key resolution for incoming queries is
         provided by :class:`_ChannelCompatDict`.
 
@@ -1817,7 +1826,7 @@ class Output:
         """Return the ``channelStates`` sub-tree.
 
         Keys are channel name strings (e.g. ``"brightness"``,
-        ``"shadePositionOutside"``), matching the p44vdc API v3+ channel ID
+        ``"shadePositionOutside"``), matching the vDC API v3+ channel ID
         format. Backward-compat numeric key resolution for incoming queries is
         provided by :class:`_ChannelCompatDict`.
 
@@ -1866,9 +1875,9 @@ class Output:
 
         ``activeGroup`` is **optional** — included only when explicitly set.
 
-        ``groups`` follows p44vdc behaviour: all 64 group IDs (0–63) are
-        emitted as boolean elements (``true`` for members, ``false`` for
-        non-members).
+        ``groups`` follows vDC API: group 0 (the standard/implicit
+        group) is always emitted as ``true``. Member groups (1–63) are emitted
+        as ``true`` if in :attr:`groups`, ``false`` (or omitted) if not.
 
         ``onThreshold`` is included if and only if ``function`` is ON_OFF (0);
         when function is ON_OFF and no value was supplied the spec default of
@@ -1887,7 +1896,8 @@ class Output:
         if self._active_group is not None:
             settings["activeGroup"] = self._active_group
 
-        settings["groups"] = {str(gid): True for gid in sorted(self._groups)}
+        all_groups = self._groups | {0}
+        settings["groups"] = {str(gid): True for gid in sorted(all_groups)}
 
         pg = (
             int(self._vdsd.primary_group) if self._vdsd.primary_group is not None else 0
@@ -1925,18 +1935,34 @@ class Output:
             if self._heating_system_type is not None:
                 settings["heatingSystemType"] = int(self._heating_system_type)
 
-        # Shadow motor timing settings (primaryGroup 2 = grey/shadow).
-        if pg == 2:
-            if self._open_time is not None:
-                settings["openTime"] = self._open_time
-            if self._close_time is not None:
-                settings["closeTime"] = self._close_time
-            if self._angle_open_time is not None:
-                settings["angleOpenTime"] = self._angle_open_time
-            if self._angle_close_time is not None:
-                settings["angleCloseTime"] = self._angle_close_time
-            if self._stop_delay_time is not None:
-                settings["stopDelayTime"] = self._stop_delay_time
+        # Shadow motor timing settings: only for grey positional outputs.
+        # Always emitted when both conditions hold; falls back to vDC API defaults.
+        if pg == 2 and int(self._function) == int(OutputFunction.POSITIONAL):
+            settings["openTime"] = (
+                self._open_time
+                if self._open_time is not None
+                else _SHADOW_DEFAULT_OPEN_TIME
+            )
+            settings["closeTime"] = (
+                self._close_time
+                if self._close_time is not None
+                else _SHADOW_DEFAULT_CLOSE_TIME
+            )
+            settings["angleOpenTime"] = (
+                self._angle_open_time
+                if self._angle_open_time is not None
+                else _SHADOW_DEFAULT_ANGLE_OPEN_TIME
+            )
+            settings["angleCloseTime"] = (
+                self._angle_close_time
+                if self._angle_close_time is not None
+                else _SHADOW_DEFAULT_ANGLE_CLOSE_TIME
+            )
+            settings["stopDelayTime"] = (
+                self._stop_delay_time
+                if self._stop_delay_time is not None
+                else _SHADOW_DEFAULT_STOP_DELAY_TIME
+            )
 
         # Include any extra (firmware-specific) settings that arrived via
         # setProperty but are not in the standard known-key set.
@@ -1950,9 +1976,9 @@ class Output:
         Keys match the vDC API property names (§4.8.3).
 
         ``localPriority`` and ``transitionTime`` (float, seconds) are always
-        present, matching p44vdc base OutputBehaviour.
+        present, matching vDC API base output behaviour.
 
-        ``error`` is included for all device types (not in p44vdc base but
+        ``error`` is included for all device types (always included,
         useful for diagnostics).
         """
         return {
@@ -1989,6 +2015,8 @@ class Output:
             if isinstance(grp_data, dict):
                 for gid_str, val in grp_data.items():
                     gid = int(gid_str)
+                    if gid == 0:
+                        continue  # group 0 is implicit in the wire format; never store it
                     if val:
                         self._groups.add(gid)
                     else:

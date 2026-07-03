@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """dSUID - digitalSTROM Unique Identifier.
 
 Implements the dSUID (136-bit unique identifier) as specified in the
@@ -18,7 +20,7 @@ Generation is governed by the following prioritised rules:
   5. No unique ID available → generate random UUIDv4 (must be
      persisted by the caller).
 
-Reference: plan44/p44vdc dsuid.cpp/hpp (GPL-3.0-or-later).
+Reference: ds-basics v1.6, vDC API specification.
 """
 
 from __future__ import annotations
@@ -44,7 +46,7 @@ _GCP_BIT_LENGTH = (40, 37, 34, 30, 27, 24, 20)
 
 
 # ---------------------------------------------------------------------------
-# Well-known namespace UUIDs  (from p44vdc/dsuid.hpp)
+# Well-known namespace UUIDs  (from digitalSTROM system documentation)
 # ---------------------------------------------------------------------------
 
 

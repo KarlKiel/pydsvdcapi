@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """vDC session — protocol state machine for a vdSM ↔ vDC host session.
 
 A :class:`VdcSession` wraps a :class:`~pydsvdcapi.connection.VdcConnection`
@@ -45,15 +47,21 @@ import asyncio
 import enum
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Final
+from typing import Any, Final
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.connection import VdcConnection
 
 logger = logging.getLogger(__name__)
 
-#: The API version implemented by this library.
+#: Minimum API version accepted during hello handshake.
 SUPPORTED_API_VERSION: int = 2
+
+#: Maximum API version accepted during hello handshake.
+#: Versions higher than this are rejected with ERR_INCOMPATIBLE_API so that
+#: a future vdSM speaking a breaking protocol version does not silently
+#: interoperate using stale v2 semantics.
+MAX_SUPPORTED_API_VERSION: int = 4
 
 #: Default inactivity watchdog timeout in seconds.  vdSM sends pings
 #: every ~45 s when the session is otherwise idle; 90 s ≈ 2× that
@@ -163,8 +171,14 @@ class VdcSession:
         self._watchdog_timeout: float = watchdog_timeout
         self._last_activity: float = 0.0
         self._watchdog_task: asyncio.Task[None] | None = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         self.disconnect_reason: Exception | None = None
+
+        # Optional async callback for ping presence checks.
+        # Signature: async (dsuid: str) -> bool
+        # If None, all pings receive a pong (backward-compatible default).
+        self._presence_checker: Callable[[str], Awaitable[bool]] | None = None
 
     # ---- public properties -------------------------------------------
 
@@ -200,8 +214,24 @@ class VdcSession:
 
     @property
     def ping_count(self) -> int:
-        """Number of ping/pong exchanges completed in this session."""
+        """Number of pings received in this session."""
         return self._ping_count
+
+    def set_presence_checker(
+        self,
+        checker: Callable[[str], Awaitable[bool]] | None,
+    ) -> None:
+        """Register an async callback that gates pong responses.
+
+        The callback receives the dSUID from the ping message and must
+        return ``True`` if the device is present (pong will be sent) or
+        ``False`` to suppress the pong.  An empty-string dSUID indicates
+        a host-level ping; the callback should return ``True`` for these.
+
+        If no checker is registered (or ``None`` is passed), every ping
+        receives a pong (backward-compatible default).
+        """
+        self._presence_checker = checker
 
     # ---- message-ID helpers ------------------------------------------
 
@@ -396,27 +426,45 @@ class VdcSession:
             self._conn.peername,
         )
 
-        # Check API version compatibility.
-        if api_version < SUPPORTED_API_VERSION:
+        # Check API version range: [SUPPORTED_API_VERSION, MAX_SUPPORTED_API_VERSION].
+        if not (SUPPORTED_API_VERSION <= api_version <= MAX_SUPPORTED_API_VERSION):
             logger.warning(
-                "Incompatible API version %d (need >= %d)",
+                "Incompatible API version %d (need %d–%d)",
                 api_version,
                 SUPPORTED_API_VERSION,
+                MAX_SUPPORTED_API_VERSION,
             )
             await self._send_error(
                 msg,
                 pb.ERR_INCOMPATIBLE_API,
                 f"Incompatible API version {api_version} "
-                f"(need >= {SUPPORTED_API_VERSION})",
+                f"(need {SUPPORTED_API_VERSION}–{MAX_SUPPORTED_API_VERSION})",
             )
             self._state = SessionState.CLOSED
             return
 
-        # If we were already active, this is an implicit re-hello from
-        # the same vdSM (the spec says a new Hello implicitly
-        # terminates the old session — we just reset).
         if self._state is SessionState.ACTIVE:
-            logger.info("Re-hello — resetting session")
+            if vdsm_dsuid.upper() != (self._vdsm_dsuid or "").upper():
+                # A *different* vdSM is trying to take over an active session.
+                # Reject it — the original vdSM may still be using this connection.
+                logger.warning(
+                    "Rejecting hello from unknown vdSM %s: session already active with %s",
+                    vdsm_dsuid,
+                    self._vdsm_dsuid,
+                )
+                await self._send_error(
+                    msg,
+                    pb.ERR_SERVICE_NOT_AVAILABLE,
+                    f"Session already active with vdSM {self._vdsm_dsuid}",
+                )
+                return
+            # Same vdSM reconnecting — it lost track of the still-open connection.
+            # Reset and re-announce so communication is stable again.
+            logger.warning(
+                "Re-hello from same vdSM %s — resetting session for re-announcement",
+                vdsm_dsuid,
+            )
+            self._reset_session_state()
 
         self._vdsm_dsuid = vdsm_dsuid
         self._api_version = api_version
@@ -437,10 +485,26 @@ class VdcSession:
         # vDCs and devices, which requires sending requests and waiting
         # for responses dispatched by this same loop).
         if self._on_hello is not None:
-            asyncio.create_task(
+            _task = asyncio.create_task(
                 self._invoke_on_hello(),
                 name=f"on_hello-{vdsm_dsuid}",
             )
+            self._background_tasks.add(_task)
+            _task.add_done_callback(self._background_tasks.discard)
+
+    def _reset_session_state(self) -> None:
+        """Clear per-session runtime state before accepting a re-hello.
+
+        Pending outgoing requests will never receive a response (the vdSM
+        lost track of them), so their futures are cancelled.  Counters are
+        reset so the new session starts clean.
+        """
+        for future in self._pending_requests.values():
+            if not future.done():
+                future.cancel()
+        self._pending_requests.clear()
+        self._ping_count = 0
+        self._last_known_id = 0
 
     async def _invoke_on_hello(self) -> None:
         """Wrapper that invokes *_on_hello* with error handling."""
@@ -453,16 +517,34 @@ class VdcSession:
     # ---- ping / pong -------------------------------------------------
 
     async def _handle_ping(self, msg: pb.Message) -> None:
-        """Respond to a ``VDSM_SEND_PING`` with a ``VDC_SEND_PONG``."""
+        """Respond to a ``VDSM_SEND_PING`` with ``VDC_SEND_PONG``.
+
+        If a presence checker has been registered via
+        :meth:`set_presence_checker`, it is called first; the pong is only
+        sent if the checker returns ``True``.  With no checker registered,
+        all pings receive a pong (backward-compatible behaviour).
+        """
         target_dsuid = msg.vdsm_send_ping.dSUID
         self._ping_count += 1
+
+        if self._presence_checker is not None:
+            present = await self._presence_checker(target_dsuid)
+        else:
+            present = True
+
+        if not present:
+            logger.debug(
+                "Ping #%d for %s — device not present, suppressing pong",
+                self._ping_count,
+                target_dsuid,
+            )
+            return
 
         logger.info(
             "Ping #%d for %s — sending pong",
             self._ping_count,
             target_dsuid,
         )
-
         pong = pb.Message()
         pong.type = pb.VDC_SEND_PONG
         pong.message_id = 0  # pong is a notification, no msg_id

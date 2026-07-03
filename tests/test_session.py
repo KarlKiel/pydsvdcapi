@@ -1,6 +1,7 @@
 """Tests for the VdcSession protocol state machine."""
 
 import asyncio
+import struct
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -136,8 +137,8 @@ class TestHello:
         await task
 
     @pytest.mark.asyncio
-    async def test_incompatible_api_version(self):
-        """API version < SUPPORTED should be rejected."""
+    async def test_incompatible_api_version_too_low(self):
+        """API version < SUPPORTED_API_VERSION should be rejected."""
         vdsm, vdc = _make_pair()
         session = VdcSession(vdc, HOST_DSUID)
 
@@ -155,32 +156,86 @@ class TestHello:
         assert session.state is SessionState.CLOSED
 
     @pytest.mark.asyncio
-    async def test_re_hello_resets_session(self):
-        """A second hello on the same connection resets the session."""
+    async def test_incompatible_api_version_too_high(self):
+        """API version > MAX_SUPPORTED_API_VERSION should be rejected."""
         vdsm, vdc = _make_pair()
         session = VdcSession(vdc, HOST_DSUID)
 
-        # First hello.
-        await vdsm.send(_hello_msg(msg_id=1))
-        # Second hello with different dsuid.
-        new_dsuid = "1122334455667788990011223344556677"
-        await vdsm.send(_hello_msg(dsuid=new_dsuid, msg_id=2))
+        await vdsm.send(_hello_msg(api_version=5))
         vdsm._writer.close()
 
         task = asyncio.create_task(session.run())
 
-        # Read both responses.
-        r1 = await vdsm.receive()
-        r2 = await vdsm.receive()
-        assert r1 is not None
-        assert r2 is not None
-        assert r1.type == pb.VDC_RESPONSE_HELLO
-        assert r2.type == pb.VDC_RESPONSE_HELLO
-        assert r2.message_id == 2
+        response = await vdsm.receive()
+        assert response is not None
+        assert response.type == pb.GENERIC_RESPONSE
+        assert response.generic_response.code == pb.ERR_INCOMPATIBLE_API
 
         await task
-        # Session should reflect the second hello.
-        assert session.vdsm_dsuid == new_dsuid
+        assert session.state is SessionState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_re_hello_same_dsuid_resets_session(self):
+        """A re-hello from the same vdSM resets session state and re-fires on_hello."""
+        vdsm, vdc = _make_pair()
+        calls = []
+        second_call = asyncio.Event()
+
+        async def hello_cb(sess):
+            calls.append(True)
+            if len(calls) == 2:
+                second_call.set()
+
+        session = VdcSession(vdc, HOST_DSUID, on_hello=hello_cb)
+
+        task = asyncio.create_task(session.run())
+
+        # First hello.
+        await vdsm.send(_hello_msg(msg_id=1))
+        r1 = await vdsm.receive()
+        assert r1 is not None and r1.type == pb.VDC_RESPONSE_HELLO
+
+        # Second hello — same dSUID, simulating vdSM losing track of connection.
+        await vdsm.send(_hello_msg(msg_id=2))
+        r2 = await vdsm.receive()
+        assert r2 is not None and r2.type == pb.VDC_RESPONSE_HELLO
+        assert r2.message_id == 2
+
+        # on_hello must fire a second time (re-announcement).
+        await asyncio.wait_for(second_call.wait(), timeout=2.0)
+
+        vdsm._writer.close()
+        await task
+        assert session.vdsm_dsuid == VDSM_DSUID
+
+    @pytest.mark.asyncio
+    async def test_re_hello_different_dsuid_rejected(self):
+        """A hello from a different vdSM while a session is active is rejected."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        # First hello from the known vdSM.
+        await vdsm.send(_hello_msg(dsuid=VDSM_DSUID, msg_id=1))
+        # Second hello from a different vdSM.
+        other_dsuid = "1122334455667788990011223344556677"
+        await vdsm.send(_hello_msg(dsuid=other_dsuid, msg_id=2))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+
+        # First hello succeeds.
+        r1 = await vdsm.receive()
+        assert r1 is not None and r1.type == pb.VDC_RESPONSE_HELLO
+
+        # Second hello is rejected.
+        r2 = await vdsm.receive()
+        assert r2 is not None
+        assert r2.type == pb.GENERIC_RESPONSE
+        assert r2.generic_response.code == pb.ERR_SERVICE_NOT_AVAILABLE
+
+        await task
+        # Session remains bound to the original vdSM.
+        assert session.vdsm_dsuid == VDSM_DSUID
 
     @pytest.mark.asyncio
     async def test_on_hello_callback_is_invoked(self):
@@ -934,3 +989,195 @@ class TestDisconnectReason:
             await session.run()
 
         assert session.disconnect_reason is None
+
+
+# ---------------------------------------------------------------------------
+# Ping presence checker
+# ---------------------------------------------------------------------------
+
+
+class TestPingPresenceChecker:
+    """VdcSession respects a registered presence checker for ping/pong."""
+
+    @pytest.mark.asyncio
+    async def test_presence_checker_returning_true_sends_pong(self):
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        session.set_presence_checker(AsyncMock(return_value=True))
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        pong = await vdsm.receive()
+        assert pong is not None
+        assert pong.type == pb.VDC_SEND_PONG
+        await task
+
+    @pytest.mark.asyncio
+    async def test_presence_checker_returning_false_suppresses_pong(self):
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        session.set_presence_checker(AsyncMock(return_value=False))
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        await vdsm.send(_bye_msg())
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        # No pong is sent for the suppressed ping; bye triggers the next (and only) response
+        msg = await vdsm.receive()
+        assert msg is not None
+        assert msg.type == pb.GENERIC_RESPONSE  # bye ack, not pong
+        await task
+
+    @pytest.mark.asyncio
+    async def test_no_presence_checker_always_pongs(self):
+        """Backward compat: no checker registered → always pong."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        # No set_presence_checker call
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        pong = await vdsm.receive()
+        assert pong is not None
+        assert pong.type == pb.VDC_SEND_PONG
+        await task
+
+    @pytest.mark.asyncio
+    async def test_presence_checker_receives_target_dsuid(self):
+        """The checker is called with the exact dSUID from the ping."""
+        DEVICE_DSUID = "198C033E330755E78015F97AD093DD1C01"
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        checker = AsyncMock(return_value=True)
+        session.set_presence_checker(checker)
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(DEVICE_DSUID))
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        await vdsm.receive()  # pong
+        await task
+
+        checker.assert_called_once_with(DEVICE_DSUID)
+
+    @pytest.mark.asyncio
+    async def test_ping_count_incremented_even_when_pong_suppressed(self):
+        """ping_count reflects pings received, not pongs sent."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+        session.set_presence_checker(AsyncMock(return_value=False))
+
+        await vdsm.send(_hello_msg())
+        await vdsm.send(_ping_msg(HOST_DSUID))
+        await vdsm.send(_bye_msg())
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        await vdsm.receive()  # bye ack (pong was suppressed)
+        await task
+
+        assert session.ping_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Re-hello (session reset) — T3
+# ---------------------------------------------------------------------------
+
+
+class TestReHello:
+    @pytest.mark.asyncio
+    async def test_rehello_from_same_vdsm_calls_on_hello_again(self):
+        """A second hello from the same vdSM must reset the session and invoke on_hello again."""
+        vdsm, vdc = _make_pair()
+        hello_count = 0
+
+        async def hello_cb(sess):
+            nonlocal hello_count
+            hello_count += 1
+
+        session = VdcSession(vdc, HOST_DSUID, on_hello=hello_cb)
+
+        await vdsm.send(_hello_msg(msg_id=1))
+        await vdsm.send(_hello_msg(msg_id=2))  # same DSUID — re-hello
+        vdsm._writer.close()
+
+        task = asyncio.create_task(session.run())
+
+        resp1 = await vdsm.receive()
+        assert resp1 is not None
+        assert resp1.type == pb.VDC_RESPONSE_HELLO
+
+        resp2 = await vdsm.receive()
+        assert resp2 is not None
+        assert resp2.type == pb.VDC_RESPONSE_HELLO
+
+        await task
+        # on_hello tasks are fire-and-forget; yield twice to let them complete.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hello_count == 2
+
+    @pytest.mark.asyncio
+    async def test_rehello_cancels_pending_requests(self):
+        """Pending outgoing requests must be cancelled when a re-hello resets the session."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        await vdsm.send(_hello_msg(msg_id=1))
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+
+        # Inject a pending future simulating an in-flight outgoing request.
+        loop = asyncio.get_running_loop()
+        pending_future: asyncio.Future[object] = loop.create_future()
+        session._pending_requests[99] = pending_future  # type: ignore[assignment]
+
+        # Re-hello from same vdSM — triggers _reset_session_state()
+        await vdsm.send(_hello_msg(msg_id=2))
+        await asyncio.sleep(0)  # yield to let session process the re-hello
+
+        assert pending_future.cancelled()
+
+        vdsm._writer.close()
+        await task
+
+
+# ---------------------------------------------------------------------------
+# Corrupt protobuf — T5
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptProtobuf:
+    @pytest.mark.asyncio
+    async def test_session_terminates_cleanly_on_corrupt_protobuf(self):
+        """Session must set disconnect_reason and close cleanly when a corrupt frame arrives."""
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        await vdsm.send(_hello_msg())
+
+        # Queue corrupt protobuf (valid length header, garbage payload) after hello.
+        corrupt_payload = b"\xff\xfe\xfd\xfc\xfb\xfa\xf9\xf8\xf7\xf6"
+        vdc._reader.feed_data(struct.pack("!H", len(corrupt_payload)) + corrupt_payload)
+
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response
+        await task
+
+        assert session.state is SessionState.CLOSED
+        assert isinstance(session.disconnect_reason, ValueError)

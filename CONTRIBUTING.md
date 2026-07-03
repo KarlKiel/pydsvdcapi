@@ -30,8 +30,7 @@ src/
     ├── vdsd.py
     └── ...
 tests/               # pytest tests (mirror the src/ structure)
-examples/            # usage examples
-docs/                # supplementary documentation
+docs/                # documentation (guide.md + Sphinx config)
 ```
 
 ## Running tests

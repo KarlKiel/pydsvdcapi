@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Button input component for vdSD devices.
 
 A :class:`ButtonInput` models one pushbutton input element on a virtual
@@ -316,6 +318,7 @@ class ClickDetector:
         self._tip_timer: asyncio.TimerHandle | None = None
         self._multi_click_timer: asyncio.TimerHandle | None = None
         self._hold_repeat_timer: asyncio.TimerHandle | None = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
     # ---- public API --------------------------------------------------
 
@@ -512,7 +515,9 @@ class ClickDetector:
         try:
             result = self._on_click(click_type, value)
             if asyncio.iscoroutine(result):
-                asyncio.create_task(result)
+                _task = asyncio.create_task(result)
+                self._background_tasks.add(_task)
+                _task.add_done_callback(self._background_tasks.discard)
         except Exception:
             logger.exception(
                 "ClickDetector callback error for %s",

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Output channel component for vdSD devices.
 
 An :class:`OutputChannel` represents one controllable dimension of a
@@ -98,7 +100,7 @@ from typing import (
     Any,
 )
 
-from pydsvdcapi.conversion import apply_converter, compile_converter
+from pydsvdcapi.addons.converter import apply_converter, compile_converter
 from pydsvdcapi.enums import OutputChannelType
 
 if TYPE_CHECKING:
@@ -449,6 +451,7 @@ class OutputChannel:
         channel_type: OutputChannelType | int,
         ds_index: int = 0,
         name: str | None = None,
+        display_name: str | None = None,
         min_value: float | None = None,
         max_value: float | None = None,
         resolution: float | None = None,
@@ -480,6 +483,8 @@ class OutputChannel:
             self._name = spec.name
         else:
             self._name = f"channel_{ds_index}"
+
+        self._display_name: str | None = display_name
 
         # Ensure float so protobuf serialises as v_double (not v_uint64).
         self._min_value: float = float(
@@ -615,6 +620,19 @@ class OutputChannel:
     def name(self) -> str:
         """Human-readable label."""
         return self._name
+
+    @property
+    def display_name(self) -> str | None:
+        """Free-text label for the 'name' sub-field in channelDescriptions.
+
+        When set, overrides the canonical channel name in the property
+        response without affecting the channelId container key.
+        """
+        return self._display_name
+
+    @display_name.setter
+    def display_name(self, value: str | None) -> None:
+        self._display_name = value
 
     @property
     def min_value(self) -> float:
@@ -755,9 +773,12 @@ class OutputChannel:
         sub-tree (§4.9.1).  Keys match the vDC API property names.
         """
         props: dict[str, Any] = {
-            "name": self._name,
+            "name": self._display_name
+            if self._display_name is not None
+            else self._name,
             "channelType": int(self._channel_type),
             "dsIndex": self._ds_index,
+            "channelIndex": self._ds_index,
             "min": self._min_value,
             "max": self._max_value,
             "resolution": self._resolution,
@@ -815,6 +836,8 @@ class OutputChannel:
             node["symbol"] = self._symbol
         if self._enum_values is not None:
             node["enumValues"] = {str(k): v for k, v in self._enum_values.items()}
+        if self._display_name is not None:
+            node["displayName"] = self._display_name
         if self._uplink_converter_code is not None:
             node["uplinkConverter"] = self._uplink_converter_code
         if self._downlink_converter_code is not None:
@@ -856,6 +879,9 @@ class OutputChannel:
             self._symbol = str(state["symbol"])
         if "enumValues" in state:
             self._enum_values = {int(k): str(v) for k, v in state["enumValues"].items()}
+        if "displayName" in state:
+            raw = state["displayName"]
+            self._display_name = str(raw) if raw is not None else None
         # Converters
         if "uplinkConverter" in state:
             self.set_uplink_converter(state["uplinkConverter"])

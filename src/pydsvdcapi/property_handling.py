@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Property handling — query/response helpers for the vDC API.
 
 The vDC API uses a recursive ``PropertyElement`` tree structure for
@@ -56,7 +58,7 @@ class _NoValue:
     Use this as a dict value when building property trees where the
     resulting ``PropertyElement`` must have its ``name`` set but its
     ``value`` field completely absent (not even an empty
-    ``PropertyValue``).  This matches the p44-vdc behaviour for
+    ``PropertyValue``).  This matches the vDC API specification for
     enumeration value-list entries in state/property descriptions.
     """
 

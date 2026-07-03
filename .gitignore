@@ -209,6 +209,9 @@ __marimo__/
 # Documentation folder
 Documentation/
 
+# Retired / archived files (kept locally, not version-controlled)
+old/
+
 # Local research / comparison documents (not for version control)
 docs/p44vdc-comparison.md
 

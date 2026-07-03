@@ -21,6 +21,7 @@ from pydsvdcapi.enums import (
     BinaryInputUsage,
     ButtonType,
     ColorGroup,
+    DeviceLifecycleState,
     OutputChannelType,
     OutputFunction,
     OutputMode,
@@ -204,6 +205,31 @@ class TestVdsdConstruction:
         )
 
         assert vdsd.primary_group == ColorGroup.BLACK
+
+
+# ===========================================================================
+# DeviceLifecycleState enum
+# ===========================================================================
+
+
+class TestDeviceLifecycleStateEnum:
+    """DeviceLifecycleState enum has all required values."""
+
+    def test_all_states_exist(self):
+        assert DeviceLifecycleState.ACTIVE == "active"
+        assert DeviceLifecycleState.INACTIVE == "inactive"
+        assert DeviceLifecycleState.MAINTENANCE == "maintenance"
+        assert DeviceLifecycleState.ERROR == "error"
+        assert DeviceLifecycleState.REMOVED == "removed"
+
+    def test_is_str_subclass(self):
+        """Enum values are str instances, enabling direct string comparison."""
+        assert isinstance(DeviceLifecycleState.ACTIVE, str)
+
+    def test_str_returns_value(self):
+        """str() on any state returns the wire-format string value."""
+        for state in DeviceLifecycleState:
+            assert str(state) == state.value
 
 
 # ===========================================================================
@@ -403,7 +429,7 @@ class TestVdsdApplyState:
 
 
 class TestVdsdAutoSave:
-    def test_tracked_attr_triggers_auto_save(self, tmp_path):
+    async def test_tracked_attr_triggers_auto_save(self, tmp_path):
         host = _make_host(tmp_path)
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
@@ -417,7 +443,7 @@ class TestVdsdAutoSave:
 
         # Mutate a tracked attribute.
         vdsd.name = "Changed"
-        assert host._save_timer is not None
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
     def test_untracked_attr_no_auto_save(self, tmp_path):
@@ -432,8 +458,8 @@ class TestVdsdAutoSave:
         vdc.add_device(device)
         host._cancel_auto_save()
 
-        vdsd._active = False  # not tracked
-        assert host._save_timer is None
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE  # not tracked
+        assert host._save_handle is None
 
 
 # ===========================================================================
@@ -2839,3 +2865,261 @@ class TestWaitForInitialValues:
         # Should not raise — the restored value satisfies the requirement.
         await vdsd._wait_for_initial_values(timeout=0.05)
         assert "windprotectionconfigawning" not in vdsd.model_features
+
+
+# ===========================================================================
+# Vdsd — lifecycle state
+# ===========================================================================
+
+
+class TestVdsdLifecycleState:
+    """Vdsd.set_lifecycle_state manages state, active property, push, and vanish."""
+
+    # ---- default state ---------------------------------------------------
+
+    def test_default_lifecycle_state_is_active(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        assert vdsd.lifecycle_state == DeviceLifecycleState.ACTIVE
+        assert vdsd.active is True
+
+    # ---- active derivation -----------------------------------------------
+
+    def test_active_true_when_active_state(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        assert vdsd.active is True
+
+    # ---- transitions before announcement (no session) --------------------
+
+    @pytest.mark.asyncio
+    async def test_set_inactive_before_announced_stores_state_silently(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        # Should not raise even without a session
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+        assert vdsd.lifecycle_state == DeviceLifecycleState.INACTIVE
+        assert vdsd.active is False
+
+    @pytest.mark.asyncio
+    async def test_set_removed_before_announced_stores_state_silently(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+        assert vdsd.lifecycle_state == DeviceLifecycleState.REMOVED
+
+    # ---- transitions after announcement (with session) -------------------
+
+    @pytest.mark.asyncio
+    async def test_set_inactive_pushes_active_false(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_PUSH_NOTIFICATION
+        assert msg.vdc_send_push_notification.dSUID == str(vdsd.dsuid)
+        elem = msg.vdc_send_push_notification.changedproperties[0]
+        assert elem.name == "active"
+        assert elem.value.v_bool is False
+
+    @pytest.mark.asyncio
+    async def test_set_active_pushes_active_true(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        # Start from inactive
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_PUSH_NOTIFICATION
+        elem = msg.vdc_send_push_notification.changedproperties[0]
+        assert elem.name == "active"
+        assert elem.value.v_bool is True
+
+    @pytest.mark.asyncio
+    async def test_no_push_when_active_flag_unchanged(self):
+        """INACTIVE → MAINTENANCE: both active=False, no push needed."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.MAINTENANCE)
+
+        session.send_notification.assert_not_called()
+        assert vdsd.lifecycle_state == DeviceLifecycleState.MAINTENANCE
+
+    @pytest.mark.asyncio
+    async def test_no_push_when_same_state_repeated(self):
+        """Setting ACTIVE when already ACTIVE: no push."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
+
+        session.send_notification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_push_error_suppressed_state_still_stored(self):
+        """ConnectionError during push is suppressed; lifecycle state is still updated."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        session.send_notification.side_effect = ConnectionError("closed")
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.INACTIVE)
+
+        assert vdsd.lifecycle_state == DeviceLifecycleState.INACTIVE
+        assert vdsd.active is False
+
+    @pytest.mark.asyncio
+    async def test_set_removed_sends_vanish(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+
+        calls = session.send_notification.call_args_list
+        assert len(calls) == 2
+        assert calls[0][0][0].type == pb.VDC_SEND_PUSH_NOTIFICATION  # push first
+        assert calls[1][0][0].type == pb.VDC_SEND_VANISH  # vanish second
+
+    @pytest.mark.asyncio
+    async def test_set_removed_from_inactive_sends_vanish_only(self):
+        """INACTIVE → REMOVED: active flag unchanged (False→False) so no push, only vanish."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+        vdsd._lifecycle_state = DeviceLifecycleState.INACTIVE
+
+        await vdsd.set_lifecycle_state(DeviceLifecycleState.REMOVED)
+
+        calls = session.send_notification.call_args_list
+        assert len(calls) == 1  # only vanish, no push
+        assert calls[0][0][0].type == pb.VDC_SEND_VANISH
+
+    # ---- active property is derived, not stored directly ----------------
+
+    def test_active_property_reflects_lifecycle_state(self):
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        for state in [
+            DeviceLifecycleState.INACTIVE,
+            DeviceLifecycleState.MAINTENANCE,
+            DeviceLifecycleState.ERROR,
+            DeviceLifecycleState.REMOVED,
+        ]:
+            vdsd._lifecycle_state = state
+            assert vdsd.active is False
+        vdsd._lifecycle_state = DeviceLifecycleState.ACTIVE
+        assert vdsd.active is True
+
+
+class TestVdsdSendIdentify:
+    """VDC_SEND_IDENTIFY — physical user-identification notification."""
+
+    @pytest.mark.asyncio
+    async def test_send_identify_sends_correct_message(self):
+        """send_identify() sends VDC_SEND_IDENTIFY with the vdSD's dSUID."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.send_identify()
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_IDENTIFY
+        assert msg.vdc_send_identify.dSUID == str(vdsd.dsuid)
+
+    @pytest.mark.asyncio
+    async def test_send_identify_noop_when_not_announced(self):
+        """send_identify() is a no-op when the device is not yet announced."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        vdsd._announced = False
+        vdsd._session = session
+
+        await vdsd.send_identify()
+
+        session.send_notification.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_identify_noop_when_no_session(self):
+        """send_identify() is a no-op when there is no active session."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        vdsd._announced = True
+        vdsd._session = None
+
+        await vdsd.send_identify()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_send_identify_suppresses_connection_error(self):
+        """send_identify() logs and suppresses ConnectionError."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        session = _make_mock_session()
+        session.send_notification.side_effect = ConnectionError("gone")
+        vdsd._announced = True
+        vdsd._session = session
+
+        await vdsd.send_identify()  # must not raise

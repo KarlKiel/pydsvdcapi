@@ -2210,3 +2210,99 @@ class TestSensorTypeUsageValidation:
             SensorType.DURATION,
         }
         assert expected.issubset(set(SENSOR_TYPE_VALID_USAGES.keys()))
+
+
+# ===========================================================================
+# Stale session reference — M4
+# ===========================================================================
+
+
+class TestStaleSessionSafety:
+    """Verify that stop_alive_timer() cancels all handles so no push fires via a
+    stale session reference after reconnect."""
+
+    @pytest.mark.asyncio
+    async def test_deferred_push_does_not_fire_after_stop(self):
+        """A cancelled deferred push must not fire even after the debounce interval."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        si = _make_sensor_input(vdsd, min_push_interval=0.1)
+        vdsd.add_sensor_input(si)
+        vdsd._announced = True
+
+        session = _make_mock_session()
+        await si.update_value(21.5, session)
+        initial_count = session.send_notification.call_count
+
+        # Second update within min_push_interval schedules a deferred push.
+        await si.update_value(22.0, session)
+        assert si._deferred_push_handle is not None
+
+        # Stop cancels the deferred push.
+        si.stop_alive_timer()
+        assert si._deferred_push_handle is None
+
+        # Wait well past the would-be debounce window.
+        await asyncio.sleep(0.3)
+
+        assert session.send_notification.call_count == initial_count
+
+    @pytest.mark.asyncio
+    async def test_deferred_push_from_old_session_cancelled_on_reconnect(self):
+        """A deferred push scheduled with the old session must not fire after reconnect."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        si = _make_sensor_input(vdsd, min_push_interval=5.0)
+        vdsd.add_sensor_input(si)
+        vdsd._announced = True
+
+        session1 = _make_mock_session()
+        session2 = _make_mock_session()
+
+        si.start_alive_timer(session1)
+        await si.update_value(21.5, session1)  # immediate push
+        await si.update_value(22.0, session1)  # deferred (within min_push_interval)
+        assert si._deferred_push_handle is not None
+
+        # Session 1 ends — deferred push must be cancelled.
+        si.stop_alive_timer()
+        assert si._deferred_push_handle is None
+
+        # Reconnect with session2.
+        si.start_alive_timer(session2)
+
+        # Wait — the old deferred push must not fire via session1.
+        await asyncio.sleep(0.1)
+
+        assert session1.send_notification.call_count == 1  # only the immediate push
+        assert session2.send_notification.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_reconnect_push_targets_new_session(self):
+        """After stop+start, a fresh update must push to the new session, not the old one."""
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        si = _make_sensor_input(vdsd, min_push_interval=0.0)
+        vdsd.add_sensor_input(si)
+        vdsd._announced = True
+
+        session1 = _make_mock_session()
+        session2 = _make_mock_session()
+
+        si.start_alive_timer(session1)
+        await si.update_value(21.5, session1)
+        assert session1.send_notification.call_count == 1
+
+        si.stop_alive_timer()
+
+        si.start_alive_timer(session2)
+        await si.update_value(22.0, session2)
+
+        assert session2.send_notification.call_count == 1
+        assert session1.send_notification.call_count == 1  # unchanged

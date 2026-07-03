@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Device action components for vdSD devices (§4.5).
 
 This module implements the action-related components that a virtual

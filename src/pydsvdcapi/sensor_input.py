@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Sensor input component for vdSD devices.
 
 A :class:`SensorInput` models one analogue (continuous-value) sensor on
@@ -82,7 +84,7 @@ from typing import (
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.conversion import apply_converter, compile_converter
+from pydsvdcapi.addons.converter import apply_converter, compile_converter
 from pydsvdcapi.enums import (
     InputError,
     SensorType,
@@ -249,6 +251,7 @@ class SensorInput:
         self._last_pushed_state: tuple | None = None
         self._alive_timer_handle: asyncio.TimerHandle | None = None
         self._deferred_push_handle: asyncio.TimerHandle | None = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # ---- value converter (optional, persisted) -------------------
         self._uplink_converter_code: str | None = None
@@ -876,7 +879,9 @@ class SensorInput:
         """Callback for :meth:`_schedule_deferred_push`."""
         self._deferred_push_handle = None
         if self._vdsd.is_announced:
-            asyncio.create_task(self._do_push(session))
+            _task = asyncio.create_task(self._do_push(session))
+            self._background_tasks.add(_task)
+            _task.add_done_callback(self._background_tasks.discard)
 
     # ---- alive timer (periodic heartbeat push) -----------------------
 
@@ -938,7 +943,9 @@ class SensorInput:
                 self._ds_index,
                 self._name,
             )
-            asyncio.create_task(self._push_state(session, force=True))
+            _task = asyncio.create_task(self._push_state(session, force=True))
+            self._background_tasks.add(_task)
+            _task.add_done_callback(self._background_tasks.discard)
 
     # ---- auto-save ---------------------------------------------------
 

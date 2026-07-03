@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """vdSD — virtual digitalSTROM device.
 
 A :class:`Vdsd` is the API-visible unit that the vdSM (and dSS) recognise
@@ -75,7 +77,8 @@ from typing import (
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.dsuid import DsUid
-from pydsvdcapi.enums import ColorGroup
+from pydsvdcapi.enums import ColorGroup, DeviceLifecycleState
+from pydsvdcapi.property_handling import dict_to_elements
 
 if TYPE_CHECKING:
     from pydsvdcapi.actions import (
@@ -355,7 +358,7 @@ class Vdsd:
         self._output: Output | None = None
 
         # --- runtime state --------------------------------------------
-        self._active: bool = True
+        self._lifecycle_state: DeviceLifecycleState = DeviceLifecycleState.ACTIVE
         self._announced: bool = False
         self._session: VdcSession | None = None
 
@@ -410,12 +413,18 @@ class Vdsd:
 
     @property
     def active(self) -> bool:
-        """Whether this vdSD is currently active / operational."""
-        return self._active
+        """Whether this vdSD is currently active / operational.
 
-    @active.setter
-    def active(self, value: bool) -> None:
-        self._active = bool(value)
+        Derived from :attr:`lifecycle_state`.  ``True`` only when
+        ``lifecycle_state == DeviceLifecycleState.ACTIVE``.
+        Use :meth:`set_lifecycle_state` to change this value.
+        """
+        return self._lifecycle_state == DeviceLifecycleState.ACTIVE
+
+    @property
+    def lifecycle_state(self) -> DeviceLifecycleState:
+        """Current lifecycle state of this vdSD."""
+        return self._lifecycle_state
 
     @property
     def model_features(self) -> set[str]:
@@ -1511,6 +1520,73 @@ class Vdsd:
             if device is not None:
                 device._schedule_auto_save()
 
+    # ---- lifecycle state management ----------------------------------
+
+    async def _push_active(self, active: bool) -> None:
+        """Push a ``VDC_SEND_PUSH_NOTIFICATION`` for the ``active`` property."""
+        if self._session is None:
+            return
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._dsuid)
+        for elem in dict_to_elements({"active": active}):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+        try:
+            await self._session.send_notification(msg)
+            logger.debug("vdSD '%s': pushed active=%s", self.name, active)
+        except (ConnectionError, OSError) as exc:
+            logger.warning("vdSD '%s': failed to push active: %s", self.name, exc)
+
+    async def set_lifecycle_state(self, state: DeviceLifecycleState) -> None:
+        """Set the lifecycle state and handle all vdSM communication.
+
+        * If ``active`` changes (``True`` ↔ ``False``) and the device is
+          announced, pushes ``VDC_SEND_PUSH_NOTIFICATION`` with the new
+          ``active`` value.  Push errors (``ConnectionError``, ``OSError``) are
+          logged and suppressed.
+        * If *state* is ``REMOVED`` and the device is announced, also
+          sends ``VDC_SEND_VANISH``.  Errors from ``vanish`` propagate to the
+          caller.
+        * If the device is not yet announced, stores the state silently.
+        """
+        was_active = self._lifecycle_state == DeviceLifecycleState.ACTIVE
+        self._lifecycle_state = state
+        now_active = state == DeviceLifecycleState.ACTIVE
+
+        if self._announced and self._session is not None:
+            if was_active != now_active:
+                await self._push_active(now_active)
+            if state == DeviceLifecycleState.REMOVED:
+                await self.vanish(self._session)
+
+    async def send_identify(self) -> None:
+        """Notify the vdSM that the user physically identified this device.
+
+        Sends ``VDC_SEND_IDENTIFY`` with this vdSD's dSUID — fire-and-forget,
+        no response is expected or awaited.
+
+        Use this when the physical device signals a user-identification gesture
+        (e.g. the user presses a pairing/identify button on the hardware).  The
+        vdSM uses the incoming dSUID to know *which* physical device the user
+        touched, enabling the dSS configurator to proceed with pairing or
+        assignment without the user having to enter a dSUID manually.
+
+        If the device is not yet announced or has no active session, the call
+        is a no-op.
+        """
+        if not self._announced or self._session is None:
+            return
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_IDENTIFY
+        msg.vdc_send_identify.dSUID = str(self._dsuid)
+        try:
+            await self._session.send_notification(msg)
+            logger.debug("vdSD '%s': sent VDC_SEND_IDENTIFY", self.name)
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "vdSD '%s': failed to send VDC_SEND_IDENTIFY: %s", self.name, exc
+            )
+
     # ---- property dict (for getProperty responses) -------------------
 
     def get_properties(self) -> dict[str, Any]:
@@ -1543,14 +1619,14 @@ class Vdsd:
             "name": self.name,
             "deviceClass": self.device_class,
             "deviceClassVersion": self.device_class_version,
-            "active": self._active,
+            "active": self._lifecycle_state == DeviceLifecycleState.ACTIVE,
             # vdSD-specific properties
             "primaryGroup": int(self._primary_group),
             "zoneID": self.zone_id,
             "progMode": self.prog_mode,
             "currentConfigId": self.current_config_id,
         }
-        # modelFeatures — sorted by canonical ModelFeatureId enum index (as p44vdc).
+        # modelFeatures — sorted by canonical ModelFeatureId enum index.
         _MODEL_FEATURE_ORDER = {
             "dontcare": 0,
             "blink": 1,
@@ -1639,9 +1715,9 @@ class Vdsd:
         # ------------------------------------------------------------------
         # SingleDevice extensions (§4.5 / §4.6 / §4.7)
         # ------------------------------------------------------------------
-        # In p44-vdc, enableAsSingleDevice() always creates ALL
-        # SingleDevice containers together (deviceActions, dynamicActions,
-        # customActions, standardActions, states, events, properties).
+        # Always create ALL SingleDevice containers together
+        # (deviceActions, dynamicActions, customActions, standardActions,
+        # states, events, properties).
         # The vdSM may rely on the presence of the action description
         # properties to recognise a device as a SingleDevice.  We
         # therefore include empty action descriptions whenever ANY
@@ -2236,7 +2312,7 @@ class Vdsd:
             for si in self._sensor_inputs.values():
                 si.start_alive_timer(session)
             # Push initial state for inputs that already have a value
-            # (mirrors vdSMAnnouncementAcknowledged in p44vdc device.cpp).
+            # (implements the vdSMAnnouncementAcknowledged protocol step).
             for si in self._sensor_inputs.values():
                 if si.value is not None:
                     await si._push_state(session, force=True)

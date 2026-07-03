@@ -311,15 +311,15 @@ class TestVdcProperties:
 class TestVdcAutoSave:
     """Tests for auto-save triggering through the host."""
 
-    def test_tracked_attr_change_triggers_host_auto_save(self, tmp_path):
+    async def test_tracked_attr_change_triggers_host_auto_save(self, tmp_path):
         host = _make_host(tmp_path)
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
         host._cancel_auto_save()
 
         vdc.name = "New Name"
-        # A timer should now be running on the host.
-        assert host._save_timer is not None
+        # A handle should now be scheduled on the host.
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
     def test_non_tracked_attr_does_not_trigger(self, tmp_path):
@@ -329,26 +329,26 @@ class TestVdcAutoSave:
         host._cancel_auto_save()
 
         vdc._announced = True  # not tracked
-        assert host._save_timer is None
+        assert host._save_handle is None
 
-    def test_zone_id_is_tracked(self, tmp_path):
+    async def test_zone_id_is_tracked(self, tmp_path):
         host = _make_host(tmp_path)
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
         host._cancel_auto_save()
 
         vdc.zone_id = 99
-        assert host._save_timer is not None
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
-    def test_capabilities_setter_triggers_save(self, tmp_path):
+    async def test_capabilities_setter_triggers_save(self, tmp_path):
         host = _make_host(tmp_path)
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
         host._cancel_auto_save()
 
         vdc.capabilities = VdcCapabilities(metering=True)
-        assert host._save_timer is not None
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
     def test_auto_save_disabled_during_init(self, tmp_path):
@@ -358,7 +358,7 @@ class TestVdcAutoSave:
         # Creating a vDC should NOT trigger host auto-save
         # because _auto_save_enabled is False during __init__.
         _make_vdc(host)
-        assert host._save_timer is None
+        assert host._save_handle is None
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +409,7 @@ class TestVdcApplyState:
         host._cancel_auto_save()
 
         vdc._apply_state({"name": "No-save", "zoneID": 7})
-        assert host._save_timer is None
+        assert host._save_handle is None
 
     def test_apply_state_partial(self):
         host = _make_host()
@@ -664,22 +664,22 @@ class TestVdcHostPersistenceWithVdcs:
         data = yaml.safe_load(Path(state_path).read_text())
         assert "vdcs" not in data["vdcHost"]
 
-    def test_add_vdc_triggers_auto_save(self, tmp_path):
+    async def test_add_vdc_triggers_auto_save(self, tmp_path):
         host = _make_host(tmp_path)
         host._cancel_auto_save()
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
-        assert host._save_timer is not None
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
-    def test_remove_vdc_triggers_auto_save(self, tmp_path):
+    async def test_remove_vdc_triggers_auto_save(self, tmp_path):
         host = _make_host(tmp_path)
         vdc = _make_vdc(host)
         host.add_vdc(vdc)
         host._cancel_auto_save()
 
         host.remove_vdc(vdc.dsuid)
-        assert host._save_timer is not None
+        assert host._save_handle is not None
         host._cancel_auto_save()
 
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Value converter helpers — pydsvdcapi.addons.converter.
 
 A *converter* is a small Python code snippet provided by the end-user

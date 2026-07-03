@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """digitalSTROM vDC API enumerations.
 
 This module contains all enum definitions required by the digitalSTROM
@@ -12,7 +14,7 @@ vDC API protocol, derived from the official documentation:
 - live testing against dss (1.19.12)
 """
 
-from enum import IntEnum, unique
+from enum import Enum, IntEnum, unique
 
 # ---------------------------------------------------------------------------
 #  Protocol-level enums (from genericVDC.proto)
@@ -1418,3 +1420,34 @@ class VentilationScene(IntEnum):
     NOISE_REDUCTION = 7
     AUTOMATIC_AIR_FLOW = 8
     AUTO_LOUVER_POSITION = 9
+
+
+# ---------------------------------------------------------------------------
+#  Device lifecycle state
+# ---------------------------------------------------------------------------
+
+
+@unique
+class DeviceLifecycleState(str, Enum):
+    """Lifecycle state of a virtual device (vdSD).
+
+    The library maps these states to the vdSM wire protocol automatically:
+
+    * ``ACTIVE`` — device is operational; responds to ping with pong and
+      reports ``active=true`` in common properties.
+    * ``INACTIVE``, ``MAINTENANCE``, ``ERROR`` — device is temporarily
+      unavailable; ping responses are suppressed and ``active=false`` is
+      pushed to dSS on transition.
+    * ``REMOVED`` — device has been decommissioned; ``vanish`` is sent to
+      dSS and ping responses are suppressed.  Setting ``REMOVED`` is
+      one-way: there is no meaningful return from this state.
+    """
+
+    def __str__(self) -> str:
+        return self.value
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    MAINTENANCE = "maintenance"
+    ERROR = "error"
+    REMOVED = "removed"

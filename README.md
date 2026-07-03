@@ -31,36 +31,40 @@ Requires Python 3.10+.
 import asyncio
 from pydsvdcapi import (
     VdcHost, Vdc, Device, Vdsd,
-    DsUid, DsUidNamespace,
-    Output, OutputFunction, OutputMode, OutputUsage,
-    ColorGroup,
+    DsUid,
+    Output, OutputFunction, OutputUsage,
+    ColorGroup, DeviceLifecycleState,
 )
 
 async def main():
-    host = VdcHost(dsuid=DsUid.new_uuid_based(), name="My VDC Host")
+    host = VdcHost(name="My Gateway", state_path="state.yaml")
 
-    vdc = Vdc(dsuid=DsUid.new_uuid_based(), name="My VDC")
+    vdc = Vdc(host=host, implementation_id="x-myapp-lights",
+              name="My Lights", model="Light Controller")
     host.add_vdc(vdc)
 
-    device = Device(dsuid=DsUid.new_gtin_based("0000000000001", 0))
-    vdsd = Vdsd(dsuid=DsUid.new_uuid_based(), name="My Light")
-    output = Output(
-        function=OutputFunction.LIGHT,
-        mode=OutputMode.SWITCH,
-        usage=OutputUsage.ROOM,
-        group=ColorGroup.YELLOW,
-    )
+    device = Device(vdc=vdc, dsuid=DsUid.from_gtin_serial("0000000000001", "001"))
+    vdsd = Vdsd(device=device, primary_group=ColorGroup.YELLOW,
+                name="Living Room Light", model="My Light v1")
+    output = Output(vdsd=vdsd, function=OutputFunction.DIMMER,
+                    output_usage=OutputUsage.ROOM)
     vdsd.set_output(output)
+
+    async def apply_channels(out: Output, updates: dict) -> None:
+        if 0 in updates:  # brightness = dsIndex 0
+            print(f"Set brightness to {updates[0]:.1f}%")
+    output.on_channel_applied = apply_channels
+
+    await vdsd.set_lifecycle_state(DeviceLifecycleState.ACTIVE)
     device.add_vdsd(vdsd)
     vdc.add_device(device)
-
-    await host.run()  # connects and blocks until stopped
+    await host.start()
+    await asyncio.Event().wait()
 
 asyncio.run(main())
 ```
 
-See [`examples/getting_started.py`](examples/getting_started.py) for a minimal runnable example
-and [`examples/full_showcase.py`](examples/full_showcase.py) for all 27 device classes.
+See the [Developer Guide](docs/guide.md) for a full walkthrough and API reference.
 
 ## Development
 
@@ -82,12 +86,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidance.
 
 ## Documentation
 
-API reference: [pydsvdcapi.readthedocs.io](https://pydsvdcapi.readthedocs.io)
-
-Domain documentation lives in [`docs/`](docs/):
-- [vDC API Properties](docs/vdc-api-properties.md)
-- [VDC Host Behavior](docs/vdc-host-behavior.md)
-- [Device Splitting Guidelines](docs/device-splitting-guidelines.md)
+- [Developer Guide](docs/guide.md) — introductory walkthrough and full API reference
+- API reference: [pydsvdcapi.readthedocs.io](https://pydsvdcapi.readthedocs.io)
 
 ## License
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Low-level TCP connection with length-prefixed protobuf framing.
 
 The vDC API transport is a TCP stream where every message is preceded by
@@ -22,6 +24,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+
+from google.protobuf.message import DecodeError
 
 from pydsvdcapi import vdc_messages_pb2 as pb
 
@@ -125,15 +129,15 @@ class VdcConnection:
         ValueError
             If the received length header exceeds
             :data:`MAX_MESSAGE_LENGTH` or the payload cannot be parsed.
+        asyncio.IncompleteReadError
+            If the peer closes the connection mid-message (propagates from
+            ``StreamReader.readexactly``).
         """
         if self._closed:
             raise ConnectionError("Connection is closed")
 
         # --- read the 2-byte length header ----------------------------
         header_data = await self._reader.readexactly(_HEADER_SIZE)
-        if not header_data:
-            return None
-
         (length,) = struct.unpack(_HEADER_FMT, header_data)
         if length > MAX_MESSAGE_LENGTH:
             raise ValueError(
@@ -147,7 +151,10 @@ class VdcConnection:
         payload = await self._reader.readexactly(length)
 
         msg = pb.Message()
-        msg.ParseFromString(payload)
+        try:
+            msg.ParseFromString(payload)
+        except DecodeError as exc:
+            raise ValueError(f"Failed to parse protobuf message: {exc}") from exc
 
         logger.debug(
             "Received %s (%d bytes, msg_id=%d) ← %s",

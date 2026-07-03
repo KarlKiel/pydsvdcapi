@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Device property component for vdSD devices (§4.6.3, §4.6.4).
 
 A :class:`DeviceProperty` models one generic device property on a
@@ -62,7 +64,7 @@ from typing import (
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.conversion import apply_converter, compile_converter
+from pydsvdcapi.addons.converter import apply_converter, compile_converter
 from pydsvdcapi.property_handling import NO_VALUE, dict_to_elements
 
 if TYPE_CHECKING:
@@ -473,7 +475,7 @@ class DeviceProperty:
 
         For enumeration properties an integer key is automatically
         resolved to the corresponding text label via the *options*
-        dictionary, matching p44-vdc behaviour.
+        dictionary, matching the vDC API specification.
         """
         # Per §4.6.4 all property values are strings on the wire.
         # We keep numeric values as float internally for convenience
@@ -513,7 +515,7 @@ class DeviceProperty:
             )
             return
 
-        # Push direct scalar value (p44-vdc compatible).
+        # Push direct scalar value (vDC API compatible).
         push_tree: dict[str, Any] = {
             "deviceProperties": {
                 self._name: self._value,
@@ -557,7 +559,7 @@ class DeviceProperty:
     def _resolve_enum_label(self, value: float | int | str) -> str:
         """Resolve *value* to a string label for enumeration properties.
 
-        p44-vdc always sends the text label for enumeration values.
+        The vDC API specification always sends the text label for enumeration values.
         This method resolves:
 
         * ``int`` → label via options dictionary (key → label).

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """Device state component for vdSD devices (§4.6.1, §4.6.2).
 
 A :class:`DeviceState` models one discrete device state on a virtual
@@ -60,7 +62,7 @@ from typing import (
 )
 
 from pydsvdcapi import vdc_messages_pb2 as pb
-from pydsvdcapi.conversion import apply_converter, compile_converter
+from pydsvdcapi.addons.converter import apply_converter, compile_converter
 from pydsvdcapi.property_handling import NO_VALUE, dict_to_elements
 
 if TYPE_CHECKING:
@@ -307,7 +309,7 @@ class DeviceState:
     def _value_as_label(self) -> str | None:
         """Return the current value as a string label.
 
-        p44-vdc sends the text label (e.g. ``"Running"``) for
+        The vDC API specification requires the text label (e.g. ``"Running"``) for
         enumeration state values, not the integer key.  This method
         performs the key → label lookup.
 

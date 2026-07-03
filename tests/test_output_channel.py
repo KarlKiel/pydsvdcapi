@@ -662,9 +662,7 @@ class TestChannelPropertyDicts:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         ch = out.get_channel(0)
         state = ch.get_state_properties()
-        assert (
-            state["value"] == 0.0
-        )  # uninitialized → 0.0, matching p44vdc v_double default
+        assert state["value"] == 0.0  # uninitialized → 0.0 (vDC API default)
         assert state["age"] is None
 
     @pytest.mark.asyncio
@@ -1611,11 +1609,11 @@ class TestChannelContainerKeyFormat:
         assert str(ch.ds_index) in desc
 
     def test_positional_keyed_by_name(self):
-        """POSITIONAL: shade channels keyed by channel name, matching p44vdc wire format.
+        """POSITIONAL: shade channels keyed by channel name (vDC API v3+ wire format).
 
         The outer key becomes channel.id in dSS.  The vdSM builds the OPC table
         from the channelType and dsIndex sub-element fields, not from the outer
-        key, so the channel name is correct here (as p44vdc uses).
+        key, so the channel name is correct here.
         """
         _, _, _, vdsd = _make_stack()
         out = _make_output(vdsd, function=OutputFunction.POSITIONAL)
@@ -1956,3 +1954,160 @@ class TestChannelByKey:
         out = _make_output(vdsd, function=OutputFunction.DIMMER)
         assert out.channel_by_key("unknown") is None
         assert out.channel_by_key("99") is None
+
+
+# ===========================================================================
+# display_name — free label for channelDescriptions["name"]
+# ===========================================================================
+
+
+class TestChannelIndex:
+    """channelIndex is emitted alongside dsIndex for backward compatibility."""
+
+    def test_channel_index_present_in_description(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        desc = ch.get_description_properties()
+        assert "channelIndex" in desc
+
+    def test_channel_index_equals_ds_index_for_primary(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        desc = ch.get_description_properties()
+        assert desc["channelIndex"] == desc["dsIndex"] == 0
+
+    def test_channel_index_equals_ds_index_for_secondary(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.SHADE_OPENING_ANGLE_OUTSIDE,
+            ds_index=1,
+        )
+        desc = ch.get_description_properties()
+        assert desc["channelIndex"] == desc["dsIndex"] == 1
+
+    def test_channel_index_for_custom_channel(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=250,
+            ds_index=3,
+            name="customSensor",
+        )
+        desc = ch.get_description_properties()
+        assert desc["channelIndex"] == 3
+
+
+class TestDisplayName:
+    """display_name sets channelDescriptions 'name' independently of the channelId key."""
+
+    def test_default_name_subfield_equals_spec_name(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "brightness"
+
+    def test_display_name_overrides_name_subfield(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+            display_name="Living Room Light",
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "Living Room Light"
+
+    def test_display_name_does_not_change_container_key(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.SHADE_POSITION_OUTSIDE,
+            ds_index=0,
+            display_name="Living Room Shade",
+        )
+        # channelId (container key) is the canonical name, not the display_name
+        assert ch.name == "shadePositionOutside"
+        # but the "name" sub-field in the description uses display_name
+        assert ch.get_description_properties()["name"] == "Living Room Shade"
+
+    def test_display_name_setter_and_clear(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        ch.display_name = "My Label"
+        assert ch.get_description_properties()["name"] == "My Label"
+        ch.display_name = None
+        assert ch.get_description_properties()["name"] == "brightness"
+
+    def test_display_name_persisted_in_property_tree(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+            display_name="Ceiling Light",
+        )
+        tree = ch.get_property_tree()
+        assert tree["displayName"] == "Ceiling Light"
+
+    def test_display_name_absent_from_tree_when_not_set(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        tree = ch.get_property_tree()
+        assert "displayName" not in tree
+
+    def test_display_name_restored_from_property_tree(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=OutputChannelType.BRIGHTNESS,
+            ds_index=0,
+        )
+        ch._apply_state({"displayName": "Restored Label"})
+        assert ch.get_description_properties()["name"] == "Restored Label"
+
+    def test_custom_channel_display_name(self):
+        _, _, _, vdsd = _make_stack()
+        out = _make_output(vdsd)
+        ch = OutputChannel(
+            output=out,
+            channel_type=255,
+            ds_index=2,
+            name="myMode",
+            display_name="Operating Mode",
+        )
+        desc = ch.get_description_properties()
+        assert desc["name"] == "Operating Mode"
+        # container key (channelId) is still the channel's name, not display_name
+        assert ch.name == "myMode"

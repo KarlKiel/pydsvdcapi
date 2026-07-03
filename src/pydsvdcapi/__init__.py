@@ -1,6 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2024–2026 Arne Speck
 """pydsvdcapi - Python library for the DSvDC API."""
 
-__version__ = "0.8.9"
+__version__ = "0.9.0"
 
 __all__ = [
     # Version
@@ -28,6 +30,7 @@ __all__ = [
     "ClimateDeviceScene",
     "ColorClass",
     "ColorGroup",
+    "DeviceLifecycleState",
     "DeviceScene",
     "EntityType",
     "ErrorType",
@@ -68,6 +71,7 @@ __all__ = [
     "PropertyStore",
     # Session
     "SUPPORTED_API_VERSION",
+    "MAX_SUPPORTED_API_VERSION",
     "HelloCallback",
     "MessageCallback",
     "SessionState",
@@ -213,6 +217,7 @@ from pydsvdcapi.enums import (  # noqa: F401 – re-export for convenience
     ClimateDeviceScene,
     ColorClass,
     ColorGroup,
+    DeviceLifecycleState,
     DeviceScene,
     EntityType,
     ErrorType,
@@ -269,6 +274,7 @@ from pydsvdcapi.sensor_input import (  # noqa: F401
     SensorInputSettingsChangedCallback,
 )
 from pydsvdcapi.session import (  # noqa: F401
+    MAX_SUPPORTED_API_VERSION,
     SUPPORTED_API_VERSION,
     HelloCallback,
     MessageCallback,
