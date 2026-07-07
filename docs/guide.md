@@ -585,6 +585,11 @@ vdc.add_device(device)
   components (output, inputs, states, events, properties).
 - **`on_identify`** — settable async callback `(vdsd: Vdsd) -> None`; called when
   the vdSM requests device-level identification.
+- **`on_settings_changed`** — settable async callback
+  `(vdsd: Vdsd, changed: dict[str, Any]) -> None`; called by the host after DSS
+  writes vdSD-level properties via `setProperty`. `changed` contains only the keys
+  that were actually applied — a subset of `{"name", "zoneID", "progMode",
+  "active"}`. A key appears whenever DSS wrote it, even if the value is unchanged.
 - **`lifecycle_state`** — read-only property returning the current
   `DeviceLifecycleState`.
 - **`async set_lifecycle_state(state)`** — set lifecycle state; handles all vdSM
@@ -593,6 +598,11 @@ vdc.add_device(device)
 - **`async send_identify()`** — send a `VDC_SEND_IDENTIFY` notification (fire-and-
   forget); use this when the user presses a physical pairing/identify button on the
   hardware.
+- **`async push_property(properties)`** — push arbitrary vdSD property changes to
+  DSS immediately via `VDC_SEND_PUSH_NOTIFICATION`, without a vanish+re-announce
+  cycle. `properties` is a dict using the same property names as `getProperty`
+  responses (e.g. `{"name": "New Name", "zoneID": 5}`). No-op when the device is
+  not announced or has no active session.
 
 ---
 
@@ -2751,6 +2761,66 @@ to associate the physical device with a slot in the configurator without requiri
 manual dSUID entry.
 
 If the device is not yet announced or has no active session, the call is a no-op.
+
+### vdsd.on_settings_changed
+
+```python
+async def handler(vdsd: Vdsd, changed: dict[str, Any]) -> None:
+    ...
+
+vdsd.on_settings_changed = handler
+```
+
+Called by `VdcHost` after DSS writes vdSD-level properties via `setProperty`. The
+`changed` dict contains only the keys that were actually written — a subset of
+`{"name", "zoneID", "progMode", "active"}`. A key appears whenever DSS sent it,
+even if the value equals the current one.
+
+When DSS marks a device active or inactive via `setProperty` (either as a top-level
+`active` key or nested under `commonProperties`), the host calls
+`set_lifecycle_state()` before firing this callback, so `vdsd.lifecycle_state` is
+already updated when the callback runs.
+
+```python
+from pydsvdcapi import Vdsd, VdsdSettingsChangedCallback
+from typing import Any
+
+async def handle_vdsd_settings(vdsd: Vdsd, changed: dict[str, Any]) -> None:
+    if "name" in changed:
+        print(f"Device renamed to: {changed['name']}")
+    if "zoneID" in changed:
+        print(f"Moved to zone: {changed['zoneID']}")
+    if "active" in changed:
+        print(f"Active state changed: {changed['active']}")
+        # vdsd.lifecycle_state is already updated at this point
+
+vdsd.on_settings_changed = handle_vdsd_settings
+```
+
+### vdsd.push_property()
+
+```python
+await vdsd.push_property(properties: dict[str, Any]) -> None
+```
+
+Pushes property changes from vDC to DSS via `VDC_SEND_PUSH_NOTIFICATION`. Use
+this after changing a property on the vdSD side (e.g. renaming the device or
+updating its zone) to notify DSS immediately without a vanish+re-announce cycle.
+
+`properties` uses the same key names as `getProperty` responses:
+
+```python
+# After changing the device name in your integration:
+vdsd.name = "Living Room Dimmer"
+await vdsd.push_property({"name": vdsd.name})
+
+# After moving the device to a different zone:
+vdsd.zone_id = 12
+await vdsd.push_property({"zoneID": vdsd.zone_id})
+```
+
+No-op when the device is not yet announced or has no active session. Connection
+errors are logged as warnings and suppressed.
 
 ### Example: state transitions
 
