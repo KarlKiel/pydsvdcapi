@@ -1453,16 +1453,44 @@ class VdcHost:
         empty-name entry (``""`` key from the protobuf wildcard), the
         value is applied to all existing items at that level.
         """
+        changed: dict[str, Any] = {}
         if "name" in incoming:
             vdsd.name = incoming["name"]
+            changed["name"] = incoming["name"]
             logger.info("vdSD '%s' name set to '%s'", vdsd.dsuid, vdsd.name)
         if "zoneID" in incoming and incoming["zoneID"] is not None:
             vdsd.zone_id = int(incoming["zoneID"])
+            changed["zoneID"] = vdsd.zone_id
             logger.info("vdSD '%s' zoneID set to %d", vdsd.dsuid, vdsd.zone_id)
         if "progMode" in incoming:
             val = incoming["progMode"]
             vdsd.prog_mode = bool(val) if val is not None else None
+            changed["progMode"] = vdsd.prog_mode
             logger.info("vdSD '%s' progMode set to %s", vdsd.dsuid, vdsd.prog_mode)
+        # Handle active from top-level or commonProperties.
+        for active_val in [
+            incoming.get("active"),
+            (incoming.get("commonProperties") or {}).get("active"),
+        ]:
+            if active_val is not None:
+                new_state = (
+                    DeviceLifecycleState.ACTIVE
+                    if active_val
+                    else DeviceLifecycleState.INACTIVE
+                )
+                await vdsd.set_lifecycle_state(new_state)
+                logger.info(
+                    "vdSD '%s' active set to %s via setProperty", vdsd.dsuid, active_val
+                )
+                changed["active"] = bool(active_val)
+                break
+        if changed and vdsd.on_settings_changed is not None:
+            try:
+                await vdsd.on_settings_changed(vdsd, changed)
+            except Exception:
+                logger.exception(
+                    "on_settings_changed callback raised for vdSD '%s'", vdsd.dsuid
+                )
         # Button input settings (§4.2.2).
         if "buttonInputSettings" in incoming:
             btn_settings = incoming["buttonInputSettings"]

@@ -98,6 +98,7 @@ __all__ = [
     "DeviceIdentifyCallback",
     "InvokeActionCallback",
     "Vdsd",
+    "VdsdSettingsChangedCallback",
     # Actions
     "ActionParameter",
     "CustomAction",
@@ -304,6 +305,7 @@ from pydsvdcapi.vdsd import (  # noqa: F401,F811
     Device,
     InvokeActionCallback,
     Vdsd,
+    VdsdSettingsChangedCallback,
 )
 from pydsvdcapi.vdsd import (  # noqa: F401
     IdentifyCallback as DeviceIdentifyCallback,

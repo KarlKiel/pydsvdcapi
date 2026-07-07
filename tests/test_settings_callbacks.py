@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pydsvdcapi as api
+from pydsvdcapi import vdc_messages_pb2 as pb
 from pydsvdcapi.binary_input import BinaryInput
 from pydsvdcapi.button_input import ButtonInput
 from pydsvdcapi.dsuid import DsUid, DsUidNamespace
@@ -15,6 +16,7 @@ from pydsvdcapi.enums import (
     ButtonElementID,
     ButtonType,
     ColorGroup,
+    DeviceLifecycleState,
     OutputFunction,
     OutputUsage,
     SensorType,
@@ -364,6 +366,144 @@ class TestOutputCallback:
 
 
 # ===========================================================================
+# Vdsd settings callback + push_property
+# ===========================================================================
+
+
+class TestVdsdSettingsCallback:
+    """Tests for Vdsd.on_settings_changed callback and push_property()."""
+
+    async def test_vdsd_callback_called_with_changed_keys(self):
+        host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+
+        mock_cb = AsyncMock()
+        vdsd.on_settings_changed = mock_cb
+
+        await host._apply_vdsd_set_property(
+            vdsd, {"name": "New Name", "zoneID": 5, "progMode": True}
+        )
+
+        mock_cb.assert_called_once()
+        _vdsd_arg, changed_arg = mock_cb.call_args[0]
+        assert _vdsd_arg is vdsd
+        assert changed_arg == {"name": "New Name", "zoneID": 5, "progMode": True}
+
+    async def test_vdsd_callback_not_called_without_vdsd_keys(self):
+        host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+
+        mock_cb = AsyncMock()
+        vdsd.on_settings_changed = mock_cb
+
+        await host._apply_vdsd_set_property(vdsd, {"buttonInputSettings": {}})
+
+        mock_cb.assert_not_called()
+
+    async def test_active_top_level_calls_set_lifecycle_state(self):
+        host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+
+        mock_set_state = AsyncMock()
+        vdsd.set_lifecycle_state = mock_set_state
+
+        mock_cb = AsyncMock()
+        vdsd.on_settings_changed = mock_cb
+
+        await host._apply_vdsd_set_property(vdsd, {"active": False})
+
+        mock_set_state.assert_called_once_with(DeviceLifecycleState.INACTIVE)
+        mock_cb.assert_called_once()
+        _vdsd_arg, changed_arg = mock_cb.call_args[0]
+        assert changed_arg == {"active": False}
+
+    async def test_active_in_common_properties_calls_set_lifecycle_state(self):
+        host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+
+        mock_set_state = AsyncMock()
+        vdsd.set_lifecycle_state = mock_set_state
+
+        mock_cb = AsyncMock()
+        vdsd.on_settings_changed = mock_cb
+
+        await host._apply_vdsd_set_property(
+            vdsd, {"commonProperties": {"active": True}}
+        )
+
+        mock_set_state.assert_called_once_with(DeviceLifecycleState.ACTIVE)
+        mock_cb.assert_called_once()
+        _vdsd_arg, changed_arg = mock_cb.call_args[0]
+        assert changed_arg == {"active": True}
+
+    async def test_active_top_level_wins_over_common_properties(self):
+        host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+
+        mock_set_state = AsyncMock()
+        vdsd.set_lifecycle_state = mock_set_state
+
+        mock_cb = AsyncMock()
+        vdsd.on_settings_changed = mock_cb
+
+        await host._apply_vdsd_set_property(
+            vdsd, {"active": True, "commonProperties": {"active": False}}
+        )
+
+        mock_set_state.assert_called_once_with(DeviceLifecycleState.ACTIVE)
+        mock_cb.assert_called_once()
+        _vdsd_arg, changed_arg = mock_cb.call_args[0]
+        assert changed_arg == {"active": True}
+
+    async def test_vdsd_callback_exception_suppressed(self):
+        host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+
+        mock_cb = AsyncMock(side_effect=RuntimeError("boom"))
+        vdsd.on_settings_changed = mock_cb
+
+        # Must not raise
+        await host._apply_vdsd_set_property(vdsd, {"name": "X"})
+
+    async def test_push_property_sends_notification(self):
+        _host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+        vdsd._announced = True
+
+        await vdsd.push_property({"name": "Test Device"})
+
+        session.send_notification.assert_called_once()
+        msg = session.send_notification.call_args[0][0]
+        assert msg.type == pb.VDC_SEND_PUSH_NOTIFICATION
+        assert msg.vdc_send_push_notification.dSUID == str(vdsd.dsuid)
+
+    async def test_push_property_noop_when_not_announced(self):
+        _host, _vdc, _device, vdsd = _scaffold()
+        session = _make_mock_session()
+        vdsd._session = session
+        vdsd._announced = False
+
+        await vdsd.push_property({"name": "X"})
+
+        session.send_notification.assert_not_called()
+
+    async def test_push_property_noop_without_session(self):
+        _host, _vdc, _device, vdsd = _scaffold()
+        vdsd._announced = True
+        vdsd._session = None
+
+        # Must not raise
+        await vdsd.push_property({"name": "X"})
+
+
+# ===========================================================================
 # Exports
 # ===========================================================================
 
@@ -376,3 +516,6 @@ class TestCallbackTypeExports:
         assert hasattr(api, "ButtonInputSettingsChangedCallback")
         assert hasattr(api, "SensorInputSettingsChangedCallback")
         assert hasattr(api, "OutputSettingsChangedCallback")
+
+    def test_vdsd_settings_changed_callback_exported(self):
+        assert hasattr(api, "VdsdSettingsChangedCallback")
