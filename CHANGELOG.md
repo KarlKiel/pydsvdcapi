@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-07
+
 ### Added
 - `Vdsd.on_settings_changed` — async callback `(vdsd, changed: dict)` fired by `VdcHost` after DSS writes vdSD-level properties via `setProperty`. `changed` contains only the keys actually applied, a subset of `{"name", "zoneID", "progMode", "active"}`.
 - `Vdsd.push_property(properties)` — pushes arbitrary vdSD property changes to DSS via `VDC_SEND_PUSH_NOTIFICATION` without a vanish+re-announce cycle. No-op when not announced or session absent.
@@ -174,6 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DsUid` — dSUID encoding/decoding with multiple creation strategies.
 - Property handling helpers (`build_get_property_response`, etc.).
 
+[0.9.1]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.9...v0.9.0
 [0.8.9]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/KarlKiel/pyDSvDCAPI/compare/v0.8.7...v0.8.8

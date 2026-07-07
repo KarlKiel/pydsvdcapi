@@ -2,7 +2,7 @@
 # Copyright (C) 2024–2026 Arne Speck
 """pydsvdcapi - Python library for the DSvDC API."""
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 __all__ = [
     # Version
