@@ -68,7 +68,7 @@ Usage example::
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -156,6 +156,20 @@ InvokeActionCallback = Callable[
 IdentifyCallback = Callable[
     ["Vdsd"],
     None | Awaitable[None],
+]
+
+#: Type alias for the vdSD-level settings-changed callback.
+#:
+#: Signature::
+#:
+#:     async def callback(vdsd: Vdsd, changed: dict[str, Any]) -> None
+#:
+#: ``vdsd`` is the :class:`Vdsd` instance whose settings changed.
+#: ``changed`` is a dict containing only the keys that were actually
+#: applied — a subset of ``{"name", "zoneID", "progMode", "active"}``.
+VdsdSettingsChangedCallback = Callable[
+    ["Vdsd", dict[str, Any]],
+    Coroutine[Any, Any, None],
 ]
 
 
@@ -370,6 +384,7 @@ class Vdsd:
         self._on_control_value: ControlValueCallback | None = None
         self._on_invoke_action: InvokeActionCallback | None = None
         self._on_identify: IdentifyCallback | None = None
+        self._on_settings_changed: VdsdSettingsChangedCallback | None = None
 
         # Enable auto-save now that construction is complete.
         self._auto_save_enabled = True
@@ -532,6 +547,15 @@ class Vdsd:
     @on_identify.setter
     def on_identify(self, callback: IdentifyCallback | None) -> None:
         self._on_identify = callback
+
+    @property
+    def on_settings_changed(self) -> VdsdSettingsChangedCallback | None:
+        """Callback invoked when DSS writes vdSD-level properties via setProperty."""
+        return self._on_settings_changed
+
+    @on_settings_changed.setter
+    def on_settings_changed(self, callback: VdsdSettingsChangedCallback | None) -> None:
+        self._on_settings_changed = callback
 
     async def identify(self) -> None:
         """Handle an identify notification from the vdSM (§7.3.7).
@@ -1586,6 +1610,26 @@ class Vdsd:
             logger.warning(
                 "vdSD '%s': failed to send VDC_SEND_IDENTIFY: %s", self.name, exc
             )
+
+    async def push_property(self, properties: dict[str, Any]) -> None:
+        """Push changed properties to DSS via VDC_SEND_PUSH_NOTIFICATION.
+
+        Use this after changing vdSD properties like name or zone_id to notify
+        DSS immediately without a vanish+re-announce cycle.
+        No-op if the vdSD is not announced or has no active session.
+        """
+        if not self._announced or self._session is None:
+            return
+        msg = pb.Message()
+        msg.type = pb.VDC_SEND_PUSH_NOTIFICATION
+        msg.vdc_send_push_notification.dSUID = str(self._dsuid)
+        for elem in dict_to_elements(properties):
+            msg.vdc_send_push_notification.changedproperties.append(elem)
+        try:
+            await self._session.send_notification(msg)
+            logger.debug("vdSD '%s': pushed properties %s", self.name, list(properties))
+        except (ConnectionError, OSError) as exc:
+            logger.warning("vdSD '%s': failed to push properties: %s", self.name, exc)
 
     # ---- property dict (for getProperty responses) -------------------
 

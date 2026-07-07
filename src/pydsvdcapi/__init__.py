@@ -2,7 +2,7 @@
 # Copyright (C) 2024–2026 Arne Speck
 """pydsvdcapi - Python library for the DSvDC API."""
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 __all__ = [
     # Version
@@ -98,6 +98,7 @@ __all__ = [
     "DeviceIdentifyCallback",
     "InvokeActionCallback",
     "Vdsd",
+    "VdsdSettingsChangedCallback",
     # Actions
     "ActionParameter",
     "CustomAction",
@@ -304,6 +305,7 @@ from pydsvdcapi.vdsd import (  # noqa: F401,F811
     Device,
     InvokeActionCallback,
     Vdsd,
+    VdsdSettingsChangedCallback,
 )
 from pydsvdcapi.vdsd import (  # noqa: F401
     IdentifyCallback as DeviceIdentifyCallback,

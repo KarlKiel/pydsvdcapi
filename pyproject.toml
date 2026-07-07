@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydsvdcapi"
-version = "0.9.0"
+version = "0.9.1"
 description = "Python library for the digitalSTROM vDC API"
 readme = "README.md"
 license = { file = "LICENSE" }
