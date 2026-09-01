@@ -265,6 +265,7 @@ class Vdsd:
             "device_class",
             "device_class_version",
             "zone_id",
+            "prog_mode",
         }
     )
 

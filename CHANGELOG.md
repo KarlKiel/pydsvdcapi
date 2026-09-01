@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `progMode` changes applied via DSS `setProperty` were not persisted to YAML because `"prog_mode"` was missing from `Vdsd._TRACKED_ATTRS`. After restart the old value was restored. Now `prog_mode` is tracked and auto-saved like `zone_id` and `name`.
+- `CustomAction.apply_settings` did not trigger the auto-save chain, so custom action changes made by DSS were silently lost on restart. A `_schedule_auto_save()` call is now issued whenever settings change.
+
 ## [0.9.1] - 2026-07-07
 
 ### Added

@@ -2797,6 +2797,13 @@ async def handle_vdsd_settings(vdsd: Vdsd, changed: dict[str, Any]) -> None:
 vdsd.on_settings_changed = handle_vdsd_settings
 ```
 
+> **Do not call `push_property` inside `on_settings_changed`.** DSS triggered the
+> `setProperty` itself and already knows the new value. Pushing it back is
+> redundant and sends the push notification *before* the `GENERIC_RESPONSE` for
+> the `setProperty` is delivered, which some vdSM firmware versions log as an
+> unexpected property notification. Use `on_settings_changed` only to update your
+> integration's state in reaction to DSS-driven changes.
+
 ### vdsd.push_property()
 
 ```python
@@ -2804,8 +2811,10 @@ await vdsd.push_property(properties: dict[str, Any]) -> None
 ```
 
 Pushes property changes from vDC to DSS via `VDC_SEND_PUSH_NOTIFICATION`. Use
-this after changing a property on the vdSD side (e.g. renaming the device or
-updating its zone) to notify DSS immediately without a vanish+re-announce cycle.
+this after changing a property **on the vDC side** (e.g. renaming the device or
+updating its zone from your integration code) to notify DSS immediately without a
+vanish+re-announce cycle. Do **not** call this in response to a DSS-initiated
+`setProperty` (i.e. from inside `on_settings_changed`).
 
 `properties` uses the same key names as `getProperty` responses:
 
@@ -2882,14 +2891,21 @@ The YAML file stores a complete structural snapshot of the entire vDC host:
 - `VdcHost` common properties (name, model, version, etc.)
 - `Vdc` properties (implementation ID, name, etc.)
 - Device structure: which devices exist, their base dSUIDs, sub-device indices
-- vdSD common properties (name, model, primary group, zone ID, model features, etc.)
+- vdSD common properties (name, model, primary group, zone ID, progMode, model features, etc.)
 - Output and output-channel descriptions and settings
+- Scene settings (per scene: dontCare, ignoreLocalPriority, effect, channel values)
 - Sensor input descriptions and settings
 - Binary input descriptions and settings
 - Button input descriptions and settings
 - Device state descriptions and device property descriptions and values
 - Device event descriptions
 - Action descriptions, standard actions, custom actions
+
+**Auto-save triggers:** any change to a tracked vdSD property (`name`, `zone_id`,
+`prog_mode`, …) immediately schedules a debounced save. Component settings changes
+(via `apply_settings`, `apply_scenes`) also trigger the same chain. There is no
+need to call `host.flush()` manually in normal operation; call it before shutdown to
+guarantee all pending writes are flushed to disk.
 
 ### What is NOT persisted
 
@@ -2901,8 +2917,11 @@ the YAML file:
 - Output channel current values after a session disconnect
 - Binary input state (current high/low readings)
 - Button click state
+- Device lifecycle state (`active` / `inactive`) — devices start as `ACTIVE` on
+  every restart; the owning integration is responsible for restoring a non-active
+  state if needed
 - Dynamic actions (always runtime-only)
-- Control values received from dSS
+- Control values received from DSS
 
 ### Three-file persistence strategy
 

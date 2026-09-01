@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 import yaml
 
+from pydsvdcapi.actions import CustomAction
+from pydsvdcapi.dsuid import DsUid, DsUidNamespace
+from pydsvdcapi.enums import ColorGroup
+from pydsvdcapi.vdc import Vdc
 from pydsvdcapi.vdc_host import AUTO_SAVE_DELAY, VdcHost
+from pydsvdcapi.vdsd import Device, Vdsd
 
 TEST_MAC = "AA:BB:CC:DD:EE:FF"
 
@@ -267,3 +272,60 @@ class TestPrivateAttrsIgnored:
         host._port = 9999
         assert host._save_handle is None
         assert not path.exists()
+
+
+# ---------------------------------------------------------------------------
+# vdSD-level property persistence
+# ---------------------------------------------------------------------------
+
+
+def _make_persisted_scaffold(path):
+    host = VdcHost(mac=TEST_MAC, state_path=path)
+    vdc = Vdc(host=host, implementation_id="x-persist-test", name="Persist vDC", model="P1")
+    base = DsUid.from_name_in_space("persist-dev", DsUidNamespace.VDC)
+    device = Device(vdc=vdc, dsuid=base)
+    vdsd = Vdsd(device=device, primary_group=ColorGroup.YELLOW, name="PersistDev", model="PM")
+    device.add_vdsd(vdsd)
+    vdc.add_device(device)
+    host.add_vdc(vdc)
+    return host, vdsd
+
+
+class TestVdsdPropertyPersistence:
+    """Regression tests: vdSD property changes must be persisted to YAML."""
+
+    def _vdsd_node(self, data: dict) -> dict:
+        return data["vdcHost"]["vdcs"][0]["devices"][0]["vdsds"][0]
+
+    async def test_prog_mode_change_triggers_save(self, tmp_path):
+        path = tmp_path / "host.yaml"
+        host, vdsd = _make_persisted_scaffold(path)
+
+        vdsd.prog_mode = True
+        host.flush()
+
+        data = yaml.safe_load(path.read_text())
+        assert self._vdsd_node(data)["progMode"] is True
+
+    async def test_prog_mode_roundtrips_through_yaml(self, tmp_path):
+        path = tmp_path / "host.yaml"
+        host, vdsd = _make_persisted_scaffold(path)
+
+        await host._apply_vdsd_set_property(vdsd, {"progMode": True})
+        host.flush()
+
+        data = yaml.safe_load(path.read_text())
+        assert self._vdsd_node(data)["progMode"] is True
+
+    async def test_custom_action_change_triggers_save(self, tmp_path):
+        path = tmp_path / "host.yaml"
+        host, vdsd = _make_persisted_scaffold(path)
+
+        action = CustomAction(vdsd, ds_index=0, name="custom.test", action="play", title="Old")
+        vdsd._custom_actions[0] = action
+
+        await host._apply_vdsd_set_property(vdsd, {"customActions": {"0": {"title": "New"}}})
+        host.flush()
+
+        data = yaml.safe_load(path.read_text())
+        assert self._vdsd_node(data)["customActions"][0]["title"] == "New"

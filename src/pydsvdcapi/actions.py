@@ -724,13 +724,24 @@ class CustomAction:
         The ``name`` field is the unique identifier and is not
         overwritten here.
         """
+        changed = False
         if "action" in settings:
             self._action = settings["action"]
+            changed = True
         if "title" in settings:
             self._title = settings["title"]
+            changed = True
         if "params" in settings:
             raw = settings["params"]
             self._params = dict(raw) if raw else None
+            changed = True
+        if changed:
+            self._schedule_auto_save()
+
+    def _schedule_auto_save(self) -> None:
+        device = getattr(self._vdsd, "_device", None)
+        if device is not None:
+            device._schedule_auto_save()
 
     # ---- persistence -------------------------------------------------
 
