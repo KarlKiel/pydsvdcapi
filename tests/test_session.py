@@ -543,6 +543,38 @@ class TestSessionClose:
         await task
         assert session.state is SessionState.CLOSED
 
+    @pytest.mark.asyncio
+    async def test_close_waits_for_concurrent_run_to_finish(self):
+        """close() must not return until a concurrently-running run() task
+        has fully finished its own cleanup.
+
+        run() is what drives VdcHost's session-ended cleanup (e.g.
+        resetting announced state and stopping alive timers — see
+        VdcHost._run_session's finally block).  If close() returns before
+        run() has actually unwound, a caller that immediately proceeds to
+        start a new session (VdcHost._handle_new_connection on reconnect)
+        can race with stale background tasks from the old one.
+        """
+        vdsm, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        await vdsm.send(_hello_msg())
+        task = asyncio.create_task(session.run())
+        await vdsm.receive()  # hello response — run() is now blocked on receive()
+
+        await session.close()
+
+        assert task.done(), "run()'s task must have finished before close() returns"
+
+    @pytest.mark.asyncio
+    async def test_close_without_a_running_run_task_does_not_hang(self):
+        """close() on a session whose run() was never started must return
+        promptly — there is nothing to wait for."""
+        _, vdc = _make_pair()
+        session = VdcSession(vdc, HOST_DSUID)
+
+        await asyncio.wait_for(session.close(), timeout=1.0)
+
 
 # ---------------------------------------------------------------------------
 # Repr

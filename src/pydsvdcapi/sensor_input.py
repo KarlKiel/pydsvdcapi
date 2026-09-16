@@ -902,9 +902,19 @@ class SensorInput:
         """Stop periodic alive re-pushes and cancel pending pushes.
 
         Called when the vdSD vanishes or the session disconnects.
+
+        Cancels the scheduled ``TimerHandle`` (prevents a *future* fire)
+        as well as any push ``Task`` a timer has *already* created but
+        that has not run yet — e.g. a reconnect race where the alive
+        timer fires and schedules its push just before teardown.  Without
+        this, that already-created task would still execute later,
+        potentially sending a push for a dSUID that is no longer
+        announced.
         """
         self._cancel_alive_timer()
         self._cancel_deferred_push()
+        for task in list(self._background_tasks):
+            task.cancel()
         self._session = None
 
     def _reschedule_alive_timer(self) -> None:

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- On a fast reconnect, `VdcHost` could start the new session before the old one had finished tearing down. `VdcHost._close_session()` (used both on reconnect and in `VdcHost.stop()`) called `VdcSession.close()`, which closed the connection but returned without waiting for the old session's own `run()` loop — running in a separate asyncio Task — to actually observe the closure and execute its cleanup (`Vdc.reset_announcement()`, which stops every vdSD's alive timers and clears the announced flag). In that window, a `SensorInput` alive timer already armed on the old session could still fire, or an already-fired one's push task could still run, sending `VDC_SEND_PUSH_NOTIFICATION` over the dying old session for a device the vdSM was about to consider gone — logged by the vdSM as "device not found". `VdcSession.close()` now waits (with a bounded timeout) for a concurrently running `run()` call to finish before returning, so callers can rely on teardown having fully completed.
+- `SensorInput.stop_alive_timer()` cancelled the alive timer's `TimerHandle` (preventing it from firing *again*) but not an `asyncio.Task` a firing had *already* created for an in-flight push. That task would still run to completion later even after the vdSD was reset/vanished. `stop_alive_timer()` now also cancels any such pending background tasks.
+
 ## [0.9.2] - 2026-09-09
 
 ### Added

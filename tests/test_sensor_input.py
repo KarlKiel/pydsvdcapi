@@ -1669,6 +1669,43 @@ class TestAliveTimer:
         assert si._alive_timer_handle is None
         assert si._session is None
 
+    @pytest.mark.asyncio
+    async def test_stop_cancels_already_created_push_task(self):
+        """A push task already created by a just-fired alive timer must be
+        cancelled by stop_alive_timer(), not left to run to completion.
+
+        Reproduces the reconnect race: the TimerHandle fires and creates
+        the background push task, but before the event loop gives that
+        task a chance to run, the vdSD is torn down (reset_announcement /
+        vanish -> stop_alive_timer). Cancelling the TimerHandle (already
+        fired, so a no-op) is not enough - the created Task must also be
+        cancelled.
+        """
+        host = _make_host()
+        vdc = _make_vdc(host)
+        device = _make_device(vdc)
+        vdsd = _make_vdsd(device)
+        si = _make_sensor_input(vdsd, alive_sign_interval=10.0)
+        vdsd.add_sensor_input(si)
+        vdsd._announced = True
+
+        session = _make_mock_session()
+        si.start_alive_timer(session)
+
+        # Simulate the alive TimerHandle firing: this creates a background
+        # task for the push but does not run it yet (no await has
+        # occurred since creation).
+        si._on_alive_timer_fired()
+        assert len(si._background_tasks) == 1
+
+        # Tear down before that task gets a chance to run.
+        si.stop_alive_timer()
+
+        # Let the event loop process the cancellation.
+        await asyncio.sleep(0)
+
+        assert session.send_notification.call_count == 0
+
 
 # ===========================================================================
 # Session fallback — update_value without explicit session

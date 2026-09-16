@@ -76,6 +76,13 @@ WATCHDOG_TIMEOUT_DEFAULT: Final[float] = 90.0
 #: this far apart.  Set to ``0`` to disable pacing.
 ANNOUNCE_PACE_INTERVAL_DEFAULT: Final[float] = 0.2
 
+#: Maximum seconds :meth:`VdcSession.close` waits for a concurrently
+#: running :meth:`VdcSession.run` call to finish its own cleanup before
+#: giving up and returning anyway.  Closing the connection reliably
+#: unblocks a ``run()`` loop that is waiting on a read, so this is only a
+#: safety net against a pathological hang, not the expected path.
+CLOSE_WAIT_TIMEOUT: Final[float] = 5.0
+
 
 # ---------------------------------------------------------------------------
 # Session state
@@ -198,6 +205,19 @@ class VdcSession:
         # If None, all pings receive a pong (backward-compatible default).
         self._presence_checker: Callable[[str], Awaitable[bool]] | None = None
 
+        # Set whenever run()'s own cleanup has finished (or run() was
+        # never started — there is then nothing to wait for, hence the
+        # initial "set" state).  close() awaits this so callers can rely
+        # on run()'s finally block — which drives VdcHost's per-session
+        # cleanup (reset_announcement / stop_alive_timer) — having
+        # already completed by the time close() returns.  Without this,
+        # a caller that closes one session and immediately starts a new
+        # one (VdcHost._handle_new_connection on reconnect) can race with
+        # stale background tasks (e.g. a SensorInput alive timer) still
+        # referencing the old, un-torn-down session.
+        self._run_finished = asyncio.Event()
+        self._run_finished.set()
+
     # ---- public properties -------------------------------------------
 
     @property
@@ -275,6 +295,7 @@ class VdcSession:
         logger.info("Session started for connection from %s", self._conn.peername)
         loop = asyncio.get_running_loop()
         self._last_activity = loop.time()
+        self._run_finished.clear()
         if self._watchdog_timeout > 0:
             self._watchdog_task = asyncio.create_task(
                 self._run_watchdog(), name="vdc-watchdog"
@@ -309,21 +330,26 @@ class VdcSession:
                 await self._dispatch(msg)
 
         finally:
-            self._state = SessionState.CLOSED
-            if self._watchdog_task is not None:
-                self._watchdog_task.cancel()
-                self._watchdog_task = None
-            # Cancel all pending outgoing requests.
-            for future in self._pending_requests.values():
-                if not future.done():
-                    future.cancel()
-            self._pending_requests.clear()
-            await self._conn.close()
-            logger.info(
-                "Session ended for %s (vdSM %s)",
-                self._conn.peername,
-                self._vdsm_dsuid or "<unknown>",
-            )
+            try:
+                self._state = SessionState.CLOSED
+                if self._watchdog_task is not None:
+                    self._watchdog_task.cancel()
+                    self._watchdog_task = None
+                # Cancel all pending outgoing requests.
+                for future in self._pending_requests.values():
+                    if not future.done():
+                        future.cancel()
+                self._pending_requests.clear()
+                await self._conn.close()
+                logger.info(
+                    "Session ended for %s (vdSM %s)",
+                    self._conn.peername,
+                    self._vdsm_dsuid or "<unknown>",
+                )
+            finally:
+                # Unblock any close() waiting on this run() call to
+                # finish, no matter how the above cleanup went.
+                self._run_finished.set()
 
     async def _run_watchdog(self) -> None:
         """Close the session if no message arrives within *watchdog_timeout* seconds."""
@@ -353,7 +379,19 @@ class VdcSession:
     # ---- close -------------------------------------------------------
 
     async def close(self) -> None:
-        """Terminate the session and close the connection."""
+        """Terminate the session and close the connection.
+
+        If :meth:`run` is currently executing in another task (the normal
+        case — ``run()`` drives the read loop while ``close()`` is called
+        from elsewhere, e.g. :class:`~pydsvdcapi.vdc_host.VdcHost` tearing
+        down a session to accept a new connection), this waits for that
+        ``run()`` call to finish its own cleanup before returning.  That
+        guarantees any teardown driven by ``run()`` completing — such as
+        ``VdcHost`` resetting announced state and stopping alive timers —
+        has already happened by the time a caller proceeds to start a new
+        session, closing the window where stale background tasks from
+        this session could otherwise race a reconnect.
+        """
         self._state = SessionState.CLOSED
         # Cancel all pending outgoing requests.
         for future in self._pending_requests.values():
@@ -361,6 +399,15 @@ class VdcSession:
                 future.cancel()
         self._pending_requests.clear()
         await self._conn.close()
+        try:
+            await asyncio.wait_for(
+                self._run_finished.wait(), timeout=CLOSE_WAIT_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Timed out waiting for run() to finish while closing session with %s",
+                self._vdsm_dsuid or "<unknown>",
+            )
 
     # ---- message dispatch --------------------------------------------
 
